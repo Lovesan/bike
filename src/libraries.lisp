@@ -51,7 +51,7 @@
 (defun %get-tpa ()
   (let* ((path (uiop:merge-pathnames* 
                 (uiop:make-pathname*
-                 :defaults uiop:*wild-file-for-directory*
+                 :name uiop:*wild*
                  :type "dll")
                 *coreclr-location*))
          (files (uiop:directory* path)))
