@@ -78,10 +78,11 @@
 (define-constant +pointer-bits+ (* 8 +pointer-size+))
 
 (defvar *interop-build-dir*
-  (merge-pathnames*
-   (make-pathname*
-    :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
-   (pathname-directory-pathname #.(current-lisp-file-pathname))))
+  (uiop:native-namestring
+    (merge-pathnames*
+     (make-pathname*
+      :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
+     (pathname-directory-pathname #.(current-lisp-file-pathname)))))
 
 (cffi:defctype lpwstr (:string :encoding :utf-16/le))
 
