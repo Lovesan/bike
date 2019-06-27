@@ -13,6 +13,7 @@
 
 Now you have the batteries included! Which are of the size of Battersea Power Station.
 
+[![CircleCI](https://circleci.com/gh/Lovesan/bike/tree/master.svg?style=svg)](https://circleci.com/gh/Lovesan/bike/tree/master)
 
 ## TL;DR
 
@@ -32,7 +33,7 @@ This library implements cross-platform Common Lisp interface to .Net Core platfo
                           (format t "Hello ~a!~%You are running .Net Core~% inside ~a ~a~% on ~a"
                                   who
                                   (lisp-implementation-type)
-                                  (lisp-implementation-version)                                  
+                                  (lisp-implementation-version)
                                   os))))
          (user (property 'System.Environment 'UserName)))
     (invoke delegate 'invoke user)))
