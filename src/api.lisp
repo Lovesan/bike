@@ -122,7 +122,7 @@
 (defun new (type &rest args)
   (declare (type dotnet-type-designator type)
            (dynamic-extent args))
-  "Creates and instance of the specified TYPE.
+  "Creates an instance of the specified TYPE.
 In case of the TYPE being a delegate type, first,
  and only, argument, must be a lisp function-like
  object."

@@ -1,0 +1,22 @@
+version: 2
+jobs:
+  build_ccl_amd64:
+    docker:
+      - image: "love5an/dotnet-core-sdk-common-lisp:2.2-ccl-1.11.5-stretch"
+
+    working_directory: ~/quicklisp/local-projects/bike
+
+    steps:
+
+      - checkout
+
+      - run:
+          name: Run tests
+          command: cat tests.lisp | ccl64 -Q -b
+
+workflows:
+  version: 2
+
+  ccl_amd64:
+    jobs:
+      - build_ccl_amd64
