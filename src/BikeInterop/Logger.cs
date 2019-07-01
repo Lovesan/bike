@@ -23,21 +23,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+using System;
+using System.IO;
+using System.Text;
+
 namespace BikeInterop
 {
     /// <summary>
-    /// Represents a Lisp exception
+    /// Some dummy logger. Need to use something else in the future.
     /// </summary>
-    public class LispException : BikeException
+    public class Logger
     {
-        /// <summary>
-        /// Lisp exception object
-        /// </summary>
-        public LispObject Value { get; }
+        private readonly string _source;
+        private readonly TextWriter _stderr;
 
-        public LispException(LispObject value)
+        private Logger(string source)
         {
-            Value = value;
+            _source = source;
+            if (Console.IsErrorRedirected)
+            {
+                _stderr = new StreamWriter(
+                    Console.OpenStandardError(),
+                    new UTF8Encoding(false,false),
+                    4096,
+                    true);
+            }
+            else
+            {
+                _stderr = Console.Error;
+            }
+        }
+
+        public void Exception(Exception e)
+        {
+            _stderr.WriteLine("[{0}] [ERROR] [{1}] {2}\n{3}", _source, e.GetType().FullName, e.Message, e.StackTrace);
+        }
+
+        public static Logger Get<T>()
+        {
+            return Get(typeof(T));
+        }
+
+        public static Logger Get(Type type)
+        {
+            return Get(type.FullName);
+        }
+
+        public static Logger Get(string source)
+        {
+            if (string.IsNullOrWhiteSpace(source))
+                source = typeof(Logger).FullName;
+            return new Logger(source);
         }
     }
 }

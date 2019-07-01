@@ -23,21 +23,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+using System;
+
 namespace BikeInterop
 {
     /// <summary>
-    /// Represents a Lisp exception
+    /// Represents generic interop exception
     /// </summary>
-    public class LispException : BikeException
+    public class BikeException : Exception
     {
-        /// <summary>
-        /// Lisp exception object
-        /// </summary>
-        public LispObject Value { get; }
+        public BikeException(string message, Exception innerException)
+            :base(message, innerException)
+        { }
 
-        public LispException(LispObject value)
-        {
-            Value = value;
-        }
+        public BikeException(string message)
+            : base(message)
+        { }
+
+        public BikeException()
+        { }
     }
 }

@@ -1,3 +1,4 @@
+// ReSharper disable RedundantUsingDirective
 //// -*- indent-tabs-mode: nil -*-
 
 //// Copyright(C) 2019, Dmitry Ignatiev<lovesan.ru at gmail.com>
@@ -25,10 +26,13 @@
 
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 // ReSharper disable once RedundantUsingDirective
 using System.Threading.Tasks;
+using System.Transactions;
+
 // ReSharper disable MemberCanBePrivate.Global
 
 // ReSharper disable UnusedMember.Global
@@ -41,7 +45,17 @@ namespace BikeInterop
 {
     public static class Externals
     {
+#if ENABLE_TASK_HACK
+        public const bool HasTaskHack = true;
+#else
+        public const bool HasTaskHack = false;
+#endif
+
         private static readonly object[] EmptyArray = new object[0];
+
+        private static readonly Type[] EmptyTypeArray = new Type[0];
+
+        private static readonly Logger Log = Logger.Get(typeof(Externals));
 
         public static void InstallCallbacks(
             IntPtr freeLispHandleCallback,
@@ -62,7 +76,9 @@ namespace BikeInterop
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -101,12 +117,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -143,7 +163,7 @@ namespace BikeInterop
             {
                 var definitionName = string.Format(CultureInfo.InvariantCulture, "{0}`{1}", name, nArgs);
                 var realAssembly = UnboxObject(assembly) as Assembly;
-                var typeArgs = UnboxTypeArgs(args, nArgs);
+                var typeArgs = nArgs == 0 ? EmptyTypeArray : UnboxTypeArgs(args, nArgs);
                 var definition = realAssembly != null
                     ? realAssembly.GetType(definitionName, throwOnError, true)
                     : Type.GetType(definitionName, throwOnError, true);
@@ -152,12 +172,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -191,17 +215,21 @@ namespace BikeInterop
             try
             {
                 var definition = (Type) UnboxObject(type);
-                var typeArgs = UnboxTypeArgs(args, nArgs);
+                var typeArgs = nArgs == 0 ? EmptyTypeArray : UnboxTypeArgs(args, nArgs);
                 invocationResult = definition.MakeGenericType(typeArgs);
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -238,12 +266,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -263,9 +295,12 @@ namespace BikeInterop
                    realType.IsSubclassOf(typeof(Delegate));
         }
 
-        public static void InvokeMember(
+        public static void Invoke(
             IntPtr target,
+            bool isStatic,
             [MarshalAs(UnmanagedType.LPWStr)] string methodName,
+            IntPtr typeArgs,
+            int nTypeArgs,
             IntPtr args,
             int nArgs,
             out IntPtr result,
@@ -276,7 +311,7 @@ namespace BikeInterop
             result = IntPtr.Zero;
             object e = null;
             object invocationResult = null;
-            typeCode = (int) TypeCode.Empty;
+            typeCode = (int)TypeCode.Empty;
 
 #if ENABLE_TASK_HACK
             var task = Task.Factory.StartNew(() =>
@@ -284,28 +319,40 @@ namespace BikeInterop
 #endif
             try
             {
-                var instance = UnboxObject(target);
-                var type = instance.GetType();
-                var realArgs = UnboxArgs(args, nArgs);
-                invocationResult = type.InvokeMember(
-                    methodName,
-                    BindingFlags.Public |
-                    BindingFlags.Instance |
-                    BindingFlags.InvokeMethod |
-                    BindingFlags.IgnoreCase,
-                    null,
-                    UnboxObject(target),
-                    realArgs,
-                    CultureInfo.CurrentCulture);
+                var instance = isStatic ? null : UnboxObject(target);
+                var type = isStatic ? (Type)UnboxObject(target) : instance.GetType();
+                var realArgs = nArgs == 0 ? EmptyArray : UnboxArgs(args, nArgs);
+                if (nTypeArgs > 0)
+                {
+                    var realTypeArgs = UnboxTypeArgs(typeArgs, nTypeArgs);
+                    var method = type.MakeGenericMethod(methodName, isStatic, realTypeArgs, realArgs);
+                    invocationResult = method.Invoke(instance, realArgs);
+                }
+                else
+                {
+                    var flags = BindingFlags.Public | BindingFlags.InvokeMethod | BindingFlags.IgnoreCase;
+                    flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
+                    invocationResult = type.InvokeMember(
+                        methodName,
+                        flags,
+                        null,
+                        instance,
+                        realArgs,
+                        CultureInfo.CurrentCulture);
+                }
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -319,8 +366,221 @@ namespace BikeInterop
             exception = BoxObject(e);
         }
 
+        public static void GetProperty(
+            IntPtr target,
+            bool isStatic,
+            [MarshalAs(UnmanagedType.LPWStr)] string propertyName,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            result = IntPtr.Zero;
+            object e = null;
+            object invocationResult = null;
+            typeCode = (int)TypeCode.Empty;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var instance = isStatic ? null : UnboxObject(target);
+                var type = isStatic ? (Type)UnboxObject(target) : instance.GetType();
+                var flags = BindingFlags.Public | BindingFlags.GetProperty | BindingFlags.IgnoreCase;
+                flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
+                var property = type.GetProperty(propertyName, flags);
+                if (property == null || property.GetIndexParameters().Length > 0)
+                    throw new MissingMemberException(type.FullName, propertyName);
+                invocationResult = property.GetValue(instance);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+            result = BoxObject(invocationResult);
+            typeCode = invocationResult.GetFullTypeCode();
+            if (e is LispException lispException)
+                e = lispException.Value;
+            exception = BoxObject(e);
+        }
+
+        public static void SetProperty(
+            IntPtr target,
+            bool isStatic,
+            [MarshalAs(UnmanagedType.LPWStr)] string propertyName,
+            IntPtr value,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            object e = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var instance = isStatic ? null : UnboxObject(target);
+                var type = isStatic ? (Type)UnboxObject(target) : instance.GetType();
+                var realValue = UnboxObject(value);
+                var flags = BindingFlags.Public | BindingFlags.SetProperty | BindingFlags.IgnoreCase;
+                flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
+                var property = type.GetProperty(propertyName, flags);
+                if(property == null || property.GetIndexParameters().Length > 0)
+                    throw new MissingMemberException(type.FullName, propertyName);
+                property.SetValue(instance, realValue);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+            if (e is LispException lispException)
+                e = lispException.Value;
+            exception = BoxObject(e);
+        }
+
+        public static void GetIndex(
+            IntPtr target,
+            IntPtr args,
+            int nArgs,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            result = IntPtr.Zero;
+            object e = null;
+            object invocationResult = null;
+            typeCode = (int)TypeCode.Empty;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var instance = UnboxObject(target);
+                var type = instance.GetType();
+                var realArgs = UnboxArgs(args, nArgs);
+                const BindingFlags flags = BindingFlags.Public |
+                                           BindingFlags.GetProperty |
+                                           BindingFlags.IgnoreCase |
+                                           BindingFlags.Instance;
+                var indexer = type.GetProperties(flags).FirstOrDefault(x => x.GetIndexParameters().Length > 0);
+                if (indexer == null)
+                    throw new MissingMemberException($"Indexer not found on {type.FullName}");
+                invocationResult = indexer.GetValue(instance, realArgs);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+            result = BoxObject(invocationResult);
+            typeCode = invocationResult.GetFullTypeCode();
+            if (e is LispException lispException)
+                e = lispException.Value;
+            exception = BoxObject(e);
+        }
+
+        public static void SetIndex(
+            IntPtr target,
+            IntPtr value,
+            IntPtr args,
+            int nArgs,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            object e = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var instance = UnboxObject(target);
+                var type = instance.GetType();
+                var realArgs = UnboxArgs(args, nArgs);
+                var realValue = UnboxObject(value);
+                const BindingFlags flags = BindingFlags.Public |
+                                           BindingFlags.GetProperty |
+                                           BindingFlags.IgnoreCase |
+                                           BindingFlags.Instance;
+                var indexer = type.GetProperties(flags).FirstOrDefault(x => x.GetIndexParameters().Length > 0);
+                if (indexer == null)
+                    throw new MissingMemberException($"Indexer not found on {type.FullName}");
+                indexer.SetValue(instance, realValue, realArgs);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+            if (e is LispException lispException)
+                e = lispException.Value;
+            exception = BoxObject(e);
+        }
+
         public static void GetField(
             IntPtr target,
+            bool isStatic,
             [MarshalAs(UnmanagedType.LPWStr)] string fieldName,
             out IntPtr result,
             out int typeCode,
@@ -338,14 +598,13 @@ namespace BikeInterop
 #endif
             try
             {
-                var instance = UnboxObject(target);
-                var type = instance.GetType();
+                var instance = isStatic ? null : UnboxObject(target);
+                var type = isStatic ? (Type)UnboxObject(target) : instance.GetType();
+                var flags = BindingFlags.GetField | BindingFlags.Public | BindingFlags.IgnoreCase;
+                flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
                 invocationResult = type.InvokeMember(
                     fieldName,
-                    BindingFlags.GetField |
-                    BindingFlags.Public |
-                    BindingFlags.Instance | 
-                    BindingFlags.IgnoreCase,
+                    flags,
                     null,
                     instance,
                     EmptyArray,
@@ -353,12 +612,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -373,6 +636,7 @@ namespace BikeInterop
 
         public static void SetField(
             IntPtr target,
+            bool isStatic,
             [MarshalAs(UnmanagedType.LPWStr)] string fieldName,
             IntPtr value,
             out IntPtr exception)
@@ -386,15 +650,14 @@ namespace BikeInterop
 #endif
             try
             {
-                var instance = UnboxObject(target);
+                var instance = isStatic ? null : UnboxObject(target);
+                var type = isStatic ? (Type) UnboxObject(target) : instance.GetType();
                 var valueObject = UnboxObject(value);
-                var type = instance.GetType();
+                var flags = BindingFlags.SetField | BindingFlags.Public | BindingFlags.IgnoreCase;
+                flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
                 type.InvokeMember(
                     fieldName,
-                    BindingFlags.SetField |
-                    BindingFlags.Public |
-                    BindingFlags.Instance |
-                    BindingFlags.IgnoreCase,
+                    flags,
                     null,
                     instance,
                     new [] {valueObject},
@@ -402,12 +665,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -416,160 +683,7 @@ namespace BikeInterop
 #endif
             exception = BoxObject(e);
         }
-
-        public static void InvokeStatic(
-            IntPtr type,
-            [MarshalAs(UnmanagedType.LPWStr)] string methodName,
-            IntPtr args,
-            int nArgs,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            result = IntPtr.Zero;
-            object e = null;
-            object invocationResult = null;
-            typeCode = (int) TypeCode.Empty;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var realType = (Type) UnboxObject(type);
-                var realArgs = UnboxArgs(args, nArgs);
-                invocationResult = realType.InvokeMember(
-                    methodName,
-                    BindingFlags.Public | 
-                    BindingFlags.Static | 
-                    BindingFlags.InvokeMethod |
-                    BindingFlags.IgnoreCase,
-                    null,
-                    null,
-                    realArgs,
-                    CultureInfo.CurrentCulture);
-            }
-            catch (TargetInvocationException ex)
-            {
-                Console.Error.WriteLine(ex);
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex);
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            if (e is LispException lispException)
-                e = lispException.Value;
-            exception = BoxObject(e);
-        }
-
-
-        public static void GetStaticField(
-            IntPtr type,
-            [MarshalAs(UnmanagedType.LPWStr)] string fieldName,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            result = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-            typeCode = (int)TypeCode.Empty;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var realType = (Type) UnboxObject(type);
-                invocationResult = realType.InvokeMember(
-                    fieldName,
-                    BindingFlags.GetField |
-                    BindingFlags.IgnoreCase |
-                    BindingFlags.Public |
-                    BindingFlags.Static,
-                    null,
-                    null,
-                    EmptyArray,
-                    CultureInfo.CurrentCulture);
-            }
-            catch (TargetInvocationException ex)
-            {
-                Console.Error.WriteLine(ex);
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex);
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            exception = BoxObject(e);
-        }
-
-
-        public static void SetStaticField(
-            IntPtr type,
-            [MarshalAs(UnmanagedType.LPWStr)] string fieldName,
-            IntPtr value,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            Exception e = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var realType = (Type)UnboxObject(type);
-                var valueObject = UnboxObject(value);
-                realType.InvokeMember(
-                    fieldName,
-                    BindingFlags.SetField |
-                    BindingFlags.IgnoreCase |
-                    BindingFlags.Public |
-                    BindingFlags.Static,
-                    null,
-                    null,
-                    new[] { valueObject },
-                    CultureInfo.CurrentCulture);
-            }
-            catch (TargetInvocationException ex)
-            {
-                Console.Error.WriteLine(ex);
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine(ex);
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-            exception = BoxObject(e);
-        }
-
+        
         public static void InvokeConstructor(
             IntPtr type,
             IntPtr args,
@@ -591,17 +705,21 @@ namespace BikeInterop
             try
             {
                 var realType = (Type) UnboxObject(type);
-                var realArgs = UnboxArgs(args, nArgs);
+                var realArgs = nArgs == 0 ? EmptyArray : UnboxArgs(args, nArgs);
                 invocationResult = Activator.CreateInstance(realType, realArgs);
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -637,17 +755,21 @@ namespace BikeInterop
             try
             {
                 var realDelegate = (Delegate) UnboxObject(boxedDelegate);
-                var realArgs = UnboxArgs(args, nArgs);
+                var realArgs = nArgs == 0 ? EmptyArray : UnboxArgs(args, nArgs);
                 invocationResult = realDelegate.DynamicInvoke(realArgs);
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -686,12 +808,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -701,6 +827,143 @@ namespace BikeInterop
 
             result = BoxObject(invocationResult);
             typeCode = invocationResult.GetFullTypeCode();
+            exception = BoxObject(e);
+        }
+
+        public static void GetDelegateTrampoline(
+            IntPtr methodInfo,
+            IntPtr args,
+            int nArgs,
+            out IntPtr functionPointer,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            result = IntPtr.Zero;
+            typeCode = (int)TypeCode.Empty;
+            exception = IntPtr.Zero;
+            Exception e = null;
+            object invocationResult = null;
+            var pointer = IntPtr.Zero;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+
+                var realMethodInfo = (MethodInfo)UnboxObject(methodInfo);
+                var argTypes = nArgs == 0 ? EmptyTypeArray : UnboxTypeArgs(args, nArgs);
+                invocationResult = TrampolineCompiler.CompileMethod(
+                    realMethodInfo,
+                    out var ptr,
+                    argTypes);
+                pointer = ptr;
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            functionPointer = pointer;
+            result = BoxObject(invocationResult);
+            typeCode = invocationResult.GetFullTypeCode();
+            exception = BoxObject(e);
+        }
+
+        public static void GetAccessorTrampolines(
+            IntPtr memberInfo,
+            int accessorMemberType,
+            out IntPtr reader,
+            out IntPtr readerPointer,
+            out IntPtr writer,
+            out IntPtr writerPointer,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            reader = IntPtr.Zero;
+            readerPointer = IntPtr.Zero;
+            writer = IntPtr.Zero;
+            writerPointer = IntPtr.Zero;
+            Exception e = null;
+            Delegate readerObject = null;
+            var readerPtr = IntPtr.Zero;
+            Delegate writerObject = null;
+            var writerPtr = IntPtr.Zero;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var type = (AccessorMemberTypes) accessorMemberType;
+                Delegate rdr;
+                IntPtr innerReaderPtr;
+                Delegate wtr;
+                IntPtr innerWriterPtr;
+
+                switch (type)
+                {
+                    case AccessorMemberTypes.Field:
+                        var fieldInfo = (FieldInfo) UnboxObject(memberInfo);
+                        TrampolineCompiler.CompileField(fieldInfo, out rdr, out innerReaderPtr, out wtr, out innerWriterPtr);
+                        break;
+                    case AccessorMemberTypes.Property:
+                        var propertyInfo = (PropertyInfo) UnboxObject(memberInfo);
+                        TrampolineCompiler.CompileProperty(propertyInfo, out rdr, out innerReaderPtr, out wtr, out innerWriterPtr);
+                        break;
+                    case AccessorMemberTypes.Indexer:
+                        var indexerInfo = (PropertyInfo) UnboxObject(memberInfo);
+                        TrampolineCompiler.CompileIndexer(indexerInfo, out rdr, out innerReaderPtr, out wtr, out innerWriterPtr);
+                        break;
+                    case AccessorMemberTypes.Undefined:
+                    default:
+                        throw new ArgumentException("Invalid accessor member type", nameof(accessorMemberType));
+                }
+
+                readerObject = rdr;
+                readerPtr = innerReaderPtr;
+                writerObject = wtr;
+                writerPtr = innerWriterPtr;
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+            reader = BoxObject(readerObject);
+            readerPointer = readerPtr;
+            writer = BoxObject(writerObject);
+            writerPointer = writerPtr;
             exception = BoxObject(e);
         }
 
@@ -911,12 +1174,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -953,12 +1220,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -992,12 +1263,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK
@@ -1006,6 +1281,26 @@ namespace BikeInterop
 #endif
 
             exception = BoxObject(e);
+        }
+
+        public static int GetFullTypeCode(IntPtr value)
+        {
+            return UnboxObject(value)?.GetFullTypeCode() ?? 0;
+        }
+
+        public static IntPtr GetTypeOf(IntPtr value)
+        {
+            return BoxObject(UnboxObject(value)?.GetType() ?? typeof(object));
+        }
+
+        public static IntPtr GetTypeFullName(IntPtr type)
+        {
+            return BoxObject(((Type) UnboxObject(type)).FullName);
+        }
+
+        public static IntPtr GetTypeAssemblyQualifiedName(IntPtr type)
+        {
+            return BoxObject(((Type)UnboxObject(type)).AssemblyQualifiedName);
         }
 
         public static void ConvertTo(
@@ -1033,12 +1328,16 @@ namespace BikeInterop
             }
             catch (TargetInvocationException ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex.InnerException;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine(ex);
+#if DEBUG
+                Log.Exception(ex);
+#endif
                 e = ex;
             }
 #if ENABLE_TASK_HACK

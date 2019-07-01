@@ -24,74 +24,94 @@
 
 (in-package #:bike)
 
-(defmethod print-object ((object dotnet-object) stream)
-  (print-unreadable-object (object stream)
-    (let ((type (%to-string (%get-type object)))
-          (str (%to-string object))
-          (gc-handle (pointer-address (%dotnet-object-handle object))))
-      (if (string= str type)
-        (format stream "~a {~8,'0X}" type gc-handle)
-        (format stream "~a ~a {~8,'0X}" type str gc-handle))))
-  object)
-
-(defun invoke (target method-name &rest args)
+(defun invoke (target method &rest args)
   (declare (type (or dotnet-object dotnet-type-designator) target)
-           (type string-designator method-name)
+           (type dotnet-method-designator method)
            (dynamic-extent args))
-  "Invokes a method named METHOD-NAME on a TARGET which can
+  "Invokes a method designated by METHOD on a TARGET which can
  either be a type specifier, in which case a static method is
  invoked, or an instance, which would lead to instance method
  invocation."
-  (if (not (dotnet-object-p target))
-    (check-exception (apply #'%invoke-static
-                            (resolve-type target)
-                            (%mknetsym method-name)
-                            args))
-    (check-exception (apply #'%invoke-member
-                            target
-                            (%mknetsym method-name)
-                            args))))
+  ;;; will use reflection until method resolution would be implemented
+  (multiple-value-bind (method-name type-args)
+      (if (consp method)
+        (%resolve-generic-types method)
+        (values (%mknetsym method) '()))
+    (if (dotnet-object-p target)
+      (apply #'%invoke target nil type-args method-name args)
+      (apply #'%invoke (resolve-type target) t type-args method-name args))))
 
-(defun property (target name &rest indexers)
+(defun property (target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
-           (type string-designator name)
-           (dynamic-extent indexers))
+           (type string-designator name))
   "Retrieves a value of property named NAME from a TARGET, which
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (let ((propmethod (format nil "get_~a" (%mknetsym name))))
-    (if (not (dotnet-object-p target))
-      (check-exception (apply #'%invoke-static
-                              (resolve-type target)
-                              propmethod
-                              indexers))
-      (check-exception (apply #'%invoke-member
-                              target
-                              propmethod
-                              indexers)))))
+  (let* ((entry (resolve-property target name))
+         (reader (%property-entry-reader entry)))
+    (unless reader
+      (error 'accessor-resolution-error
+             :member (%property-entry-name entry)
+             :kind :reader
+             :member-kind :property
+             :type (reflection-property (%property-entry-info entry)
+                                        "DeclaringType")))
+    (if (%property-entry-staticp entry)
+      (funcall reader)
+      (funcall reader target))))
 
-(defun (setf property) (new-value target name &rest indexers)
+(defun (setf property) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
-           (type string-designator name)
-           (dynamic-extent indexers))
+           (type string-designator name))
   "Changes a value of property named NAME of a TARGET, which
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (let ((propmethod (format nil "set_~a" (%mknetsym name))))
-    (if (not (dotnet-object-p target))
-      (check-exception (apply #'%invoke-static
-                              (resolve-type target)
-                              propmethod
-                              new-value
-                              indexers))
-      (check-exception (apply #'%invoke-member
-                              target
-                              propmethod
-                              new-value
-                              indexers)))
-    new-value))
+  (let* ((entry (resolve-property target name))
+         (writer (%property-entry-writer entry)))
+    (unless writer
+      (error 'accessor-resolution-error
+             :member (%property-entry-name entry)
+             :kind :writer
+             :member-kind :property
+             :type (reflection-property (%property-entry-info entry)
+                                        "DeclaringType")))
+    (if (%property-entry-staticp entry)
+      (funcall writer new-value)
+      (funcall writer target new-value))))
+
+(defun ref (target index &rest indices)
+  (declare (type dotnet-object target)
+           (dynamic-extent indices))
+  "Retrieves a value of an indexer from a TARGET, which
+ must be an instance."
+  (let* ((entry (resolve-indexer target))
+         (reader (%indexer-entry-reader entry)))
+    (unless reader
+      (error 'accessor-resolution-error
+             :member (%indexer-entry-name entry)
+             :kind :reader
+             :member-kind :indexer
+             :type (reflection-property (%indexer-entry-info entry)
+                                        "DeclaringType")))
+    (apply reader target (cons index indices))))
+
+(defun (setf ref) (new-value target index &rest indices)
+  (declare (type dotnet-object target)
+           (dynamic-extent indices))
+  "Changes a value of an indexer from a TARGET, which
+ must be an instance."
+  (let* ((entry (resolve-indexer target))
+         (writer (%indexer-entry-writer entry)))
+    (unless writer
+      (error 'accessor-resolution-error
+             :member (%indexer-entry-name entry)
+             :kind :writer
+             :member-kind :indexer
+             :type (reflection-property (%indexer-entry-info entry)
+                                        "DeclaringType")))
+    (apply writer target (cons index (nreverse (cons new-value indices))))))
 
 (defun field (target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -100,11 +120,18 @@
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (if (not (dotnet-object-p target))
-    (check-exception
-     (%get-static-field (resolve-type target) (%mknetsym name)))
-    (check-exception
-     (%get-field target (%mknetsym name)))))
+  (let* ((entry (resolve-field target name))
+         (reader (%field-entry-reader entry)))
+    (unless reader
+      (error 'accessor-resolution-error
+             :member (%field-entry-name entry)
+             :kind :reader
+             :member-kind :field
+             :type (reflection-property (%field-entry-info entry)
+                                        "DeclaringType")))
+    (if (%field-entry-staticp entry)
+      (funcall reader)
+      (funcall reader target))))
 
 (defun (setf field) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -113,11 +140,18 @@
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (if (not (dotnet-object-p target))
-    (check-exception
-     (%set-static-field (resolve-type target) (%mknetsym name) new-value))
-    (check-exception
-     (%set-field target (%mknetsym name) new-value))))
+  (let* ((entry (resolve-field target name))
+         (writer (%field-entry-writer entry)))
+    (unless writer
+      (error 'accessor-resolution-error
+             :member (%field-entry-name entry)
+             :kind :writer
+             :member-kind :field
+             :type (reflection-property (%field-entry-info entry)
+                                        "DeclaringType")))
+    (if (%field-entry-staticp entry)
+      (funcall writer new-value)
+      (funcall writer target new-value))))
 
 (defun new (type &rest args)
   (declare (type dotnet-type-designator type)
@@ -127,44 +161,29 @@ In case of the TYPE being a delegate type, first,
  and only, argument, must be a lisp function-like
  object."
   (let ((type (resolve-type type)))
-    (check-exception
-     (if (%is-delegate-type type)
-       (let ((lisp-function (first args)))
-         (declare (type (or symbol function) lisp-function))
-         (%get-delegate-for-lisp-function lisp-function type))
-       (apply #'%invoke-constructor type args)))))
+    (if (%is-delegate-type type)
+      (let ((lisp-function (first args)))
+        (declare (type (or symbol function) lisp-function))
+        (%get-delegate-for-lisp-function lisp-function type))
+      (apply #'%invoke-constructor type args))))
 
 (defun unbox (object)
-  (declare (type dotnet-object object))
   "Attempts to unbox an OBJECT into lisp object"
-  (check-exception (%convert-to object (resolve-type "System.Object") t)))
+  (if (dotnet-object-p object)
+    (let ((code (%get-full-type-code (%dotnet-object-handle object))))
+      (values (%unbox (%dotnet-object-handle object) code)))
+    object))
 
 (defun box (object &optional (type nil typep))
   (declare (type (or null dotnet-type-designator) type))
   "Makes a boxed representation of an OBJECT"
-  (check-exception (%convert-to object (resolve-type (if typep type "System.Object")))))
-
-(defmacro do-bike-vector ((elt-var vector &optional result) &body body)
-  "Evaluates BODY forms in a loop where ELT-VAR is subsequently bound to
- each element of a VECTOR, which should evaluate to .Net array of rank 1.
- Returns RESULT form."
-  (with-gensyms (i v)
-    `(let ((,v ,vector))
-       (declare (type dotnet-object ,v))
-       (dotimes (,i (check-exception (%array-length ,v)) ,result)
-         (let ((,elt-var (check-exception (%net-vref ,v ,i))))
-           ,@body)))))
-
-(defun dnvref (vector index)
-  (declare (type dotnet-object vector)
-           (type non-negative-fixnum index))
-  "Accesses a .Net VECTOR (an array of rank 1) at INDEX"
-  (check-exception (%net-vref vector index)))
-
-(defun (setf dnvref) (new-value vector index)
-  (declare (type dotnet-object vector)
-           (type non-negative-fixnum index))
-  "Accesses a .Net VECTOR (an array of rank 1) at INDEX"
-  (check-exception (funcall #'(setf %net-vref) new-value vector index)))
+  (let ((boxed (if (dotnet-object-p object)
+                 object
+                 (let* ((ptr (%box object))
+                        (code (%get-full-type-code ptr)))
+                   (%get-boxed-object ptr (ash code -8) nil)))))
+    (if typep
+      (%convert-to boxed (resolve-type type))
+      boxed)))
 
 ;;; vim: ft=lisp et

@@ -29,8 +29,8 @@
           :library coreclr
           :convention :stdcall)
     :uint
-  (exe-path (:string :encoding :utf-8))
-  (app-domain-name (:string :encoding :utf-8))
+  (exe-path lpastr)
+  (app-domain-name lpastr)
   (property-count :int)
   (property-keys :pointer)
   (property-values :pointer)
@@ -53,9 +53,9 @@
     :uint
   (host-handle :pointer)
   (domain-id :uint)
-  (entry-assembly (:string :encoding :utf-8))
-  (entry-type (:string :encoding :utf-8))
-  (entry-method (:string :encoding :utf-8))
+  (entry-assembly lpastr)
+  (entry-type lpastr)
+  (entry-method lpastr)
   (delegate :pointer))
 
 (defcfun (coreclr-execute-assembly
@@ -67,7 +67,7 @@
   (domain-id :uint)
   (argc :int)
   (argv :pointer)
-  (assembly-path (:string :encoding :utf-8))
+  (assembly-path lpastr)
   (exit-code :pointer))
 
 ;;; vim: ft=lisp et

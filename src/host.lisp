@@ -37,14 +37,15 @@
   (make-generic-type (null-pointer) :type foreign-pointer)
   (make-array-type (null-pointer) :type foreign-pointer)
   (is-delegate-type (null-pointer) :type foreign-pointer)
-  (invoke-member (null-pointer) :type foreign-pointer)
-  (invoke-static (null-pointer) :type foreign-pointer)
+  (invoke (null-pointer) :type foreign-pointer)
   (invoke-constructor (null-pointer) :type foreign-pointer)
   (invoke-delegate (null-pointer) :type foreign-pointer)
   (get-field (null-pointer) :type foreign-pointer)
   (set-field (null-pointer) :type foreign-pointer)
-  (get-static-field (null-pointer) :type foreign-pointer)
-  (set-static-field (null-pointer) :type foreign-pointer)
+  (get-property (null-pointer) :type foreign-pointer)
+  (set-property (null-pointer) :type foreign-pointer)
+  (get-index (null-pointer) :type foreign-pointer)
+  (set-index (null-pointer) :type foreign-pointer)
   (box-boolean (null-pointer) :type foreign-pointer)
   (box-char (null-pointer) :type foreign-pointer)
   (box-uint8 (null-pointer) :type foreign-pointer)
@@ -83,7 +84,13 @@
   (vector-get (null-pointer) :type foreign-pointer)
   (vector-set (null-pointer) :type foreign-pointer)
   (array-length (null-pointer) :type foreign-pointer)
-  (convert-to (null-pointer) :type foreign-pointer))
+  (convert-to (null-pointer) :type foreign-pointer)
+  (get-delegate-trampoline (null-pointer) :type foreign-pointer)
+  (get-accessor-trampolines (null-pointer) :type foreign-pointer)
+  (get-full-type-code (null-pointer) :type foreign-pointer)
+  (get-type-of (null-pointer) :type foreign-pointer)
+  (get-type-full-name (null-pointer) :type foreign-pointer)
+  (get-type-assembly-qualified-name (null-pointer) :type foreign-pointer))
 
 #+sbcl
 (sb-ext:defglobal *coreclr-host* nil)
@@ -107,7 +114,7 @@
                     ,type (,converter ,val)
                     :pointer))))))
   (frob boolean :bool)
-  (frob char :int char-code)
+  (frob char :uint16 char-code)
   (frob int8 :int8)
   (frob uint8 :uint8)
   (frob int16 :int16)
@@ -136,7 +143,7 @@
                            :pointer ,val
                            ,type)))))))
   (frob boolean :bool)
-  (frob char :int code-char)
+  (frob char :uint16 code-char)
   (frob int8 :int8)
   (frob uint8 :uint8)
   (frob int16 :int16)
@@ -150,7 +157,7 @@
   (frob intptr :pointer))
 
 (defmacro hostcall (name &rest args-and-types)
-  (let ((conc-name (intern (format nil "~a~a" '%coreclr-host- name))))
+  (let ((conc-name (intern (format nil "~a~a" '%coreclr-host- name) :bike)))
     `(foreign-funcall-pointer
       (,conc-name *coreclr-host*)
       (:convention :stdcall)
@@ -211,5 +218,12 @@
   (hostcall unbox-lisp-object
             :pointer ptr
             :pointer))
+
+(declaim (inline %get-full-type-code))
+(defun %get-full-type-code (ptr)
+  (declare (type foreign-pointer ptr))
+  (hostcall get-full-type-code
+            :pointer ptr
+            :int))
 
 ;;; vim: ft=lisp et

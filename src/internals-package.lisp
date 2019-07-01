@@ -22,20 +22,34 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(asdf:defsystem #:bike-tests
-  :version "0.2.0"
-  :description "Common Lisp .Net Core Interop tests"
-  :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :licence "MIT"
-  :depends-on (#:bike
-               #:fiveam)
-  :serial t
-  :components ((:module "test"
-                :serial t
-                :components ((:file "tests"))))
-  :perform (test-op (o c) (symbol-call
-                           :fiveam '#:run!
-                           (intern* '#:bike-suite :bike-tests))))
+(in-package #:cl-user)
+
+(uiop:define-package #:bike-internals
+  (:use #:cl #:uiop #:cffi #:split-sequence #:flexi-streams #:cl-ppcre)
+  (:export #:find-coreclr
+           #:find-interop
+           #:build-interop
+           #:get-exe-path
+           #:+coreclr-library-file+
+           #:+interop-library-file+
+           #:+pointer-size+
+           #:+pointer-bits+
+           #:lpwstr
+           #:lpastr
+           #:dnchar
+
+           #:slot-initializer-missing
+           #:slot-initializer-missing-message
+           #:required-slot
+
+           #:rwlock
+           #:rwlockp
+           #:make-rwlock
+           #:with-read-lock
+           #:with-write-lock)
+  (:import-from #:alexandria
+                #:define-constant
+                #:non-negative-fixnum
+                #:with-gensyms))
 
 ;;; vim: ft=lisp et

@@ -24,42 +24,7 @@
 
 (in-package #:cl-user)
 
-(uiop:define-package #:bike-internals
-  (:use #:cl #:uiop #:cffi #:split-sequence #:flexi-streams #:cl-ppcre)
-  (:export #:find-coreclr
-           #:find-interop
-           #:build-interop
-           #:get-exe-path
-           #:+coreclr-library-file+
-           #:+interop-library-file+
-           #:+pointer-size+
-           #:+pointer-bits+
-           #:lpwstr
-           #:rwlock
-           #:rwlockp
-           #:make-rwlock
-           #:with-read-lock
-           #:with-write-lock)
-  (:import-from #:alexandria
-                #:define-constant
-                #:non-negative-fixnum
-                #:with-gensyms))
-
 (in-package #:bike-internals)
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (cond ((os-windows-p)
-         (pushnew :coreclr-windows *features*))
-        ((os-macosx-p)
-         (pushnew :coreclr-macos *features*))
-        ((os-unix-p)
-         (pushnew :coreclr-unix *features*)))
-  #+linux
-  (pushnew :coreclr-linux *features*)
-  #+(and sbcl windows)
-  (when (string< (uiop:lisp-version-string)
-                 "1.5.4")
-    (pushnew :coreclr-sbcl-task-hack *features*)))
 
 (define-constant +coreclr-library-file+
   #+coreclr-windows
@@ -73,18 +38,28 @@
 (define-constant +interop-library-file+ "BikeInterop.dll"
   :test #'equal)
 
-(define-constant +pointer-size+ (foreign-type-size :pointer))
+(define-condition slot-initializer-missing (cell-error)
+  ((message :initarg :message :initform nil :reader slot-initializer-missing-message))
+  (:report (lambda (err stream)
+             (let ((message (slot-initializer-missing-message err))
+                   (name (ignore-errors (cell-error-name err))))
+               (format stream
+                       "Initializer for slot ~:[~;~:*~s ~]is missing.~:[~; ~:*~a~]"
+                       name
+                       message)
+               err))))
 
-(define-constant +pointer-bits+ (* 8 +pointer-size+))
+(defmacro required-slot (&key name message)
+  `(error 'slot-initializer-missing
+          :name ,name
+          :message (or ,message "Slot is required.")))
 
 (defvar *interop-build-dir*
   (uiop:native-namestring
-    (merge-pathnames*
-     (make-pathname*
-      :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
-     (pathname-directory-pathname #.(current-lisp-file-pathname)))))
-
-(cffi:defctype lpwstr (:string :encoding :utf-16/le))
+   (merge-pathnames*
+    (make-pathname*
+     :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
+    (pathname-directory-pathname #.(current-lisp-file-pathname)))))
 
 (defun %find-by-command ()
   (let* ((out (with-output-to-string (out)
@@ -106,74 +81,6 @@
                           (merge-pathnames* (car latest) runtimes-dir))))
         (probe-file*
          (merge-pathnames* +coreclr-library-file+ latest-dir))))))
-
-
-#+coreclr-windows
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (define-foreign-library kernel32
-    (t "kernel32.dll"))
-  (use-foreign-library kernel32)
-  (defcfun (get-oemcp "GetOEMCP" :convention :stdcall
-                                 :library kernel32)
-      :uint)
-  (defcfun (get-last-error "GetLastError" :convention :stdcall
-                                          :library kernel32)
-      :uint32)
-  (defcfun (get-module-file-name
-            "GetModuleFileNameW" :convention :stdcall
-                                 :library kernel32)
-      :uint32
-    (module :pointer)
-    (buffer :pointer)
-    (size :uint32)))
-
-#+corecl-macos
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (defcfun (ns-get-executable-path "_NSGetExecutablePath")
-      :int
-    (buf :pointer)
-    (bufsize :uint32)))
-
-(defun get-exe-path ()
-  #+coreclr-windows
-  (let* ((size 260) ;; MAX_PATH
-         (buf (foreign-alloc :char :count size)))
-    (unwind-protect
-         (loop :for rv = (get-module-file-name (null-pointer)
-                                               buf
-                                               size)
-               :for last-error = (get-last-error) :do
-                 (unless (= last-error 122)
-                   (return (values (foreign-string-to-lisp
-                                    buf :encoding :utf-16/le))))
-                 (foreign-free buf)
-                 (setf size (* size 2)
-                       buf (foreign-alloc :char :count size))
-                 (when (null-pointer-p buf)
-                   (error "Unable to allocate buffer")))
-      (unless (null-pointer-p buf)
-        (foreign-free buf))))
-  #+coreclr-macos
-  (let ((size 260)
-        (buf (foreign-alloc :char :count size)))
-    (unwind-protect
-         (loop :for rv = (ns-get-executable-path buf size) :do
-           (when (zerop rv)
-             (return (values (foreign-string-to-lisp buf))))
-           (foreign-free buf)
-           (setf size (* size 2)
-                 buf (foreign-alloc :char :count size))
-           (when (null-pointer-p buf)
-             (error "Unable to allocate buffer")))
-      (unless (null-pointer-p buf)
-        (foreign-free buf))))
-  #+coreclr-linux
-  (native-namestring (truename* "/proc/self/exe"))
-  #-(or coreclr-windows coreclr-macos coreclr-linux)
-  (let ((argv0 (first (raw-command-line-arguments))))
-    (unless argv0
-      (error "Unable to get executable name"))
-    argv0))
 
 (defun %get-flexi-stream (in)
   #+coreclr-windows

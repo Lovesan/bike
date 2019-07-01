@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike-internals
-  :version "0.1.1"
+  :version "0.2.0"
   :description "Common Lisp .Net Core Interop Internals"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
@@ -38,7 +38,10 @@
   :serial t
   :components ((:module "src"
                 :serial t
-                :components ((:file "internals")
-                             (:file "rwlock")))))
+                :components ((:file "internals-package")
+                             (:file "features")
+                             (:file "internals-ffi")
+                             (:file "rwlock")
+                             (:file "internals")))))
 
 ;;; vim: ft=lisp et

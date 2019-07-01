@@ -22,20 +22,33 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(asdf:defsystem #:bike-tests
-  :version "0.2.0"
-  :description "Common Lisp .Net Core Interop tests"
-  :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :licence "MIT"
-  :depends-on (#:bike
-               #:fiveam)
-  :serial t
-  :components ((:module "test"
-                :serial t
-                :components ((:file "tests"))))
-  :perform (test-op (o c) (symbol-call
-                           :fiveam '#:run!
-                           (intern* '#:bike-suite :bike-tests))))
+(in-package #:bike)
+
+(defun %make-field-entry (info)
+  (declare (type dotnet-object info))
+  (let* ((name (%mknetsym (reflection-property info "Name")))
+         (type (reflection-property info "FieldType"))
+         (staticp (reflection-property info "IsStatic"))
+         (primitive-type (cdr (assoc (reflection-property type "FullName")
+                                     +primitive-types+
+                                     :test #'string-equal))))
+    (multiple-value-bind
+          (reader-delegate reader-ptr writer-delegate writer-ptr)
+        (%get-accessor-trampolines info :field)
+      (let ((reader (when reader-delegate
+                      (compile-reader-trampoline reader-ptr staticp primitive-type)))
+            (writer (when writer-delegate
+                      (compile-writer-trampoline writer-ptr staticp primitive-type))))
+        (%field-entry info
+                      name
+                      staticp
+                      primitive-type
+                      type
+                      reader
+                      reader-delegate
+                      reader-ptr
+                      writer
+                      writer-delegate
+                      writer-ptr)))))
 
 ;;; vim: ft=lisp et

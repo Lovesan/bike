@@ -41,10 +41,18 @@
                        (:conc-name %type-entry-))
   "Represents an entry in the type table"
   (type nil :type dotnet-type)
-  (qualified-name nil :type (or null string)))
+  (qualified-name nil :type (or null string))
+  (fields (make-hash-table :test #'equal) :type hash-table)
+  (properties (make-hash-table :test #'equal) :type hash-table)
+  (methods (make-hash-table :test #'equal) :type hash-table)
+  (indexer nil)
+  (members-initialized-p nil :type boolean))
 
 (deftype dotnet-type-designator ()
   '(or dotnet-type string-designator (cons string-designator list)))
+
+(deftype dotnet-method-designator ()
+  '(or string-designator (cons string-designator (cons dotnet-type-designator list))))
 
 #+sbcl
 (sb-ext:defglobal *type-table* nil)
@@ -65,12 +73,23 @@
            ,table
          ,@body))))
 
-(declaim (inline %net-symbolify))
+(defmacro with-type-table-lock ((&optional (type :read)) &body body)
+  (declare (type (member :read :write) type))
+  (with-gensyms (table lock)
+    `(let ((,table *type-table*))
+       (declare (type type-table ,table))
+       (with-accessors ((,lock %type-table-lock))
+           ,table
+         (,(ecase type (:read 'with-read-lock) (:write 'with-write-lock))
+          (,lock)
+          ,@body)))))
+
+(declaim (inline %mknetsym))
 (defun %mknetsym (what)
   (declare (type string-designator what))
   (string-upcase (string what)))
 
-(defun use-namespace (namespace)  
+(defun use-namespace (namespace)
   (declare (type string-designator namespace))
   "Adds a NAMESPACE to the list of used namespaces."
   (let ((namespace-prefix (uiop:strcat (%mknetsym namespace) ".")))
@@ -79,7 +98,7 @@
         (pushnew namespace-prefix namespaces :test #'equal))))
   (values))
 
-(defun unuse-namespace (namespace)  
+(defun unuse-namespace (namespace)
   (declare (type string-designator namespace))
   "Removes a NAMESPACE from the list of used namespaces."
   (let ((namespace-prefix (uiop:strcat (%mknetsym namespace) ".")))
@@ -121,16 +140,34 @@
       (clrhash aliases)))
   (values))
 
+;; must always be called inside a type table write lock
+(defun %%register-type (type full-name qualified)
+  (with-type-table (data ns lock)
+    (let* ((qname (when qualified (%get-type-assembly-qualified-name type)))
+           (entry (%type-entry type qname)))
+      (setf (gethash full-name data) entry)
+      (values type entry))))
+
+;; must always be called inside a type table read lock
+(defun %ensure-type (target)
+  (declare (type (or dotnet-object dotnet-type-designator) target))
+  (if (dotnet-object-p target)
+    ;; bypass usual full type resolution
+    (let* ((type (get-type target))
+           (full-name (%mknetsym (%get-type-full-name type))))
+      (with-type-table (data ns lock)
+        (let ((entry (gethash full-name data)))
+          (if entry
+            (values type entry)
+            (with-write-lock (lock)
+              (%%register-type type full-name t))))))
+    (%resolve-type target t)))
+
 (defun %register-type (type qualified)
   (declare (type dotnet-type type))
   (with-type-table (data ns lock)
-    (let ((full-name (%invoke-member type "get_FullName")))
-      (setf (gethash (%mknetsym full-name) data)
-            (%type-entry
-             type
-             (when qualified
-               (%invoke-member type "get_AssemblyQualifiedName"))))
-      type)))
+    (let ((full-name (%mknetsym (%get-type-full-name type))))
+      (%%register-type type full-name qualified))))
 
 (defun %import-type (type assembly)
   (with-type-table (data ns lock)
@@ -139,21 +176,19 @@
           ((typep type 'string-designator)
            (let ((type (%mknetsym type)))
              (%import-type
-              (check-exception
-               (if (dotnet-object-p assembly)
-                 (%get-type-by-name type t assembly)
-                 (%get-type-by-name type t nil)))
+              (if (dotnet-object-p assembly)
+                (%get-type-by-name type t assembly)
+                (%get-type-by-name type t nil))
               assembly)))
           ((consp type)
            (multiple-value-bind (type types)
-               (loop :with generic-type = (%mknetsym (first type))  
+               (loop :with generic-type = (%mknetsym (first type))
                      :for type-arg :in (rest type)
                      :collect (%import-type type-arg nil) :into types
-                     :finally (return (values generic-type types)))             
+                     :finally (return (values generic-type types)))
              (%import-type
-              (check-exception
-               (%get-generic-type-by-name
-                type t (and (dotnet-object-p assembly) assembly) types))
+              (%get-generic-type-by-name
+               type t (and (dotnet-object-p assembly) assembly) types)
               assembly)))
           (t (error 'invalid-type-designator :datum type)))))
 
@@ -162,7 +197,7 @@
            (type (or dotnet-object boolean) assembly))
   "Imports a .Net type designated by a TYPE specifier.
 ASSEMBLY can be either:
-a) A .Net System.Reflection.Assembly object, in which case a type would be loaded from it, 
+a) A .Net System.Reflection.Assembly object, in which case a type would be loaded from it,
 b) T, in which case resulting type would be imported with its fully qualified name
 c) NIL, in which case a type would be registered only by its .FullName"
   (with-type-table (data ns lock)
@@ -174,7 +209,9 @@ c) NIL, in which case a type would be registered only by its .FullName"
   (with-type-table (data ns lock)
     (declare (type string name))
     (let ((entry (gethash name data)))
-      (and entry (%type-entry-type entry)))))
+      (if entry
+        (values (%type-entry-type entry) entry)
+        (values nil nil)))))
 
 (defun %resolve-generic-type (type args errorp)
   (declare (type string-designator type)
@@ -189,27 +226,66 @@ c) NIL, in which case a type would be registered only by its .FullName"
           :else
             :collect resolved :into type-args
           :finally
-             (let ((definition
-                     (%resolve-type (format nil "~a`~D" type i) errorp)))
-               (when definition
-                 (return (check-exception
-                          (%make-generic-type definition type-args))))))))
+             (let* ((definition-name (format nil "~a`~D" type i))
+                    (full-name (format nil "~a[~{[~a]~^,~}]" definition-name
+                                       (mapcar
+                                        (lambda (type-arg)
+                                          (%get-property
+                                           type-arg nil "AssemblyQualifiedName"))
+                                        type-args)))
+                    (full-name-upcase (%mknetsym full-name)))
+               (multiple-value-bind
+                     (type entry)
+                   (%%resolve-type full-name-upcase)
+                 (if type
+                   (return (values type entry))
+                   (multiple-value-bind
+                         (definition entry) (%resolve-type definition-name errorp)
+                     (declare (ignore entry))
+                     (if definition
+                       (let ((generic-type
+                               (check-exception
+                                (%make-generic-type definition type-args))))
+                         (return (with-type-table (data ns lock)
+                                   (with-write-lock (lock)
+                                     (%import-type generic-type t)))))
+                       (return (values nil nil))))))))))
+
+(declaim (inline %make-array-type-name))
+(defun %make-array-type-name (elt-type rank)
+  (and elt-type
+       (%mknetsym
+        (with-output-to-string (out)
+          (write-string (%get-property elt-type nil "FullName")
+                        out)
+          (write-char #\[ out)
+          (loop :repeat (1- rank) :do
+            (write-char #\, out))
+          (write-char #\] out)))))
 
 (defun %resolve-type (type errorp)
   (with-type-table (data ns lock aliases)
-    (cond ((dotnet-type-p type) type)
+    (cond ((dotnet-type-p type) (values type nil))
+          ((type-entry-p type) (values (%type-entry-type type) type))
           ((typep type 'string-designator)
            (let* ((type (%mknetsym type))
                   (alias (gethash type aliases)))
              (if alias
                (%resolve-type alias errorp)
-               (or (%%resolve-type type)
+               (multiple-value-bind (basic entry) (%%resolve-type type)
+                 (if basic
+                   (values basic entry)
                    (loop :for namespace :in ns
-                         :for prefixed = (uiop:strcat namespace type)
-                         :for resolved = (%%resolve-type prefixed)
-                         :when resolved :do (return resolved)
-                           :finally (when errorp
-                                      (error 'type-resolution-error :datum type)))))))
+                         :for prefixed = (uiop:strcat namespace type) :do
+                           (multiple-value-bind
+                                 (resolved entry) (%%resolve-type prefixed)
+                             (when resolved
+                               (return (values resolved entry))))
+                         :finally
+                            (when errorp
+                              (with-type-table (data ns lock)
+                                (with-write-lock (lock)
+                                  (return (%import-type type t)))))))))))
           ((consp type)
            (destructuring-bind (type &rest rest) type
              (let ((def-type (%mknetsym type)))
@@ -217,8 +293,16 @@ c) NIL, in which case a type would be registered only by its .FullName"
                  (destructuring-bind (elt-type &optional (rank 1)) rest
                    (declare (type (integer 1 32) rank))
                    (let ((elt-type (%resolve-type elt-type errorp)))
-                     (when elt-type
-                       (check-exception (%make-array-type elt-type rank)))))
+                     (if elt-type
+                       (let* ((array-type-name (%make-array-type-name elt-type rank)))
+                         (multiple-value-bind (type entry) (%%resolve-type array-type-name)
+                           (if (null type)
+                             (when errorp
+                               (with-type-table (data ns lock)
+                                 (with-write-lock (lock)
+                                   (%import-type array-type-name t))))
+                             (values type entry))))
+                       (values nil nil))))
                  (%resolve-generic-type def-type rest errorp)))))
           (t (when errorp (error 'invalid-type-designator :datum type))))))
 
@@ -228,8 +312,11 @@ c) NIL, in which case a type would be registered only by its .FullName"
  internal type cache."
   (with-type-table (data ns lock)
     (with-read-lock (lock)
-      (or (%resolve-type type errorp)
-          error-value))))
+      (multiple-value-bind (type entry) (%resolve-type type errorp)
+        (declare (ignore entry))
+        (if type
+          type
+          error-value)))))
 
 (defun load-assembly (assembly-string)
   (declare (type string-designator assembly-string))
@@ -238,10 +325,7 @@ c) NIL, in which case a type would be registered only by its .FullName"
          (assembly-type-name "System.Reflection.Assembly")
          (assembly-type (or (resolve-type assembly-type-name nil)
                             (import-type assembly-type-name))))
-    (check-exception
-     (%invoke-static assembly-type
-                     "Load"
-                     assembly-string))))
+    (%invoke assembly-type t () "Load" assembly-string)))
 
 (defun import-assembly (assembly-designator)
   (declare (type (or dotnet-object string-designator)
@@ -250,32 +334,25 @@ c) NIL, in which case a type would be registered only by its .FullName"
   (let* ((assembly (if (dotnet-object-p assembly-designator)
                      assembly-designator
                      (load-assembly assembly-designator)))
-         (types (check-exception
-                 (%invoke-member assembly "GetTypes"))))
+         (types (%invoke assembly nil () "GetTypes")))
     (with-type-table (data ns lock)
       (with-write-lock (lock)
-        (dotimes (i (%array-length types))
-          (%import-type (%net-vref types i)
-                        assembly))))
-    (values)))
+        (do-bike-vector (type types)
+          (%import-type type assembly)))))
+  (values))
 
 (defun get-loaded-assemblies ()
   "Returns a list of currently loaded assemblies"
   (let* ((loader-ctx-type-name "System.Runtime.Loader.AssemblyLoadContext")
          (loader-ctx-type (or (resolve-type loader-ctx-type-name nil)
                               (import-type loader-ctx-type-name)))
-         (assemblies (check-exception
-                      (%invoke-static loader-ctx-type "GetLoadedAssemblies")))
-         (result '()))
-    (dotimes (i (%array-length assemblies))
-      (push (%net-vref assemblies i) result))
-    (nreverse result)))
+         (assemblies (%invoke loader-ctx-type t () "GetLoadedAssemblies")))
+    (bike-vector-to-list assemblies)))
 
 (defun import-loaded-assemblies ()
   "Imports all currently loaded assemblies into type cache"
   (dolist (assembly (get-loaded-assemblies))
-    (unless (check-exception
-             (%invoke-member assembly "get_IsDynamic"))
+    (unless (%get-property assembly nil "IsDynamic")
       (import-assembly assembly)))
   (values))
 

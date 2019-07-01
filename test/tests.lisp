@@ -41,13 +41,24 @@
 (test box-unbox-int
   (is (eql 4 (unbox (box 4 'int)))))
 
-(test test-datetime-rountrip
+(test box-unbox-lisp-object
+  (let ((object (make-instance 'standard-object)))
+    (is (eq object (unbox (box object))))))
+
+(test test-datetime-roundtrip
   (let* ((culture (property 'System.Globalization.CultureInfo 'InvariantCulture))
          (dt (property 'System.DateTime 'Now))
          (str (invoke dt 'ToString "o" culture)))
     (is (invoke :object 'Equals
                 dt
                 (invoke 'System.DateTime 'ParseExact str "o" culture)))))
+
+(test test-vector-roundtrip
+  (let* ((list (loop :for i :from 1 :to 10 :collect i))
+         (vector (list-to-bike-vector list :type 'System.Int32)))
+    (dotimes (i (property vector 'Length))
+      (incf (dnvref vector i)))
+    (is (= 65 (reduce #'+ (bike-vector-to-list vector))))))
 
 (test test-exception
   (let ((ex nil))
@@ -57,9 +68,19 @@
         (setf ex (dotnet-error-object e))))
     (let ((type-name (and ex (property (invoke ex 'GetType)
                                        'FullName))))
-      (print type-name)
       (is (equal "System.IndexOutOfRangeException" type-name)
           "Wrong exception type. Got: ~a" type-name))))
+
+(test test-indexer
+  (let ((dict (new '(System.Collections.Generic.Dictionary :string :string))))
+    (setf (ref dict "Hello") "World")
+    (is (string= "World" (ref dict "Hello")))))
+
+(test test-read-only-indexer
+  (let* ((boxed-string (box "Hello"))
+         (ex (nth-value 1 (ignore-errors
+                           (setf (ref boxed-string 0) #\A)))))
+    (is (typep ex 'accessor-resolution-error))))
 
 (test test-callback
   (let* ((x 1)

@@ -32,9 +32,10 @@
                 #:string-designator
                 #:removef
                 #:hash-table-alist
+                #:define-constant
                 #:non-negative-fixnum)
   (:export
-   
+
    ;; types and stuff
    #:import-type
    #:resolve-type
@@ -49,6 +50,8 @@
    #:use-type-alias
    #:unuse-type-alias
    #:unuse-all-type-aliases
+   #:dotnet-type-designator
+   #:dotnet-method-designator
 
    ;; objects
    #:dotnet-object
@@ -69,25 +72,49 @@
    #:invalid-type-designator
    #:invalid-type-designator-datum
    #:type-resolution-error
-   #:type-resolution-error-datum   
+   #:type-resolution-error-datum
+   #:member-resolution-error
+   #:member-resolution-error-type
+   #:member-resolution-error-field
+   #:member-resolution-error-property
+   #:member-resolution-error-method
+   #:member-resolution-error-args
+   #:member-resolution-error-accessor-kind
+   #:member-resolution-error-member-kind
+   #:member-resolution-error-member
+   #:field-resolution-error
+   #:field-resolution-error-field
+   #:property-resolution-error
+   #:property-resolution-error-property
+   #:indexer-resolution-error
+   #:method-resolution-error
+   #:method-resolution-error-method
+   #:method-resolution-error-args
+   #:accessor-resolution-error
+   #:accessor-resolution-error-accessor-kind
+   #:accessor-resolution-error-member-kind
+   #:accessor-resolution-error-member
 
+   ;; reflection api
+   #:reflection-invoke
+   #:reflection-field
+   #:reflection-property
+   #:reflection-ref
 
    ;; api
+   #:get-type
    #:new
    #:invoke
    #:field
    #:property
+   #:ref
    #:box
    #:unbox
 
    ;; arrays
    #:do-bike-vector
-   #:dnvref))
+   #:dnvref
+   #:list-to-bike-vector
+   #:bike-vector-to-list))
 
 ;;; vim: ft=lisp et
-
-
-
-
-
-

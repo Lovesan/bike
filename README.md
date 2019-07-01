@@ -115,6 +115,12 @@ Testers are welcome.
 
 * Fancy reader syntax like the one RDNZL had
 
-* Reflection, although works, is no speed daemon. Probably, it is a must to implement some cache of compiled lambda expressions / dynamic methods, like the DLR has, which would be directly invoked by Lisp.
+* Implement method lookup based on existing type member cache
+
+* Refactor trampoline compiler code
+
+* Implement direct function definitions akin to CFFI's ```defcfun```
+
+* Fix SBCL crashes on Linux. Fix SBCL crashes on Windows with NullReferenceException.
 
 * etc.

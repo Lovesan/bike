@@ -22,20 +22,14 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(asdf:defsystem #:bike-tests
-  :version "0.2.0"
-  :description "Common Lisp .Net Core Interop tests"
-  :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :licence "MIT"
-  :depends-on (#:bike
-               #:fiveam)
-  :serial t
-  :components ((:module "test"
-                :serial t
-                :components ((:file "tests"))))
-  :perform (test-op (o c) (symbol-call
-                           :fiveam '#:run!
-                           (intern* '#:bike-suite :bike-tests))))
+(in-package #:bike)
+
+;;; Mini-CLOS would be here
+;;; We need to implement a resolution of the concrete method entry using
+;;;   the supplied args or arg types
+;;; The problem is that such 'multiple-dispatch'
+;;;   implementation would be a cross-boundary thing.
+;;; We need to make a dispatch of .Net methods on Lisp objects
+
 
 ;;; vim: ft=lisp et

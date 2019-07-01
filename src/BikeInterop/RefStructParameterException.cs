@@ -23,21 +23,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+using System;
+using System.Reflection;
+
 namespace BikeInterop
 {
     /// <summary>
-    /// Represents a Lisp exception
+    /// Represents a situation where <see cref="TrampolineCompiler"/> has
+    ///   encountered a ref struct, which it cannot process
     /// </summary>
-    public class LispException : BikeException
+    public class RefStructParameterException : BikeException
     {
-        /// <summary>
-        /// Lisp exception object
-        /// </summary>
-        public LispObject Value { get; }
+        public RefStructParameterException(MemberInfo memberInfo, Type refStructType)
+            : this(null, memberInfo, refStructType)
+        { }
 
-        public LispException(LispObject value)
-        {
-            Value = value;
-        }
+        public RefStructParameterException(ParameterInfo parameterInfo, MemberInfo memberInfo, Type refStructType)
+            : base("Unable to compile ref struct parameters and return values")
+            => (ParameterInfo, MemberInfo, RefStructType) = (parameterInfo, memberInfo, refStructType);
+
+        /// <summary>
+        /// An optional parameter which has <see cref="RefStructType"/>
+        /// </summary>
+        public ParameterInfo ParameterInfo { get; }
+
+        /// <summary>
+        /// A member which could not be compiled into trampoline
+        /// </summary>
+        public MemberInfo MemberInfo { get; }
+
+        /// <summary>
+        /// A type of a struct which cannot be used
+        /// </summary>
+        public Type RefStructType { get; }
     }
 }

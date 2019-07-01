@@ -22,20 +22,20 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(asdf:defsystem #:bike-tests
-  :version "0.2.0"
-  :description "Common Lisp .Net Core Interop tests"
-  :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :licence "MIT"
-  :depends-on (#:bike
-               #:fiveam)
-  :serial t
-  :components ((:module "test"
-                :serial t
-                :components ((:file "tests"))))
-  :perform (test-op (o c) (symbol-call
-                           :fiveam '#:run!
-                           (intern* '#:bike-suite :bike-tests))))
+(in-package #:bike-internals)
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (cond ((os-windows-p)
+         (pushnew :coreclr-windows *features*))
+        ((os-macosx-p)
+         (pushnew :coreclr-macos *features*))
+        ((os-unix-p)
+         (pushnew :coreclr-unix *features*)))
+  #+linux
+  (pushnew :coreclr-linux *features*)
+  #+(and sbcl windows)
+  (when (string< (uiop:lisp-version-string)
+                 "1.5.4")
+    (pushnew :coreclr-sbcl-task-hack *features*)))
 
 ;;; vim: ft=lisp et

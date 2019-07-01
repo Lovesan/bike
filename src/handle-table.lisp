@@ -48,7 +48,7 @@
 
 (uiop:register-image-restore-hook #'%init-handle-table (null *handle-table*))
 
-(defmacro with-handle-table ((data-var &optional (length-var (gensym)) read)
+(defmacro with-handle-table ((data-var &optional (length-var (gensym)) (lock-type :write))
                              &body body)  
   (with-gensyms (table lock)
     `(let ((,table *handle-table*))
@@ -57,12 +57,14 @@
                         (,length-var %handle-table-length)
                         (,lock %handle-table-lock))
            ,table
-         (,(if read 'with-read-lock 'with-write-lock)
-          (,lock)
+         (,@(if lock-type
+              `(,(if (eq lock-type :write) 'with-read-lock 'with-write-lock)
+                (,lock))
+              '(progn))
           (locally ,@body))))))
 
 (defun %resize-handle-table ()
-  (with-handle-table (data length)
+  (with-handle-table (data length nil)
     (let* ((size (length data))
            (new-size (min most-positive-fixnum (1+ (* size 2)))))
       (when (< size new-size)
@@ -72,7 +74,7 @@
           t)))))
 
 (defun %alloc-lisp-handle (object)
-  (with-handle-table (data length)
+  (with-handle-table (data length :write)
     (let* ((slots data)
            (index (loop :for i :of-type fixnum :from 1 :below length
                         :when (null (svref slots i)) :do (return i)
@@ -91,7 +93,7 @@
 
 (defun %free-lisp-handle (handle)
   (declare (type fixnum handle))
-  (with-handle-table (data length)
+  (with-handle-table (data length :write)
     (when (and (> handle 0)
                (< handle length))
       (setf (svref data handle) nil)))
@@ -99,7 +101,7 @@
 
 (defun %handle-table-get (handle)
   (declare (type fixnum handle))
-  (with-handle-table (data length t)
+  (with-handle-table (data length :read)
     (when (and (> handle 0)
                (< handle length))
       (svref data handle))))

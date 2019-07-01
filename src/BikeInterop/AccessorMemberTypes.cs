@@ -26,18 +26,26 @@
 namespace BikeInterop
 {
     /// <summary>
-    /// Represents a Lisp exception
+    /// Represents a type of accessors to make trampolines for
+    ///   by means of <see cref="TrampolineCompiler"/>
     /// </summary>
-    public class LispException : BikeException
+    public enum AccessorMemberTypes
     {
         /// <summary>
-        /// Lisp exception object
+        /// Invalid value
         /// </summary>
-        public LispObject Value { get; }
-
-        public LispException(LispObject value)
-        {
-            Value = value;
-        }
+        Undefined = 0,
+        /// <summary>
+        /// Field accessors
+        /// </summary>
+        Field = 1,
+        /// <summary>
+        /// Property accessors
+        /// </summary>
+        Property = 2,
+        /// <summary>
+        /// Indexer accessors
+        /// </summary>
+        Indexer = 3
     }
 }

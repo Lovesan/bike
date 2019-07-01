@@ -29,7 +29,7 @@
                    (:conc-name %rwlock-))
   "Read-Write lock with read preferrence"
   (read-lock (bt:make-lock) :type bt:lock :read-only t)
-  (write-lock (bt:make-lock) :type bt:lock :read-only t)
+  (write-lock (bt:make-recursive-lock) :type bt:recursive-lock :read-only t)
   (read-count 0 :type non-negative-fixnum))
 
 (defun make-rwlock ()
@@ -62,8 +62,8 @@
   (with-gensyms (lock)
     `(let ((,lock ,rwlock))
        (declare (type rwlock ,lock))
-       (bt:acquire-lock (%rwlock-write-lock ,lock))
+       (bt:acquire-recursive-lock (%rwlock-write-lock ,lock))
        (unwind-protect (locally ,@body)
-         (bt:release-lock (%rwlock-write-lock ,lock))))))
+         (bt:release-recursive-lock (%rwlock-write-lock ,lock))))))
 
 ;;; vim: ft=lisp et

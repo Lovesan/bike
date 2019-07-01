@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike
-  :version "0.1.1"
+  :version "0.2.0"
   :description "Common Lisp .Net Core Interop"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
@@ -46,8 +46,17 @@
                              (:file "handle-table")
                              (:file "object")
                              (:file "conditions")
+                             (:file "api-low")
                              (:file "callbacks")
                              (:file "type")
+                             (:file "members-low")
+                             (:file "api-reflection")
+                             (:file "trampolines")
+                             (:file "methods")
+                             (:file "fields")
+                             (:file "properties")
+                             (:file "members")
+                             (:file "method-resolution")
                              (:file "api")
                              (:file "init"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))
