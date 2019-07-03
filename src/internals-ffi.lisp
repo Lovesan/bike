@@ -205,5 +205,4 @@
     (declare (ignore param))
     (foreign-free pointer)))
 
-
 ;;; vim: ft=lisp et

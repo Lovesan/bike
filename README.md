@@ -95,11 +95,18 @@ The above patch fixed the situation for usual exceptions (Exception, IndexOutOfB
 
 #### Linux
 
-Sometimes SBCL crashes into LDB with a cryptic message of ```blockables unblocked``` should .Net Core runtime be present on a lisp thread. The reason for this is, possibly, that SBCL somehow interferes with unix signals installed by .Net(or vice versa), in a kind of a wrong way.
+Early SBCL versions(namely [pre 1.5.4.13-b656602a3](https://sourceforge.net/p/sbcl/sbcl/ci/b656602a309fc9647dd01255154c1068305f12f7/tree/)) were frequently crashing into LDB with a cryptic message of ```blockables unblocked``` if .Net Core runtime was present in a lisp process.
 
-This need to be debugged out. [Seems that it is not only a case of .Net Core.](https://irclog.tymoon.eu/freenode/lisp?around=1500933122)
+The reason for this is that SBCL and .Net Core stomp on each other signals, in a kind of a wrong way.
 
-It may be something wrong with how SBCL handles pseudo-atomic thing.
+[Seems that it is not only a case of .Net Core.](https://irclog.tymoon.eu/freenode/lisp?around=1500933122)
+
+Thankfully, Stas Boukarev(stassats) implemented a workaround in the latest SBCL.
+
+We still have to understand what may that workaround do to .Net Core runtime, but at least, it solves a problem of unavoidable and frequent crashes.
+
+On overall, this need to be debugged out further. Maybe we would ask for help someone from .Net Core team.
+
 
 #### MacOS X
 

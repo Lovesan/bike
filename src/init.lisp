@@ -49,18 +49,22 @@
                                   (domain-id :uint))
              (setf (mem-ref keys :pointer) propkey
                    (mem-ref vals :pointer) tpa)
-             (let ((rv (coreclr-initialize exe
-                                           domain-name
-                                           1
-                                           keys
-                                           vals
-                                           host
-                                           domain-id)))
-               (unless (zerop rv)
-                 (error "Unable to initialize coreclr: HRESULT ~8,'0X" rv))
-               (%coreclr-host :handle (mem-ref host :pointer)
-                              :domain-id (mem-ref domain-id :uint)
-                              :domain-name domain-name))))
+             (locally (declare (optimize (speed 3) (safety 0) (space 0) (debug 0)))
+               (let ((rv (coreclr-initialize exe
+                                             domain-name
+                                             1
+                                             keys
+                                             vals
+                                             host
+                                             domain-id)))
+                 (declare (type (unsigned-byte 32) rv))
+                 #+coreclr-restore-sbcl-signals
+                 (foreign-funcall "restore_sbcl_signals" :void)
+                 (unless (zerop rv)
+                   (error "Unable to initialize coreclr: HRESULT ~8,'0X" rv))))
+             (%coreclr-host :handle (mem-ref host :pointer)
+                            :domain-id (mem-ref domain-id :uint)
+                            :domain-name domain-name)))
       (free-converted-object tpa 'lpastr nil))))
 
 (defun init-coreclr (&optional (domain-name "CommonLisp"))

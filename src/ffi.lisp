@@ -24,6 +24,7 @@
 
 (in-package #:bike)
 
+(declaim (inline coreclr-initialize))
 (defcfun (coreclr-initialize
           "coreclr_initialize"
           :library coreclr
@@ -36,6 +37,24 @@
   (property-values :pointer)
   (host-handle :pointer)
   (domain-id :pointer))
+
+(define-compiler-macro coreclr-initialize (exe-path
+                                           app-domain-name
+                                           property-count
+                                           property-keys
+                                           property-values
+                                           host-handle
+                                           domain-id)
+  `(foreign-funcall ("coreclr_initialize" :convention :stdcall
+                                          :library coreclr)
+                    lpastr ,exe-path
+                    lpastr ,app-domain-name
+                    :int ,property-count
+                    :pointer ,property-keys
+                    :pointer ,property-values
+                    :pointer ,host-handle
+                    :pointer ,domain-id
+                    :uint))
 
 (defcfun (coreclr-shutdown-2
           "coreclr_shutdown_2"

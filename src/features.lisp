@@ -36,6 +36,9 @@
   #+(and sbcl windows)
   (when (string< (uiop:lisp-version-string)
                  "1.5.4")
-    (pushnew :coreclr-sbcl-task-hack *features*)))
+    (pushnew :coreclr-sbcl-task-hack *features*))
+  #+(and sbcl linux)
+  (when (foreign-symbol-pointer "restore_sbcl_signals")
+    (pushnew :coreclr-restore-sbcl-signals *features*)))
 
 ;;; vim: ft=lisp et

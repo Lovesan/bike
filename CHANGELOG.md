@@ -1,3 +1,10 @@
+# 0.3.0 - Workaround for SBCL/Linux crashes
+  * stassats implemented a workaround for SBCL/CoreCLR signal interference on Linux
+  * Fixed bug with handle-table resize
+  * Verified that library works inside SBCL/nanoserver container
+    * ```docker pull love5an/dotnet-core-sdk-common-lisp:2.2-sbcl-1.5.4-nanoserver-1903```
+  * Implemented several internal APIs for future enhancements of type resolution
+
 # 0.2.0 - Type member cache
   * Major refactoring
   * Split internals system into several files
