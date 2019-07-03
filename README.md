@@ -124,10 +124,12 @@ Testers are welcome.
 
 * Implement method lookup based on existing type member cache
 
+* Optimize type resolution
+
 * Refactor trampoline compiler code
 
 * Implement direct function definitions akin to CFFI's ```defcfun```
 
-* Fix SBCL crashes on Linux. Fix SBCL crashes on Windows with NullReferenceException.
+* Investigate SBCL/CoreCLR interop on Linux. Fix SBCL crashes on Windows with NullReferenceException.
 
 * etc.
