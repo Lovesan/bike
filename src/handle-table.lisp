@@ -49,7 +49,7 @@
 (uiop:register-image-restore-hook #'%init-handle-table (null *handle-table*))
 
 (defmacro with-handle-table ((data-var &optional (length-var (gensym)) (lock-type :write))
-                             &body body)  
+                             &body body)
   (with-gensyms (table lock)
     `(let ((,table *handle-table*))
        (declare (type handle-table ,table))
@@ -69,7 +69,7 @@
            (new-size (min most-positive-fixnum (1+ (* size 2)))))
       (when (< size new-size)
         (let ((new-data (make-array new-size :initial-element nil)))
-          (replace new-data data :end1 new-size :end2 new-size)
+          (replace new-data data :end1 new-size :end2 size)
           (setf data new-data)
           t)))))
 
