@@ -28,6 +28,7 @@ using System;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 // ReSharper disable once RedundantUsingDirective
 using System.Threading.Tasks;
@@ -932,6 +933,7 @@ namespace BikeInterop
                         var indexerInfo = (PropertyInfo) UnboxObject(memberInfo);
                         TrampolineCompiler.CompileIndexer(indexerInfo, out rdr, out innerReaderPtr, out wtr, out innerWriterPtr);
                         break;
+                    // ReSharper disable once RedundantCaseLabel
                     case AccessorMemberTypes.Undefined:
                     default:
                         throw new ArgumentException("Invalid accessor member type", nameof(accessorMemberType));
@@ -1149,6 +1151,116 @@ namespace BikeInterop
             if (value == IntPtr.Zero)
                 return false;
             return UnboxObject(value) is Type;
+        }
+
+        public static bool IsTransientType(IntPtr type)
+        {
+            return (UnboxObject(type) as Type)?.Assembly.IsDynamic ?? false;
+        }
+
+        public static bool IsGenericType(IntPtr type)
+        {
+            return (UnboxObject(type) as Type)?.IsGenericType ?? false;
+        }
+
+        public static bool IsGenericTypeDefinition(IntPtr type)
+        {
+            return (UnboxObject(type) as Type)?.IsGenericTypeDefinition ?? false;
+        }
+
+        public static void GetGenericTypeDefinition(
+            IntPtr type,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            result = IntPtr.Zero;
+            typeCode = (int) TypeCode.Empty;
+            Exception e = null;
+            Type definition = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realType = (Type) UnboxObject(type);
+                definition = realType.GetGenericTypeDefinition();
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            typeCode = definition.GetFullTypeCode();
+            result = BoxObject(definition);
+            exception = BoxObject(e);
+        }
+
+        public static void GetGenericTypeArguments(
+            IntPtr type,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            result = IntPtr.Zero;
+            typeCode = (int) TypeCode.Empty;
+            Exception e = null;
+            Type[] arguments = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realType = (Type)UnboxObject(type);
+                arguments = realType.GetGenericArguments();
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            typeCode = arguments.GetFullTypeCode();
+            result = BoxObject(arguments);
+            exception = BoxObject(e);
+        }
+
+        public static bool IsCompilerGeneratedMember(IntPtr value)
+        {
+            var info = UnboxObject(value) as MemberInfo;
+            if (info == null) return false;
+            return info.GetCustomAttribute<CompilerGeneratedAttribute>() != null;
         }
 
         public static void ArrayLength(

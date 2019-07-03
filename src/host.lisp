@@ -90,7 +90,13 @@
   (get-full-type-code (null-pointer) :type foreign-pointer)
   (get-type-of (null-pointer) :type foreign-pointer)
   (get-type-full-name (null-pointer) :type foreign-pointer)
-  (get-type-assembly-qualified-name (null-pointer) :type foreign-pointer))
+  (get-type-assembly-qualified-name (null-pointer) :type foreign-pointer)
+  (is-generic-type (null-pointer) :type foreign-pointer)
+  (is-generic-type-definition (null-pointer) :type foreign-pointer)
+  (get-generic-type-definition (null-pointer) :type foreign-pointer)
+  (get-generic-type-arguments (null-pointer) :type foreign-pointer)
+  (is-compiler-generated-member (null-pointer) :type foreign-pointer)
+  (is-transient-type (null-pointer) :type foreign-pointer))
 
 #+sbcl
 (sb-ext:defglobal *coreclr-host* nil)

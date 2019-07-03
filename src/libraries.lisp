@@ -48,16 +48,25 @@
 
 (use-foreign-library coreclr)
 
-(defun %get-tpa ()
-  (let* ((path (uiop:merge-pathnames* 
-                (uiop:make-pathname*
-                 :name uiop:*wild*
-                 :type "dll")
-                *coreclr-location*))
-         (files (uiop:directory* path)))
-    (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}~a~a")
-            (mapcar #'uiop:native-namestring files)
-            (uiop:inter-directory-separator)
-            (uiop:native-namestring *interop-location*))))
+(defun get-trusted-platform-assemblies ()
+  "Retrieves a list of pathnames of trusted platform assemblies"
+  (uiop:directory* (uiop:make-pathname*
+                    :name uiop:*wild*
+                    :type "dll"
+                    :defaults *coreclr-location*)))
+
+(defun %get-tpa-string ()
+  (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}~a~a")
+          (mapcar #'uiop:native-namestring
+                  (get-trusted-platform-assemblies))
+          (uiop:inter-directory-separator)
+          (uiop:native-namestring *interop-location*)))
+
+(defun %get-trusted-assembly-names ()
+  (loop :with tpa-dlls = (get-trusted-platform-assemblies)
+        :for full-pathname :in tpa-dlls
+        :for name = (pathname-name full-pathname)
+        :when (uiop:string-prefix-p "System." name)
+          :collect name))
 
 ;;; vim: ft=lisp et

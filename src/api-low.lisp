@@ -134,7 +134,9 @@
   (declare (type foreign-pointer ex))
   (unless (null-pointer-p ex)
     (if (%is-lisp-object ex)
-      (let ((condition (%handle-table-get (%%unbox-lisp-object ex))))
+      (let ((condition (%handle-table-get
+                         (pointer-address
+                           (%%unbox-lisp-object ex)))))
         (%free-handle ex)
         (error condition))
       (error 'dotnet-error :object (%dotnet-exception ex))))
@@ -614,5 +616,60 @@
          (name (%unbox-string rv)))
     (%free-handle rv)
     name))
+
+(defun generic-type-p (type)
+  (declare (type dotnet-type type))
+  "Tests whether a TYPE is a generic type"
+  (hostcall is-generic-type
+            :pointer (%dotnet-type-handle type)
+            :bool))
+
+(defun generic-type-definition-p (type)
+  (declare (type dotnet-type type))
+  "Tests whether a TYPE is a generic type definition"
+  (hostcall is-generic-type-definition
+            :pointer (%dotnet-type-handle type)
+            :bool))
+
+(defun get-generic-type-definition (type)
+  (declare (type dotnet-type type))
+  "Returns a generic type definition for a generic TYPE"
+  (with-foreign-objects ((rv :pointer)
+                         (code :int)
+                         (ex :pointer))
+    (hostcall get-generic-type-definition
+              :pointer (%dotnet-type-handle type)
+              :pointer rv
+              :pointer code
+              :pointer ex)
+    (%transform-rv rv code ex)))
+
+(defun get-generic-type-arguments (type)
+  (declare (type dotnet-type type))
+  "Returns a list of generic type arguments for TYPE"
+  (with-foreign-objects ((rv :pointer)
+                         (code :int)
+                         (ex :pointer))
+    (hostcall get-generic-type-arguments
+              :pointer (%dotnet-type-handle type)
+              :pointer rv
+              :pointer code
+              :pointer ex)
+    (bike-vector-to-list (%transform-rv rv code ex))))
+
+(defun compiler-generated-member-p (info)
+  (declare (type dotnet-object info))
+  "Returns T in case of the MemberInfo designated by INFO
+ is compiler-generated"
+  (hostcall is-compiler-generated-member
+            :pointer (%dotnet-object-handle info)
+            :bool))
+
+(defun transient-type-p (type)
+  (declare (type dotnet-type type))
+  "Returns non-NIL in case of the TYPE is coming from a dynamic assembly"
+  (hostcall is-transient-type
+            :pointer (%dotnet-type-handle type)
+            :bool))
 
 ;;; vim: ft=lisp et

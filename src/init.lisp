@@ -39,7 +39,7 @@
 (defun %do-initialize-coreclr (domain-name)
   (declare (type string domain-name))
   (let* ((exe (get-exe-path))
-         (tpa (convert-to-foreign (%get-tpa) 'lpastr)))
+         (tpa (convert-to-foreign (%get-tpa-string) 'lpastr)))
     (unwind-protect
          (with-foreign-string (propkey "TRUSTED_PLATFORM_ASSEMBLIES"
                                        :encoding :ascii)
@@ -131,6 +131,12 @@
       (frob get-type-of "GetTypeOf")
       (frob get-type-full-name "GetTypeFullName")
       (frob get-type-assembly-qualified-name "GetTypeAssemblyQualifiedName")
+      (frob is-generic-type "IsGenericType")
+      (frob is-generic-type-definition "IsGenericTypeDefinition")
+      (frob get-generic-type-definition "GetGenericTypeDefinition")
+      (frob get-generic-type-arguments "GetGenericTypeArguments")
+      (frob is-compiler-generated-member "IsCompilerGeneratedMember")
+      (frob is-transient-type "IsTransientType")
       (setf *coreclr-host* host)
       (%install-callbacks (callback free-lisp-handle)
                           (callback apply))
