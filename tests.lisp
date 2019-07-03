@@ -22,6 +22,8 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+(ql:quickload '#:bike-internals)
+(ql:quickload '#:bike)
 (ql:quickload '#:bike-tests)
 
 (asdf:test-system '#:bike)
