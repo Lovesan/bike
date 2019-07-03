@@ -31,10 +31,7 @@ jobs:
 workflows:
   version: 2
 
-  ccl_amd64:
+  tests:
     jobs:
       - build_ccl_amd64
-
-  sbcl_amd64:
-    jobs:
       - build_sbcl_amd64
