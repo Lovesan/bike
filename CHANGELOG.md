@@ -1,3 +1,7 @@
+# 0.3.1 - Bugfixing release
+  * Fixed property setter trampoline compiler
+  * Added SBCL to CI tests
+
 # 0.3.0 - Workaround for SBCL/Linux crashes
   * stassats implemented a workaround for SBCL/CoreCLR signal interference on Linux
   * Fixed bug with handle-table resize

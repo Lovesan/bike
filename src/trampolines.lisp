@@ -179,6 +179,7 @@
              ,@(if primitive-type
                  `(,primitive-type ,value)
                  `(:pointer ,boxed))
+             :pointer ,ex
              :void)
             (let ((,ex (mem-ref ,ex :pointer)))
               ,@(unless primitive-type
