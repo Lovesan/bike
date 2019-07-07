@@ -327,6 +327,15 @@ c) NIL, in which case a type would be registered only by its .FullName"
                             (import-type assembly-type-name))))
     (%invoke assembly-type t () "Load" assembly-string)))
 
+(defun load-assembly-from (path)
+  (declare (type (or pathname string) path))
+  "Loads an assembly from a file designated by PATH"
+  (let* ((path (uiop:truename* path))
+         (assembly-type-name "System.Reflection.Assembly")
+         (assembly-type (or (resolve-type assembly-type-name nil)
+                            (import-type assembly-type-name))))
+    (%invoke assembly-type t () "LoadFrom" (uiop:native-namestring path))))
+
 (defun import-assembly (assembly-designator)
   (declare (type (or dotnet-object string-designator)
                  assembly-designator))
@@ -358,6 +367,7 @@ c) NIL, in which case a type would be registered only by its .FullName"
 
 (defun %init-type-table (namespaces types aliases)
   (setf *type-table* (%type-table))
+
   (import-loaded-assemblies)
   (use-type-alias :object "System.Object")
   (use-type-alias :string "System.String")

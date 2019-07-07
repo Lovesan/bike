@@ -33,6 +33,7 @@
   :components ((:module "examples"
                 :serial t
                 :components ((:file "package")
-                             (:file "hello")))))
+                             (:file "hello")
+                             (:file "aspnet-mvc")))))
 
 ;;; vim: ft=lisp et

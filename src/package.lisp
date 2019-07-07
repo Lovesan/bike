@@ -40,6 +40,7 @@
    #:import-type
    #:resolve-type
    #:load-assembly
+   #:load-assembly-from
    #:import-assembly
    #:get-loaded-assemblies
    #:import-loaded-assemblies

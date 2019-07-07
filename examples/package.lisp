@@ -28,6 +28,9 @@
   (:use #:cl #:bike)
   (:export #:hello
            #:hello-datetime
-           #:hello-callback))
+           #:hello-callback
+           #:start-hello-host
+           #:stop-hello-host
+           #:get-hello-response))
 
 ;;; vim: ft=lisp et
