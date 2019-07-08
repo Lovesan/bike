@@ -81,6 +81,7 @@
                                                         name
                                                         type
                                                         primitive-type
+                                                        pointer-p
                                                         optional-p
                                                         direction
                                                         position
@@ -91,6 +92,7 @@
   (info (required-slot) :type dotnet-object :read-only t)
   (name (required-slot) :type string :read-only t)
   (primitive-type nil :type symbol :read-only t)
+  (pointer-p nil :type symbol :read-only t)
   (type (required-slot) :type dotnet-type :read-only t)
   (optional-p nil :type boolean :read-only t)
   (direction :in :type parameter-direction :read-only t)
@@ -101,6 +103,7 @@
                                                     name
                                                     staticp
                                                     primitive-type
+                                                    pointer-p
                                                     type
                                                     reader
                                                     reader-delegate
@@ -115,6 +118,7 @@
   (name "" :type string :read-only t)
   (staticp nil :type boolean :read-only t)
   (primitive-type nil :type symbol :read-only t)
+  (pointer-p nil :type symbol :read-only t)
   (type (required-slot) :type dotnet-object :read-only t)
   (reader nil :type (or null function) :read-only t)
   (reader-delegate nil :type (or null dotnet-object) :read-only t)
@@ -127,6 +131,7 @@
                                                           name
                                                           staticp
                                                           primitive-type
+                                                          pointer-p
                                                           type
                                                           reader
                                                           reader-delegate
@@ -141,6 +146,7 @@
   (name "" :type string :read-only t)
   (staticp nil :type boolean :read-only t)
   (primitive-type nil :type symbol :read-only t)
+  (pointer-p nil :type symbol :read-only t)
   (type (required-slot) :type dotnet-object :read-only t)
   (reader nil :type (or null function) :read-only t)
   (reader-delegate nil :type (or null dotnet-object) :read-only t)
@@ -152,6 +158,7 @@
 (defstruct (indexer-entry (:constructor %indexer-entry (info
                                                         name
                                                         primitive-type
+                                                        pointer-p
                                                         type
                                                         arg-count
                                                         args
@@ -167,6 +174,7 @@
   (info (required-slot) :type dotnet-object :read-only t)
   (name "" :type string :read-only t)
   (primitive-type nil :type symbol :read-only t)
+  (pointer-p nil :type symbol :read-only t)
   (type (required-slot) :type dotnet-object :read-only t)
   (arg-count 0 :type non-negative-fixnum)
   (args (required-slot) :type cons)
@@ -189,7 +197,8 @@
                                      ("System.UInt64" . :uint64)
                                      ("System.Single" . :float)
                                      ("System.Double" . :double)
-                                     ("System.IntPtr" . :pointer))
+                                     ("System.IntPtr" . :pointer)
+                                     ("System.UIntPtr" . :pointer))
   :test #'equal)
 
 ;;; vim: ft=lisp et

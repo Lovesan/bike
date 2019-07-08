@@ -28,6 +28,14 @@
 
 (define-constant +pointer-bits+ (* 8 +pointer-size+))
 
+#+coreclr-64-bit
+(progn
+  (defctype size-t :uint64))
+
+#+coreclr-32-bit
+(progn
+  (defctype size-t :uint32))
+
 (defctype lpwstr (:string :encoding :utf-16/le))
 
 (define-foreign-type dotnet-char-type ()

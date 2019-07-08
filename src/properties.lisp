@@ -34,6 +34,7 @@
          (type (reflection-property info "PropertyType"))
          (staticp (reflection-property (dnvref (reflection-invoke info "GetAccessors") 0)
                                        "IsStatic"))
+         (pointerp (reflection-property type "IsPointer"))
          (primitive-type (cdr (assoc (reflection-property type "FullName")
                                      +primitive-types+
                                      :test #'string-equal))))
@@ -47,7 +48,9 @@
         (%property-entry info
                          name
                          staticp
-                         primitive-type
+                         (or primitive-type
+                             (and pointerp :pointer))
+                         pointerp
                          type
                          reader
                          reader-delegate
@@ -63,6 +66,7 @@
          (primitive-type (cdr (assoc (reflection-property type "FullName")
                                      +primitive-types+
                                      :test #'string-equal)))
+         (pointerp (reflection-property type "IsPointer"))
          (args (sort (mapcar #'%make-param-entry
                              (bike-vector-to-list
                               (reflection-invoke info "GetIndexParameters")))
@@ -85,7 +89,9 @@
                         writer-ptr nil t writer-args))))
         (%indexer-entry info
                         name
-                        primitive-type
+                        (or primitive-type
+                            (and pointerp :pointer))
+                        pointerp
                         type
                         arg-count
                         args

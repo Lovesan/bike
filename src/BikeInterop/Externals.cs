@@ -289,11 +289,124 @@ namespace BikeInterop
             exception = BoxObject(e);
         }
 
+        public static void MakePointerType(
+            IntPtr type,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            typeCode = (int)TypeCode.Empty;
+            result = IntPtr.Zero;
+            Exception e = null;
+            object invocationResult = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var underlyingType = (Type)UnboxObject(type);
+                invocationResult = underlyingType.MakePointerType();
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            result = BoxObject(invocationResult);
+            typeCode = invocationResult.GetFullTypeCode();
+            exception = BoxObject(e);
+        }
+        public static void MakeByRefType(
+            IntPtr type,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            typeCode = (int)TypeCode.Empty;
+            result = IntPtr.Zero;
+            Exception e = null;
+            object invocationResult = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var underlyingType = (Type)UnboxObject(type);
+                invocationResult = underlyingType.MakeByRefType();
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            result = BoxObject(invocationResult);
+            typeCode = invocationResult.GetFullTypeCode();
+            exception = BoxObject(e);
+        }
+
         public static bool IsDelegateType(IntPtr type)
         {
             var obj = UnboxObject(type);
             return obj is Type realType &&
                    realType.IsSubclassOf(typeof(Delegate));
+        }
+
+        public static bool IsPointerType(IntPtr type)
+        {
+            var obj = UnboxObject(type);
+            return obj is Type realType && realType.IsPointer;
+        }
+
+        public static bool IsByRefType(IntPtr type)
+        {
+            var obj = UnboxObject(type);
+            return obj is Type realType && realType.IsByRef;
+        }
+
+        public static bool IsArrayType(IntPtr type)
+        {
+            var obj = UnboxObject(type);
+            return obj is Type realType && realType.IsArray;
+        }
+
+        public static bool IsEnumType(IntPtr type)
+        {
+            var obj = UnboxObject(type);
+            return obj is Type realType && realType.IsEnum;
         }
 
         public static void Invoke(
@@ -684,7 +797,7 @@ namespace BikeInterop
 #endif
             exception = BoxObject(e);
         }
-        
+
         public static void InvokeConstructor(
             IntPtr type,
             IntPtr args,
@@ -1256,6 +1369,48 @@ namespace BikeInterop
             exception = BoxObject(e);
         }
 
+        public static IntPtr GetElementType(IntPtr type, out IntPtr exception)
+        {
+            Exception e = null;
+            object invocationResult = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realType = (Type) UnboxObject(type);
+                invocationResult = realType.GetElementType();
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            exception = BoxObject(e);
+            return BoxObject(invocationResult);
+        }
+
+        public static int GetArrayTypeRank(IntPtr value)
+        {
+            return ((Type)UnboxObject(value)).GetArrayRank();
+        }
+
         public static bool IsCompilerGeneratedMember(IntPtr value)
         {
             var info = UnboxObject(value) as MemberInfo;
@@ -1460,6 +1615,91 @@ namespace BikeInterop
             result = BoxObject(invocationResult);
             typeCode = invocationResult.GetFullTypeCode();
             exception = BoxObject(e);
+        }
+
+        public static IntPtr EnumToObject(
+            IntPtr type,
+            long value,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            Exception e = null;
+            object invocationResult = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realType = (Type)UnboxObject(type);
+                invocationResult = Enum.ToObject(realType, value);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            exception = BoxObject(e);
+            return BoxObject(invocationResult);
+        }
+
+        public static bool ObjectEquals(IntPtr left, IntPtr right)
+        {
+            return Equals(UnboxObject(left), UnboxObject(right));
+        }
+
+        public static IntPtr LoadAssembly(
+            [MarshalAs(UnmanagedType.LPWStr)] string assemblyString,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            Exception e = null;
+            object invocationResult = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                invocationResult = Assembly.Load(assemblyString);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            exception = BoxObject(e);
+            return BoxObject(invocationResult);
         }
 
         internal static IntPtr BoxObject(object value)

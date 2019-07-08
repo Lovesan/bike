@@ -75,6 +75,10 @@ Given this, you can deploy dumped images to other machines.
 
 ## Known Issues
 
+### Task.Result and other things which block .Net code
+
+Do not use this if you pass Lisp callbacks to .Net code - this may cause deadlocks.
+
 ### SBCL
 
 SBCL is the main development and testing platform.
@@ -107,6 +111,8 @@ We still have to understand what may that workaround do to .Net Core runtime, bu
 
 On overall, this need to be debugged out further. Maybe we would ask for help someone from .Net Core team.
 
+**UPD** **2019-07-13:**  CoreFX(the .Net Core stdlib) also establishes signals for handling System.Diagnostics.Process classes and Console Ctrl handlers. We let it handle processes, because it can handle that perfectly(that means, including processes started by lisp, e.g. using ```uiop:run-program```), but revert the SIGINT handler for lisp one.
+
 
 #### MacOS X
 
@@ -116,7 +122,13 @@ Testers are welcome.
 
 * Documentation and tests are always good
 
-* Add examples which utilize third-party assemblies, NuGet, or something like that
+* Add more examples which utilize third-party assemblies, NuGet, or something like that
+
+* ```dotnet``` command interface
+
+* NuGet interface
+
+* Fancy async/await syntax
 
 * MacOS X testing
 
@@ -124,12 +136,14 @@ Testers are welcome.
 
 * Implement method lookup based on existing type member cache
 
-* Optimize type resolution
+* Implement some cache for parsed type definitions
 
 * Refactor trampoline compiler code
 
 * Implement direct function definitions akin to CFFI's ```defcfun```
 
-* Investigate SBCL/CoreCLR interop on Linux. Fix SBCL crashes on Windows with NullReferenceException.
+* Investigate CoreCLR interop on Linux. Fix SBCL crashes on Windows with NullReferenceException.
+
+* Merge host structure definition and initialization using a macro
 
 * etc.

@@ -46,7 +46,7 @@
 ;;;  dotnet command afterwards.
 ;;; We then import all this assemblies.
 ;;;
-;;; The second part is actually responsible for setting up a
+;;; The second part is actually responsible for setting up an
 ;;;  AspNet Mvc framework on top of Kestrel server, and running it.
 
 (define-constant +tmp-project-name+ "AspNetMvcAssemblies"
@@ -57,9 +57,6 @@
    (merge-pathnames*
     (make-pathname* :directory (list :relative +tmp-project-name+))
     (pathname-directory-pathname #.(current-lisp-file-pathname)))))
-
-(import-assembly 'System.IO.FileSystem)
-(import-assembly 'System.Diagnostics.Process)
 
 (use-namespace 'System)
 (use-namespace 'System.Diagnostics)
@@ -98,66 +95,72 @@
     (invoke 'File 'WriteAllText file xml encoding)
     file))
 
-(defun make-process-output-handler (stream)
+(defun make-output-handler (stream)
   (declare (type stream stream))
-  "Helper function which creates delegates, which
- are used for proxying stderr/stdout to lisp streams."
   (new 'DataReceivedEventHandler
-       (lambda (sender e)
+       (lambda (sender e &aux (str (property e 'Data)))
          (declare (ignore sender))
-         (let ((str (property e 'Data)))
-           (when str
-             (write-line str stream))))))
+         (when str (write-line str stream)))))
 
 (defun publish-project (project-file)
   (declare (type (or pathname string) project-file))
-  "Builds and publishes the temporary project,
+  "Builds and publishes a temporary project,
  which gives us all the required AspNet assemblies"
   (let* ((process (new 'Process))
          (start-info (property process 'StartInfo))
          (args (property start-info 'ArgumentList)))
-    ;; Populate 'dotnet publish' command arguments
-    (dolist (arg (list "publish" "-c" "Release" "-o" *deps-directory* project-file))
+    (dolist (arg (list "publish"
+                       "-c" "Release"
+                       "-o" *deps-directory*
+                       project-file))
       (invoke args 'Add arg))
-    ;; Populate misc StartupInfo fields
     (setf (property start-info 'FileName) "dotnet"
-          (property start-info 'WorkingDirectory) *deps-directory*
           (property start-info 'UseShellExecute) nil
-          (property start-info 'RedirectStandardOutput) t
-          (property start-info 'RedirectStandardError) t)
+          (property start-info 'WorkingDirectory) *deps-directory*
+          (property start-info 'RedirectStandardOutput) T
+          (property start-info 'RedirectStandardError) T
+          (property process 'EnableRaisingEvents) T)
+    (invoke process "add_Exited"
+            (new 'EventHandler
+                 (lambda (sender e)
+                   (declare (ignore sender e))
+                   (cleanup-temporary-project))))
     (invoke process "add_OutputDataReceived"
-            (make-process-output-handler *standard-output*))
+            (make-output-handler *standard-output*))
     (invoke process "add_ErrorDataReceived"
-            (make-process-output-handler *error-output*))
+            (make-output-handler *error-output*))
     (invoke process 'Start)
     (invoke process 'BeginOutputReadLine)
     (invoke process 'BeginErrorReadLine)
     (invoke process 'WaitForExit)
     (let ((rv (property process 'ExitCode)))
       (unless (zerop rv)
-        (error "Unable to publish temporary project: ~a" rv)))
-    ;; delete temporary project files and directories
-    (let ((bin (native-namestring
-                (merge-pathnames*
-                 (make-pathname :directory '(:relative "bin"))
-                 *deps-directory*)))
-          (obj (native-namestring
-                (merge-pathnames*
-                 (make-pathname :directory '(:relative "obj"))
-                 *deps-directory*))))
-      (format *error-output* "Deleting ~s~%" bin)
-      (invoke 'Directory 'Delete bin t)
-      (format *error-output* "Deleting ~s~%" obj)
-      (invoke 'Directory 'Delete obj t)
-      (do-bike-vector (file (invoke 'Directory 'GetFiles
-                                    *deps-directory*
-                                    (strcat +tmp-project-name+ "*.*")))
-        (format *error-output* "Deleting ~s~%" file)
-        (delete-file file))))
-  (values))
+        (error "Unable to publish project file: ~a" rv))
+      project-file)))
 
-(defun load-microsoft-assemblies ()
-  "Loads all the assemblies prefixed with 'Microsoft.' from the temp project dir."
+(defun cleanup-temporary-project ()
+  "Cleans up a temporary project build"
+  ;; delete temporary project files and directories
+  (let ((bin (native-namestring
+              (merge-pathnames*
+               (make-pathname :directory '(:relative "bin"))
+               *deps-directory*)))
+        (obj (native-namestring
+              (merge-pathnames*
+               (make-pathname :directory '(:relative "obj"))
+               *deps-directory*))))
+    (format *error-output* "Deleting ~s~%" bin)
+    (invoke 'Directory 'Delete bin t)
+    (format *error-output* "Deleting ~s~%" obj)
+    (invoke 'Directory 'Delete obj t)
+    (do-bike-vector (file (invoke 'Directory 'GetFiles
+                                  *deps-directory*
+                                  (strcat +tmp-project-name+ "*.*")))
+      (format *error-output* "Deleting ~s~%" file)
+      (delete-file file))))
+
+(defun import-microsoft-assemblies ()
+  "Imports all the assemblies prefixed with 'Microsoft.' from the temp project dir."
   (loop :for path :in (directory* (make-pathname*
                                    :type "dll"
                                    :name *wild*
@@ -165,25 +168,21 @@
         :for name = (pathname-name path)
         :when (string-prefix-p "Microsoft." name)
           :do (handler-case
-                  (load-assembly-from (native-namestring path))
+                  (import-assembly (load-assembly-from (native-namestring path)))
                 (error (e) (format *error-output* "~a~%" e)))))
 
 (defun ensure-asp-net-assemblies ()
-  "Loads and imports all required assemblies including AspNet Mvc ones."
+  "Loads and imports all required AspNet Mvc assemblies."
   (unless (invoke 'Directory 'Exists *deps-directory*)
     (let ((file (write-project-file)))
       (publish-project file)))
-  (load-microsoft-assemblies)
-  (import-loaded-assemblies))
+  (import-microsoft-assemblies))
 
 (ensure-asp-net-assemblies)
 
 ;;; Now, to the actual part of this example.
-;;; First, import some helper assemblies and use a bunch of namespaces
+;;; First, use a bunch of namespaces
 ;;;   for the purpose of not writing qualified names of types.
-
-(import-assembly 'System.Web.HttpUtility)
-(import-assembly 'System.Net.Http)
 
 (use-namespace 'System.Net.Http)
 (use-namespace 'System.Threading)
@@ -247,7 +246,7 @@
   (declare (type dotnet-object provider))
   "Retrieves DelegateStartup instance for delegate-based configuration"
   ;; First, retrieve IServiceProviderFactory<IServiceCollections> instance,
-  ;;  which is required first argument of DelegateStartup constructor
+  ;;  which is the required first argument of DelegateStartup constructor
   (let* ((type (resolve-type '(IServiceProviderFactory IServiceCollection)))
          (factory (invoke provider 'GetService type)))
     ;; Create a DelegateStartup and pass our configuration callback to it
@@ -311,10 +310,14 @@
   (let* ((client (new 'HttpClient))
          (who (when who (invoke 'HttpUtility 'UrlEncode (invoke (box who) 'ToString))))
          (url (property (new 'UriBuilder "http" "localhost" port (or who ""))
-                        'Uri)))
-    (unwind-protect
-         (property (invoke client 'GetStringAsync url)
-                   'Result)
-      (invoke client 'Dispose))))
+                        'Uri))
+         (stdout *standard-output*))
+    ;; Do not use "Result" property directly, it may cause a deadlock, especially
+    ;;  if not all the required type members are cached yet
+    (invoke (invoke client 'GetStringAsync url) 'ContinueWith
+            (new '(Action Task)
+                 (lambda (task)
+                   (invoke client 'Dispose)
+                   (format stdout "~a" (property task 'Result)))))))
 
 ;;; vim: ft=lisp et!

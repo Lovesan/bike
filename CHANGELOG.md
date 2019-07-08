@@ -1,3 +1,18 @@
+# 0.4.0 - AspNet Core MVC example. New type resolution process. Signal handling on linux improvements.
+  * Improved coexistence of CoreCLR and Lisp runtimes on Linux.
+    * Handle CoreFX signals by lisp, except SIGCHLD, which is perfectly handled by .Net
+  * Added an example of embedding lisp into AspNet MVC pipeline
+  * Completely reworked type resolution process.
+    * Removed ```import-type``` function. Please use only the ```resolve-type``` function.
+  * Support for ```ref``` and ```*```(pointer) types
+  * Added clean.lisp script
+  * Improved CoreCLR version comparison during library search
+  * Added ```load-assembly-from``` function, to load assemblies from files
+  * Added enum type handling, see ```enum``` function
+  * Improved trampoline compilers, they now support pointer and ref types
+  * Changed keyword parameter ```:type``` of ```list-to-bike-vector``` function to ```:element-type```
+  * Other minor bugfixing and improvements
+
 # 0.3.1 - Bugfixing release
   * Fixed property setter trampoline compiler
   * Added SBCL to CI tests

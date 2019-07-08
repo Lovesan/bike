@@ -103,6 +103,27 @@ namespace BikeInterop
             return expression.ConvertExpression(typeof(T));
         }
 
+        public static Expression ConvertFromPointer(this Expression expression)
+        {
+            var type = expression.Type;
+            var method = typeof(PointerConverters)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(x => x.GetParameters()[0].ParameterType == type);
+            if (method == null)
+                throw new ArgumentException($"Value of {type} cannot be converted from typed pointer", nameof(type));
+            return Expression.Call(null, method, expression);
+        }
+
+        public static Expression ConvertToPointer(this Expression expression, Type type)
+        {
+            var method = typeof(PointerConverters)
+                .GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .FirstOrDefault(x => x.ReturnType == type);
+            if(method == null)
+                throw new ArgumentException($"Value of {type} cannot be converted to typed pointer", nameof(type));
+            return Expression.Call(null, method, expression);
+        }
+
         public static Expression ConvertExpression(this Expression expression, Type type)
         {
             return type.IsValueType

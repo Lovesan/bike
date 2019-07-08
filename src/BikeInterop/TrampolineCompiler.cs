@@ -116,7 +116,7 @@ namespace BikeInterop
 
             // Possible lambda params
             var self = instance ? GetParam<IntPtr>(false, "self") : null;
-            var val = getter ? null : GetParam(directlyConvertible ? type : typeof(IntPtr), false, "val");
+            var val = getter ? null : GetParam(directlyConvertible && !type.IsPointer ? type : typeof(IntPtr), false, "val");
             var typeCode = getter && !directlyConvertible ? GetParam<int>(true, "tc") : null;
             var ex = GetParam<IntPtr>(true, "ex");
             var lambdaParams = new List<ParameterExpression>
@@ -130,7 +130,7 @@ namespace BikeInterop
 
             // Possible outer block variables
             var exception = GetVariable<object>(false, "exception");
-            var invocationResult = getter ? GetVariable(type, false, "invocationResult") : null;
+            var invocationResult = getter ? GetVariable(type.IsPointer ? typeof(IntPtr) : type, false, "invocationResult") : null;
             var outerVariables = new List<ParameterExpression>
             {
                 exception,
@@ -151,10 +151,12 @@ namespace BikeInterop
 
             var selfUnbox = instance ? self.Unbox(info.DeclaringType) : null;
             var accessExpression = getter
-                ? Expression.Assign(invocationResult, Expression.Property(selfUnbox, info))
+                ? Expression.Assign(
+                    invocationResult,
+                    type.IsPointer ? Expression.Property(selfUnbox, info).ConvertFromPointer() : Expression.Property(selfUnbox, info))
                 : Expression.Assign(
                     Expression.Property(selfUnbox, info),
-                    directlyConvertible ? val : val.Unbox(type));
+                    directlyConvertible ? (type.IsPointer ? val.ConvertToPointer(type) : val) : val.Unbox(type));
 
             var innerBlock = Expression.Block(typeof(void), accessExpression);
 
@@ -195,7 +197,7 @@ namespace BikeInterop
             }
 
             var outerBlock = Expression.Block(
-                 getter ? (directlyConvertible ? type : typeof(IntPtr)) : typeof(void),
+                 getter ? (directlyConvertible && !type.IsPointer ? type : typeof(IntPtr)) : typeof(void),
                 outerVariables,
                 outerExpressions);
             var lambda = Expression.Lambda(outerBlock, true, lambdaParams);
@@ -241,7 +243,7 @@ namespace BikeInterop
 
             // Possible lambda params
             var self = instance ? GetParam<IntPtr>(false, "self") : null;
-            var val = getter ? null : GetParam(directlyConvertible ? type : typeof(IntPtr), false, "val");
+            var val = getter ? null : GetParam(directlyConvertible && !type.IsPointer ? type : typeof(IntPtr), false, "val");
             var typeCode = getter && !directlyConvertible ? GetParam<int>(true, "tc") : null;
             var ex = GetParam<IntPtr>(true, "ex");
             var lambdaParams = new List<ParameterExpression>
@@ -255,7 +257,7 @@ namespace BikeInterop
 
             // Possible outer block variables
             var exception = GetVariable<object>(false, "exception");
-            var invocationResult = getter ? GetVariable(type, false, "invocationResult") : null;
+            var invocationResult = getter ? GetVariable(type.IsPointer ? typeof(IntPtr) : type, false, "invocationResult") : null;
             var outerVariables = new List<ParameterExpression>
             {
                 exception,
@@ -276,10 +278,12 @@ namespace BikeInterop
 
             var selfUnbox = instance ? self.Unbox(info.DeclaringType) : null; 
             var accessExpression = getter
-                ? Expression.Assign(invocationResult, Expression.Field(selfUnbox, info))
+                ? Expression.Assign(
+                    invocationResult,
+                    type.IsPointer ? Expression.Field(selfUnbox, info).ConvertFromPointer() : Expression.Field(selfUnbox, info))
                 : Expression.Assign(
                     Expression.Field(selfUnbox, info),
-                    directlyConvertible ? val : val.Unbox(type));
+                    directlyConvertible ? (type.IsPointer ? val.ConvertToPointer(type) : val) : val.Unbox(type));
 
             var innerBlock = Expression.Block(typeof(void), accessExpression);
 
@@ -320,7 +324,7 @@ namespace BikeInterop
             }
 
             var outerBlock = Expression.Block(
-                 getter ? (directlyConvertible ? type : typeof(IntPtr)) : typeof(void),
+                 getter ? (directlyConvertible && !type.IsPointer ? type : typeof(IntPtr)) : typeof(void),
                 outerVariables,
                 outerExpressions);
             var lambda = Expression.Lambda(outerBlock, true, lambdaParams);
@@ -369,7 +373,9 @@ namespace BikeInterop
 
             outInitializerList.AddAssignDefault<IntPtr>(exParameter);
 
-            var invocationResultVar = isVoid ? null : GetVariable<object>(false, "invocationResult");
+            var invocationResultVar = isVoid
+                ? null
+                : GetVariable(returnType.IsPointer ? typeof(IntPtr) : typeof(object), false, "invocationResult");
             var objectExceptionVar = GetVariable<object>(false, "objectException");
 
             Expression selfExpression = null;
@@ -385,18 +391,22 @@ namespace BikeInterop
             {
                 outInitializerList.AddAssignDefault<IntPtr>(resultParam);
                 outInitializerList.AddAssignDefault<int>(typeCodeParam);
-                refVariableInitializerList.AddAssign(invocationResultVar, GetDefaultExpression<object>());
+                refVariableInitializerList.AddAssign(
+                    invocationResultVar,
+                    GetDefaultExpression(returnType.IsPointer ? typeof(IntPtr) : typeof(object)));
             }
 
             // process params
+            // TODO: handle ByRef pointer parameter types, they are rare but do exist
             foreach (var param in parameters)
             {
                 var realType = param.ParameterType;
                 var varType = realType.IsByRef ? realType.GetElementType() : realType;
                 var directlyConvertible = varType.IsDirectlyConvertible();
                 // ReSharper disable once PossibleNullReferenceException
-                var trampolineType = directlyConvertible ? realType :
-                    realType.IsByRef ? typeof(IntPtr).MakeByRefType() : typeof(IntPtr);
+                var trampolineType = directlyConvertible
+                    ? (realType.IsPointer ? typeof(IntPtr) :  realType)
+                    : realType.IsByRef ? typeof(IntPtr).MakeByRefType() : typeof(IntPtr);
                 var isByRef = trampolineType.IsByRef;
                 var isOut = isByRef && param.IsOut;
 
@@ -457,7 +467,10 @@ namespace BikeInterop
                 {
                     if (directlyConvertible)
                     {
-                        methodParameters.Add(trampolineParam);
+                        // ReSharper disable once PossibleNullReferenceException
+                        methodParameters.Add(varType.IsPointer
+                            ? trampolineParam.ConvertToPointer(varType)
+                            : trampolineParam);
                     }
                     else
                     {
@@ -488,7 +501,17 @@ namespace BikeInterop
             var callExpression = Expression.Call(selfExpression, info, methodParameters);
             if (!isVoid)
             {
-                innerBlockExpressions.AddAssign(invocationResultVar, callExpression.ConvertExpression<object>());
+                if (callExpression.Type.IsPointer)
+                {
+                    innerBlockExpressions.AddAssign(
+                        invocationResultVar, callExpression.ConvertFromPointer());
+                }
+                else
+                {
+                    innerBlockExpressions.AddAssign(
+                        invocationResultVar,
+                        callExpression.ConvertExpression<object>());
+                }
             }
             else
             {

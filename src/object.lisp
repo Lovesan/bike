@@ -47,6 +47,7 @@
 (defconstant +ext-type-code-type+ 2)
 (defconstant +ext-type-code-delegate+ 3)
 (defconstant +ext-type-code-exception+ 4)
+(defconstant +ext-type-code-enum+ 5)
 
 (macrolet ((frob (what &optional (include t))
              (let* ((what (symbolicate '#:dotnet- what))

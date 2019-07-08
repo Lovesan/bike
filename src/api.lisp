@@ -171,7 +171,7 @@ In case of the TYPE being a delegate type, first,
   "Attempts to unbox an OBJECT into lisp object"
   (if (dotnet-object-p object)
     (let ((code (%get-full-type-code (%dotnet-object-handle object))))
-      (values (%unbox (%dotnet-object-handle object) code)))
+      (values (%unbox (%dotnet-object-handle object) code t)))
     object))
 
 (defun box (object &optional (type nil typep))

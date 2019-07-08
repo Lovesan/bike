@@ -35,6 +35,7 @@ namespace BikeInterop
         LispObject = 0x0100,
         Type = 0x0200,
         Delegate = 0x0300,
-        Exception = 0x0400
+        Exception = 0x0400,
+        Enum = 0x0500
     }
 }

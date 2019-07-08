@@ -105,7 +105,7 @@
     (%set-field target nil (%mknetsym name) new-value)
     (%set-field (resolve-type target) t (%mknetsym name) new-value)))
 
-(defun list-to-bike-vector (list &key (start 0) end (type "System.Object"))
+(defun list-to-bike-vector (list &key (start 0) end (element-type "System.Object"))
   (declare (type list list)
            (type non-negative-fixnum start)
            (type (or null non-negative-fixnum) end))
@@ -114,9 +114,12 @@
  vector size, correspondingly"
   (let* ((end (or end (length list)))
          (count (max 0 (- end start)))
-         (vector (%invoke-constructor (resolve-type `(:array ,type)) count)))
+         (vector (%invoke-constructor (resolve-type `(:array ,element-type)) count)))
     (do ((i 0 (1+ i))
-         (sublist (nthcdr start list) (cdr sublist)))
+         (sublist (loop :for l :on list
+                        :for n :below start
+                        :finally (return l))
+                  (cdr sublist)))
         ((= i count) vector)
       (setf (dnvref vector i) (car sublist)))))
 
@@ -137,5 +140,13 @@
         (format stream "~a {~8,'0X}" type gc-handle)
         (format stream "~a ~a {~8,'0X}" type str gc-handle))))
   object)
+
+(defmethod print-object ((object type-entry) stream)
+  (print-unreadable-object (object stream :type t)
+    (with-type-entry (type) object
+      (let ((gc-handle (pointer-address (%dotnet-type-handle type)))
+            (name (reflection-invoke type "ToString")))
+        (format stream "~a {~8,'0X}" name gc-handle)))
+    object))
 
 ;;; vim: ft=lisp et

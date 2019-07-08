@@ -55,7 +55,7 @@
 
 (test test-vector-roundtrip
   (let* ((list (loop :for i :from 1 :to 10 :collect i))
-         (vector (list-to-bike-vector list :type 'System.Int32)))
+         (vector (list-to-bike-vector list :element-type 'System.Int32)))
     (dotimes (i (property vector 'Length))
       (incf (dnvref vector i)))
     (is (= 65 (reduce #'+ (bike-vector-to-list vector))))))

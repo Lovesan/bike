@@ -24,8 +24,6 @@
 
 (in-package #:bike-examples)
 
-(import-assembly 'System.Runtime.InteropServices.RuntimeInformation)
-
 (use-namespace 'System.Runtime.InteropServices)
 
 (defun hello ()
@@ -44,7 +42,7 @@
                           (format t "Hello ~a!~%You are running .Net Core~% inside ~a ~a~% on ~a"
                                   who
                                   (lisp-implementation-type)
-                                  (lisp-implementation-version)                                  
+                                  (lisp-implementation-version)
                                   os))))
          (user (property 'System.Environment 'UserName)))
     (invoke delegate 'invoke user)))

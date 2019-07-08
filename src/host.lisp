@@ -96,7 +96,18 @@
   (get-generic-type-definition (null-pointer) :type foreign-pointer)
   (get-generic-type-arguments (null-pointer) :type foreign-pointer)
   (is-compiler-generated-member (null-pointer) :type foreign-pointer)
-  (is-transient-type (null-pointer) :type foreign-pointer))
+  (is-transient-type (null-pointer) :type foreign-pointer)
+  (enum-to-object (null-pointer) :type foreign-pointer)
+  (object-equals (null-pointer) :type foreign-pointer)
+  (load-assembly (null-pointer) :type foreign-pointer)
+  (is-pointer-type (null-pointer) :type foreign-pointer)
+  (is-by-ref-type (null-pointer) :type foreign-pointer)
+  (is-array-type (null-pointer) :type foreign-pointer)
+  (make-pointer-type (null-pointer) :type foreign-pointer)
+  (make-by-ref-type (null-pointer) :type foreign-pointer)
+  (get-element-type (null-pointer) :type foreign-pointer)
+  (get-array-type-rank (null-pointer) :type foreign-pointer)
+  (is-enum-type (null-pointer) :type foreign-pointer))
 
 #+sbcl
 (sb-ext:defglobal *coreclr-host* nil)
@@ -134,7 +145,7 @@
   (frob intptr :pointer)
   (frob string lpwstr))
 
-(macrolet ((frob (name type &optional (converter 'progn))
+(macrolet ((frob (name type &optional (converter '(progn)))
              (let ((fname (intern (format nil "~a~a" '%unbox- name)))
                    (conc-name (intern (format nil "~a~a"
                                               '%coreclr-host-unbox-
@@ -142,25 +153,26 @@
                    (val (gensym (string :value))))
                `(progn (declaim (inline ,fname))
                        (defun ,fname (,val)
-                         (,converter
+                         (declare (type foreign-pointer ,val))
+                         (,@converter
                           (foreign-funcall-pointer
-                           (,conc-name *coreclr-host*)
+                           (the foreign-pointer (,conc-name (the coreclr-host *coreclr-host*)))
                            (:convention :stdcall)
-                           :pointer ,val
+                           :pointer (the foreign-pointer ,val)
                            ,type)))))))
-  (frob boolean :bool)
-  (frob char :uint16 code-char)
-  (frob int8 :int8)
-  (frob uint8 :uint8)
-  (frob int16 :int16)
-  (frob uint16 :uint16)
-  (frob int32 :int32)
-  (frob uint32 :uint32)
-  (frob int64 :int64)
-  (frob uint64 :uint64)
-  (frob single :float)
-  (frob double :double)
-  (frob intptr :pointer))
+  (frob boolean :bool (the boolean))
+  (frob char :uint16 (code-char))
+  (frob int8 :int8 (the (signed-byte 8)))
+  (frob uint8 :uint8 (the (unsigned-byte 8)))
+  (frob int16 :int16 (the (signed-byte 16)))
+  (frob uint16 :uint16 (the (unsigned-byte 16)))
+  (frob int32 :int32 (the (signed-byte 32)))
+  (frob uint32 :uint32 (the (unsigned-byte 32)))
+  (frob int64 :int64 (the (signed-byte 64)))
+  (frob uint64 :uint64 (the (unsigned-byte 64)))
+  (frob single :float (the single-float))
+  (frob double :double (the double-float))
+  (frob intptr :pointer (the foreign-pointer)))
 
 (defmacro hostcall (name &rest args-and-types)
   (let ((conc-name (intern (format nil "~a~a" '%coreclr-host- name) :bike)))
@@ -171,16 +183,18 @@
 
 (declaim (inline %get-string-length))
 (defun %get-string-length (value)
+  (declare (type foreign-pointer value))
   (hostcall get-string-length :pointer value :int))
 
 (declaim (inline %unbox-string))
 (defun %unbox-string (value)
-  (let* ((length (%get-string-length value))
+  (declare (type foreign-pointer value))
+  (let* ((length (the fixnum (%get-string-length value)))
          (size (* (foreign-type-size :short)
                   length)))
     (if (zerop size)
       ""
-      (with-foreign-pointer (ptr size)
+      (with-foreign-objects ((ptr :uint8 size))
         (hostcall unbox-string
                   :pointer value
                   :pointer ptr

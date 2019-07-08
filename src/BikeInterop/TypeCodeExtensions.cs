@@ -36,6 +36,8 @@ namespace BikeInterop
         /// <returns>Extended type code</returns>
         public static ExtendedTypeCode GetExtendedTypeCode(this object obj)
         {
+            if (obj is Enum)
+                return ExtendedTypeCode.Enum;
             if (obj is LispObject)
                 return ExtendedTypeCode.LispObject;
             if (obj is Type)
@@ -57,7 +59,7 @@ namespace BikeInterop
         {
             var typeCode = Convert.GetTypeCode(obj);
             var rv = (int) typeCode;
-            if (typeCode == TypeCode.Object)
+            if (typeCode == TypeCode.Object || rv >= (int)TypeCode.SByte && rv <= (int)TypeCode.UInt64)
             {
                 rv |= (int)obj.GetExtendedTypeCode();
             }

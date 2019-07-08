@@ -89,4 +89,116 @@
   (assembly-path lpastr)
   (exit-code :pointer))
 
+#+coreclr-restore-signals
+(progn
+  (defcstruct sigaction
+    (handler :pointer)
+    (sa-mask (:array :uint64 16))
+    (sa-flags :int)
+    (sa-restorer :pointer))
+
+  (declaim (inline sigaction))
+  (defcfun ("sigaction" sigaction)
+      :int
+    (sig :int)
+    (action :pointer)
+    (old :pointer))
+  (define-compiler-macro sigaction (sig action old)
+    `(foreign-funcall "sigaction"
+                      :int ,sig
+                      :pointer ,action
+                      :pointer ,old
+                      :void))
+
+  (defconstant +nsig+ 65)
+  (defconstant +sig-block+ 0)
+  (defconstant +sig-dfl+ 0)
+  (defconstant +sig-ign+ 1)
+  (defconstant +sigint+ 2)
+  (defconstant +sigquit+ 3)
+  (defconstant +sigchld+ 17)
+  (defconstant +sigcont+ 18)
+
+  (#+sbcl sb-ext:defglobal #-sbcl defvar +lisp-sigactions+ (null-pointer))
+  (#+sbcl sb-ext:defglobal #-sbcl defvar +dotnet-sigactions+ (null-pointer))
+  (#+sbcl sb-ext:defglobal #-sbcl defvar +new-sigactions+ (null-pointer))
+
+  (declaim (inline sigaction-address))
+  (defun sigaction-address (start n)
+    (declare (type (integer 0 64) n)
+             (type foreign-pointer start))
+    (inc-pointer start (* n (foreign-type-size '(:struct sigaction)))))
+
+  (defun save-lisp-sigactions ()
+    (setf +lisp-sigactions+ (foreign-alloc '(:struct sigaction)
+                                           :count +nsig+))
+    (setf +dotnet-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (dotimes (i +nsig+)
+      (sigaction i
+                 (null-pointer)
+                 (sigaction-address +lisp-sigactions+ i)))
+    (values))
+
+  ;; not used for the moment
+  (defcallback chained-sigaction
+      :void ((sig :int) (data :pointer) (ctx :pointer))
+    (let ((lisp-handler (foreign-slot-value
+                         (sigaction-address +lisp-sigactions+ sig)
+                         '(:struct sigaction)
+                         'handler))
+          (dotnet-handler (foreign-slot-value
+                           (sigaction-address +dotnet-sigactions+ sig)
+                           '(:struct sigaction)
+                           'handler)))
+      (format t "~X ~X~%" lisp-handler dotnet-handler)
+      (if (pointer-eq lisp-handler dotnet-handler)
+        (foreign-funcall-pointer lisp-handler () :int sig
+                                                 :pointer data
+                                                 :pointer ctx)
+        (progn (foreign-funcall-pointer lisp-handler () :int sig
+                                                        :pointer data
+                                                        :pointer ctx)
+               (foreign-funcall-pointer dotnet-handler () :int sig
+                                                          :pointer data
+                                                          :pointer ctx)))))
+
+
+  (defun initialize-dotnet-sigactions ()
+    "Initializes CoreFX sigactions, namely for SIGCHLD, SIGCONT, SIGINT, SIGQUIT.
+ We utilize CoreFX handlers for some/all of this, but use lisp signal masks for others"
+    ;; first, force initialization of corefx signal handlers
+    (invoke (invoke (resolve-type "System.Diagnostics.Process") "GetMethod"
+                    "EnsureSigChildHandler"
+                    (enum "System.Reflection.BindingFlags" "Static" "NonPublic"))
+            "Invoke" nil (new '(:array :object) 0))
+    ;; save corefx signals
+    (dotimes (i +nsig+)
+      ;; Some of them would of course be ours lisp signals reestablished earlier
+      (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i)))
+    (setf +new-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (foreign-funcall "memcpy" :pointer +new-sigactions+
+                              :pointer +lisp-sigactions+
+                              size-t (* +nsig+ (foreign-type-size '(:struct sigaction))))
+
+    ;; only use SIGCHLD for now, dotnet background thread perfectly handles it
+    (dolist (sig (list +sigchld+))
+      (let* ((addr (sigaction-address +new-sigactions+ sig))
+             (dotnet-addr (sigaction-address +dotnet-sigactions+ sig)))
+        (setf (foreign-slot-value addr '(:struct sigaction) 'handler)
+              (foreign-slot-value dotnet-addr '(:struct sigaction) 'handler))))
+
+    ;; init signals from new sigactions
+    (dotimes (i +nsig+)
+      (let ((addr (sigaction-address +new-sigactions+ i)))
+        (sigaction i addr (null-pointer)))))
+
+  (defun restore-lisp-sigactions ()
+    "Restores lisp signal actions"
+    (dotimes (i +nsig+)
+      (let ((addr (sigaction-address +lisp-sigactions+ i)))
+        (sigaction i addr (null-pointer)))))
+
+  (uiop:register-image-restore-hook #'save-lisp-sigactions
+                                    (null-pointer-p +lisp-sigactions+)))
+
 ;;; vim: ft=lisp et

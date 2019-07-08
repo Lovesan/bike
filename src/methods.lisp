@@ -31,6 +31,7 @@
          (outp (reflection-property info "IsOut"))
          (refp (reflection-property type "IsByRef"))
          (optionalp (reflection-property info "IsOptional"))
+         (pointerp (reflection-property type "IsPointer"))
          (dir (if refp (if outp :out :ref) :in))
          (paramsp (and (reflection-invoke "System.Attribute"
                                           "GetCustomAttribute"
@@ -41,14 +42,17 @@
          (primitive (cdr (assoc (reflection-property type "FullName")
                                 +primitive-types+
                                 :test #'string-equal))))
-    (%param-entry info name type primitive optionalp dir pos paramsp)))
+    (%param-entry info name type (or primitive
+                                     (and pointerp :pointer))
+                  pointerp optionalp dir pos paramsp)))
 
 (defun %get-method-info-args (info)
   (declare (type dotnet-object info))
-  (sort (mapcar #'%make-param-entry
-                (bike-vector-to-list
-                 (reflection-invoke info "GetParameters")))
-        #'< :key #'%param-entry-position))
+  (let* ((parameters (reflection-invoke info "GetParameters"))
+         (entries '()))
+    (do-bike-vector (param parameters)
+      (push (%make-param-entry param) entries))
+    (sort entries #'< :key #'%param-entry-position)))
 
 (defun %make-method-entry (info prev)
   (declare (type dotnet-object info))

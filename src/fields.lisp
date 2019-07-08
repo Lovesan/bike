@@ -29,6 +29,7 @@
   (let* ((name (%mknetsym (reflection-property info "Name")))
          (type (reflection-property info "FieldType"))
          (staticp (reflection-property info "IsStatic"))
+         (pointerp (reflection-property type "IsPointer"))
          (primitive-type (cdr (assoc (reflection-property type "FullName")
                                      +primitive-types+
                                      :test #'string-equal))))
@@ -42,7 +43,9 @@
         (%field-entry info
                       name
                       staticp
-                      primitive-type
+                      (or primitive-type
+                          (and pointerp :pointer))
+                      pointerp
                       type
                       reader
                       reader-delegate

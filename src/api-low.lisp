@@ -30,7 +30,10 @@
 
 (deftype accessor-member-type () '(member :field :property :indexer))
 
-(declaim (inline %get-boxed-object))
+(declaim (inline %get-boxed-object)
+         (ftype (function (foreign-pointer (unsigned-byte 8) &optional t)
+                          (values t boolean))
+                %get-boxed-object))
 (defun %get-boxed-object (ptr ext-code &optional (unbox-lisp t))
   (declare (type foreign-pointer ptr)
            (type (unsigned-byte 8) ext-code))
@@ -47,7 +50,28 @@
          (values (%dotnet-exception ptr) nil))
         (t (values (%dotnet-object ptr) nil))))
 
-(defun %unbox (ptr type-code)
+(declaim (inline %unbox-integer))
+(defun %unbox-integer (ptr type-code)
+  (declare (type foreign-pointer ptr)
+           (type (unsigned-byte 8) type-code))
+  (cond ((= type-code +type-code-sbyte+)
+         (values (%unbox-int8 ptr) t))
+        ((= type-code +type-code-byte+)
+         (values (%unbox-uint8 ptr) t))
+        ((= type-code +type-code-int16+)
+         (values (%unbox-int16 ptr) t))
+        ((= type-code +type-code-uint16+)
+         (values (%unbox-uint16 ptr) t))
+        ((= type-code +type-code-int32+)
+         (values (%unbox-int32 ptr) t))
+        ((= type-code +type-code-uint32+)
+         (values (%unbox-uint32 ptr) t))
+        ((= type-code +type-code-int64+)
+         (values (%unbox-int64 ptr) t))
+        ((= type-code +type-code-uint64+)
+         (values (%unbox-uint64 ptr) t))))
+
+(defun %unbox (ptr type-code &optional unbox-enum)
   (declare (type foreign-pointer ptr)
            (type (unsigned-byte 16) type-code))
   (let ((type-code (logand #xFF type-code))
@@ -55,6 +79,10 @@
     (cond ((or (zerop type-code)
                (null-pointer-p ptr))
            (values nil nil))
+          ((= ext-code +ext-type-code-enum+)
+           (if unbox-enum
+             (%unbox-integer ptr type-code)
+             (values (%dotnet-object ptr) nil)))
           ((= type-code +type-code-object+)
            (%get-boxed-object ptr ext-code))
           ((= type-code +type-code-string+)
@@ -63,22 +91,9 @@
            (values (%unbox-boolean ptr) t))
           ((= type-code +type-code-char+)
            (values (%unbox-char ptr) t))
-          ((= type-code +type-code-sbyte+)
-           (values (%unbox-int8 ptr) t))
-          ((= type-code +type-code-byte+)
-           (values (%unbox-uint8 ptr) t))
-          ((= type-code +type-code-int16+)
-           (values (%unbox-int16 ptr) t))
-          ((= type-code +type-code-uint16+)
-           (values (%unbox-uint16 ptr) t))
-          ((= type-code +type-code-int32+)
-           (values (%unbox-int32 ptr) t))
-          ((= type-code +type-code-uint32+)
-           (values (%unbox-uint32 ptr) t))
-          ((= type-code +type-code-int64+)
-           (values (%unbox-int64 ptr) t))
-          ((= type-code +type-code-uint64+)
-           (values (%unbox-uint64 ptr) t))
+          ((and (>= type-code +type-code-sbyte+)
+                (<= type-code +type-code-uint64+))
+           (%unbox-integer ptr type-code))
           ((= type-code +type-code-single+)
            (values (%unbox-single ptr) t))
           ((= type-code +type-code-double+)
@@ -90,7 +105,7 @@
          (values (null-pointer) nil))
         ((dotnet-object-p object)
          (values (%dotnet-object-handle object) nil))
-        ((eq object t)
+        ((or (eq object t) (eq object :true))
          (values (%box-boolean object) t))
         ((eq object :false)
          (values (%box-boolean nil) t))
@@ -198,7 +213,7 @@
       (%transform-rv rv code ex))))
 
 (defun %make-generic-type (type-definition type-args)
-  (declare (type dotnet-object type-definition)
+  (declare (type dotnet-type type-definition)
            (type list type-args))
   (let ((argc (length type-args)))
     (with-foreign-objects ((rv :pointer)
@@ -225,6 +240,32 @@
     (hostcall make-array-type
               :pointer (%dotnet-type-handle type)
               :int rank
+              :pointer rv
+              :pointer code
+              :pointer ex
+              :void)
+    (%transform-rv rv code ex)))
+
+(defun %make-pointer-type (type)
+  (declare (type dotnet-object type))
+  (with-foreign-objects ((rv :pointer)
+                         (code :int)
+                         (ex :pointer))
+    (hostcall make-pointer-type
+              :pointer (%dotnet-type-handle type)
+              :pointer rv
+              :pointer code
+              :pointer ex
+              :void)
+    (%transform-rv rv code ex)))
+
+(defun %make-ref-type (type)
+  (declare (type dotnet-object type))
+  (with-foreign-objects ((rv :pointer)
+                         (code :int)
+                         (ex :pointer))
+    (hostcall make-by-ref-type
+              :pointer (%dotnet-type-handle type)
               :pointer rv
               :pointer code
               :pointer ex
@@ -644,6 +685,18 @@
               :pointer ex)
     (%transform-rv rv code ex)))
 
+(defun get-element-type (type)
+  (declare (type dotnet-type type))
+  "Returns an element type for a TYPE"
+  (with-foreign-object (ex :pointer)
+    (let ((rv (%dotnet-type
+               (hostcall get-element-type
+                         :pointer (%dotnet-type-handle type)
+                         :pointer ex
+                         :pointer))))
+      (%transform-exception (mem-ref ex :pointer))
+      rv)))
+
 (defun get-generic-type-arguments (type)
   (declare (type dotnet-type type))
   "Returns a list of generic type arguments for TYPE"
@@ -665,11 +718,68 @@
             :pointer (%dotnet-object-handle info)
             :bool))
 
+(defun get-array-type-rank (type)
+  (declare (type dotnet-type type))
+  "Gets a number of dimensions of an array type"
+  (hostcall get-array-type-rank
+            :pointer (%dotnet-type-handle type)
+            :int))
+
 (defun transient-type-p (type)
   (declare (type dotnet-type type))
   "Returns non-NIL in case of the TYPE is coming from a dynamic assembly"
   (hostcall is-transient-type
             :pointer (%dotnet-type-handle type)
             :bool))
+
+(defun pointer-type-p (type)
+  (declare (type dotnet-type type))
+  "Returns non-NIL in case of the TYPE is a pointer type"
+  (hostcall is-pointer-type
+            :pointer (%dotnet-type-handle type)
+            :bool))
+
+(defun array-type-p (type)
+  (declare (type dotnet-type type))
+  "Returns non-NIL in case of the TYPE is an array type"
+  (hostcall is-array-type
+            :pointer (%dotnet-type-handle type)
+            :bool))
+
+(defun ref-type-p (type)
+  (declare (type dotnet-type type))
+  "Returns non-NIL in case of the TYPE is an ref type"
+  (hostcall is-by-ref-type
+            :pointer (%dotnet-type-handle type)
+            :bool))
+
+(defun enum-type-p (type)
+  (declare (type dotnet-type type))
+  "Returns non-NIL in case of the TYPE is an enum type"
+  (hostcall is-enum-type
+            :pointer (%dotnet-type-handle type)
+            :bool))
+
+(declaim (inline %object-equals))
+(defun %object-equals (left right)
+  (declare (type dotnet-object left right))
+  (hostcall object-equals
+            :pointer (%dotnet-object-handle left)
+            :pointer (%dotnet-object-handle right)
+            :bool))
+
+
+(defun load-assembly (assembly-string)
+  (declare (type string-designator assembly-string))
+  "Loads an assembly designated by ASSEMBLY-STRING"
+  (with-foreign-object (ex :pointer)
+    (let* ((rv (%dotnet-object
+                (hostcall load-assembly
+                          lpwstr (string assembly-string)
+                          :pointer ex
+                          :pointer)))
+           (ex (mem-ref ex :pointer)))
+      (%transform-exception ex)
+      rv)))
 
 ;;; vim: ft=lisp et

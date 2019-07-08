@@ -40,17 +40,17 @@
   (declare (type rwlock rwlock))
   (bt:with-lock-held ((%rwlock-read-lock rwlock))
     (when (= 1 (incf (%rwlock-read-count rwlock)))
-      (bt:acquire-lock (%rwlock-write-lock rwlock))))
+      (bt:acquire-recursive-lock (%rwlock-write-lock rwlock))))
   (values))
 
 (defun rwlock-end-read (rwlock)
   (declare (type rwlock rwlock))
   (bt:with-lock-held ((%rwlock-read-lock rwlock))
     (when (zerop (decf (%rwlock-read-count rwlock)))
-      (bt:release-lock (%rwlock-write-lock rwlock))))
+      (bt:release-recursive-lock (%rwlock-write-lock rwlock))))
   (values))
 
-(defmacro with-read-lock ((rwlock) &body body)  
+(defmacro with-read-lock ((rwlock) &body body)
   (with-gensyms (lock)
     `(let ((,lock ,rwlock))
        (declare (type rwlock ,lock))
@@ -62,8 +62,7 @@
   (with-gensyms (lock)
     `(let ((,lock ,rwlock))
        (declare (type rwlock ,lock))
-       (bt:acquire-recursive-lock (%rwlock-write-lock ,lock))
-       (unwind-protect (locally ,@body)
-         (bt:release-recursive-lock (%rwlock-write-lock ,lock))))))
+       (bt:with-recursive-lock-held ((%rwlock-write-lock ,lock))
+         ,@body))))
 
 ;;; vim: ft=lisp et

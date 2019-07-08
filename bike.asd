@@ -23,19 +23,13 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike
-  :version "0.3.1"
+  :version "0.4.0"
   :description "Common Lisp .Net Core Interop"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :licence "MIT"
   :defsystem-depends-on (#:bike-internals)
-  :depends-on (#:uiop
-               #:alexandria
-               #:cffi
-               #:bike-internals
-               #:trivial-features
-               #:trivial-garbage
-               #:bordeaux-threads)
+  :depends-on (#:bike-internals)
   :serial t
   :components ((:module "src"
                 :serial t
@@ -49,6 +43,9 @@
                              (:file "api-low")
                              (:file "callbacks")
                              (:file "type")
+                             (:file "type-name-parser")
+                             (:file "type-resolution")
+                             (:file "assemblies")
                              (:file "members-low")
                              (:file "api-reflection")
                              (:file "trampolines")
@@ -57,6 +54,7 @@
                              (:file "properties")
                              (:file "members")
                              (:file "method-resolution")
+                             (:file "enum")
                              (:file "api")
                              (:file "init"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))

@@ -94,7 +94,7 @@
         `(lambda (,@(unless staticp `(,this)) ,@funargs ,@(when params-arg `(&rest ,rest)))
            (declare (optimize (speed 0) (space 0) (safety 0) (debug 0)))
            (let (,@(unless staticp `((,this (%dotnet-object-handle ,this))))
-                 ,@(when params-arg `((,rest (list-to-bike-vector ,rest :type ,params-type))))
+                 ,@(when params-arg `((,rest (list-to-bike-vector ,rest :element-type ,params-type))))
                  ,@boxeds
                  ,@need-cleanups)
              (with-foreign-objects (,@(unless voidp `((,rv :pointer)

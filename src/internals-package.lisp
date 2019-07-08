@@ -37,6 +37,7 @@
            #:lpwstr
            #:lpastr
            #:dnchar
+           #:size-t
 
            #:slot-initializer-missing
            #:slot-initializer-missing-message

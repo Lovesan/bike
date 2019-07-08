@@ -22,18 +22,29 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(asdf:defsystem #:bike-examples
-  :version "0.4.0"
-  :description "Common Lisp .Net Core Interop examples"
-  :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :licence "MIT"
-  :depends-on (#:bike)
-  :serial t
-  :components ((:module "examples"
-                :serial t
-                :components ((:file "package")
-                             (:file "hello")
-                             (:file "aspnet-mvc")))))
+(let* ((current-file #.(uiop:current-lisp-file-pathname))
+       (current-dir (or (and current-file
+                             (uiop:pathname-directory-pathname
+                              current-file))
+                        (uiop:getcwd)))
+       (bindir (uiop:merge-pathnames*
+                (uiop:make-pathname*
+                 :directory '(:relative "src" "BikeInterop" "bin"))
+                current-dir))
+       (objdir (uiop:merge-pathnames*
+                (uiop:make-pathname*
+                 :directory '(:relative "src" "BikeInterop" "obj"))
+                current-dir))
+       (aspnet-assemblies (uiop:merge-pathnames*
+                           (uiop:make-pathname*
+                            :directory '(:relative "examples" "AspNetMvcAssemblies"))
+                           current-dir)))
+  (dolist (dir (list bindir objdir aspnet-assemblies))
+    (let ((dir (uiop:probe-file* dir)))
+      (when dir
+        (handler-case
+            (uiop:delete-directory-tree dir :validate t
+                                            :if-does-not-exist :ignore)
+          (error (e) (format *error-output* "~a~%" e)))))))
 
 ;;; vim: ft=lisp et

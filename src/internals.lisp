@@ -61,6 +61,50 @@
      :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
     (pathname-directory-pathname #.(current-lisp-file-pathname)))))
 
+
+(defun %version-compare (left right)
+  (labels ((parse (c)
+             ;; Given .Net version naming convention,
+             ;;   3.0.0 is actually greater then 3.0.0-rc1
+             (or (ignore-errors (parse-integer c))
+                 -1))
+           (split (str &aux (end (length str)))
+             (loop :with start = 0
+                   :with components = '()
+                   :for i :below end
+                   :for c = (char str i)
+                   :when (member c '(#\. #\-))
+                     :do (push (subseq str start i)
+                               components)
+                         (setf start (1+ i))
+                   :finally (unless (= start end)
+                              (push (subseq str start end) components))
+                            (return (nreverse (mapcar #'parse components)))))
+           (cmp (a b) (cond ((> a b) 1) ((< a b) -1) (t 0)))
+           (pad (list other-length)
+             (let ((length (length list)))
+               (if (< length other-length)
+                 (append list (make-list (- other-length length)
+                                         :initial-element 0))
+                 list))))
+    (loop :with v1 = (split left)
+          :with v2 = (split right)
+          :with v1-len = (length v1)
+          :with v2-len = (length v2)
+          :for left :on (pad v1 v2-len)
+          :and right :on (pad v2 v1-len)
+          :for a = (car left)
+          :for b = (car right)
+          :do (cond ((< a b) (return -1))
+                    ((> a b) (return 1)))
+          :finally (return (cond (left (cmp a 0))
+                                 (right (cmp 0 b))
+                                 (t 0))))))
+
+(declaim (inline %version>))
+(defun %version> (left right)
+  (= 1 (%version-compare left right)))
+
 (defun %find-by-command ()
   (let* ((out (with-output-to-string (out)
                 (progn
@@ -74,7 +118,11 @@
                          :for match = (nth-value 1 (scan-to-strings scanner line))
                          :when match
                            :collect (cons (elt match 0) (elt match 1))))
-         (latest (first (sort runtimes #'string> :key #'car))))
+         (latest (loop :with max :of-type cons = (first runtimes)
+                       :for spec :of-type cons :in (rest runtimes)
+                       :for ver :of-type string = (car spec)
+                       :when (%version> ver (car max)) :do (setf max spec)
+                         :finally (return max))))
     (when latest
       (let* ((runtimes-dir (ensure-directory-pathname (cdr latest)))
              (latest-dir (ensure-directory-pathname

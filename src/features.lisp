@@ -39,6 +39,14 @@
     (pushnew :coreclr-sbcl-task-hack *features*))
   #+(and sbcl linux)
   (when (foreign-symbol-pointer "restore_sbcl_signals")
-    (pushnew :coreclr-restore-sbcl-signals *features*)))
+    (pushnew :coreclr-restore-signals *features*))
+  #+(and (not sbcl) linux)
+  (pushnew :coreclr-restore-signals *features*)
+  (let ((pointer-size (foreign-type-size :pointer)))
+    (cond ((= pointer-size 8)
+           (pushnew :coreclr-64-bit *features*))
+          ((= pointer-size 4)
+           (pushnew :coreclr-32-bit *features*))
+          (t (error "Undefined pointer size")))))
 
 ;;; vim: ft=lisp et

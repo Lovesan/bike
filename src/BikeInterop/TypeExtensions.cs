@@ -42,7 +42,7 @@ namespace BikeInterop
         /// <returns><value>true</value> when a type is directly convertible, otherwise false</returns>
         public static bool IsDirectlyConvertible(this Type type)
         {
-            return DirectlyConvertibleTypes.Contains(type);
+            return type.IsPointer || DirectlyConvertibleTypes.Contains(type);
         }
 
         /// <summary>
@@ -108,7 +108,8 @@ namespace BikeInterop
             typeof(float),
             typeof(double),
             typeof(bool),
-            typeof(IntPtr)
+            typeof(IntPtr),
+            typeof(UIntPtr)
         };
     }
 }

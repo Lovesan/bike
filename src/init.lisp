@@ -24,6 +24,7 @@
 
 (in-package #:bike)
 
+
 (defun %get-delegate (host domain-id name)
   (with-foreign-object (pp :pointer)
     (let ((rv (coreclr-create-delegate host
@@ -58,8 +59,10 @@
                                              host
                                              domain-id)))
                  (declare (type (unsigned-byte 32) rv))
-                 #+coreclr-restore-sbcl-signals
-                 (foreign-funcall "restore_sbcl_signals" :void)
+                 #+(and sbcl coreclr-restore-signals)
+                 (foreign-funcall "restore_sbcl_signals")
+                 #+(and (not sbcl) coreclr-restore-signals)
+                 (restore-lisp-sigactions)
                  (unless (zerop rv)
                    (error "Unable to initialize coreclr: HRESULT ~8,'0X" rv))))
              (%coreclr-host :handle (mem-ref host :pointer)
@@ -141,6 +144,17 @@
       (frob get-generic-type-arguments "GetGenericTypeArguments")
       (frob is-compiler-generated-member "IsCompilerGeneratedMember")
       (frob is-transient-type "IsTransientType")
+      (frob enum-to-object "EnumToObject")
+      (frob object-equals "ObjectEquals")
+      (frob load-assembly "LoadAssembly")
+      (frob is-pointer-type "IsPointerType")
+      (frob is-array-type "IsArrayType")
+      (frob is-by-ref-type "IsByRefType")
+      (frob make-pointer-type "MakePointerType")
+      (frob make-by-ref-type "MakeByRefType")
+      (frob get-element-type "GetElementType")
+      (frob get-array-type-rank "GetArrayTypeRank")
+      (frob is-enum-type "IsEnumType")
       (setf *coreclr-host* host)
       (%install-callbacks (callback free-lisp-handle)
                           (callback apply))
@@ -158,6 +172,12 @@
           (error "Unable to shut down coreclr: HRESULT ~8,'0X" rv))))))
 
 (uiop:register-image-restore-hook 'init-coreclr (not *coreclr-host*))
-(uiop:register-image-restore-hook '%reload-type-table (not *type-table*))
+
+(uiop:register-image-restore-hook #'%reload-type-table
+                                  (not *type-table*))
+
+#+coreclr-restore-signals
+(uiop:register-image-restore-hook #'initialize-dotnet-sigactions
+                                  (null-pointer-p +new-sigactions+))
 
 ;;; vim: ft=lisp et

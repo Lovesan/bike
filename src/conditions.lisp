@@ -36,16 +36,104 @@
   ()
   (:report "Represents a subnormal but not erroneous condition"))
 
-(define-condition invalid-type-designator (bike-error)
-  ((%datum :initarg :datum :reader invalid-type-designator-datum))
+(define-condition invalid-assembly-designator (bike-error)
+  ((%datum :initarg :datum
+           :reader invalid-assembly-designator-datum))
+  (:report (lambda (c s)
+             (format s "Invalid assembly designator: ~s"
+                     (invalid-assembly-designator-datum c)))))
+
+(define-condition type-resolution-error (bike-error)
+  ((%datum :initarg :datum
+           :reader type-resolution-error-datum
+           :reader invalid-type-name-datum
+           :reader invalid-type-designator-datum
+           :reader invalid-type-ast-datum
+           :reader inner-ref-type-error-datum
+           :reader enum-resolution-error-datum))
+  (:report (lambda (c s)
+             (format s "Unable to resolve type: ~s"
+                     (type-resolution-error-datum c)))))
+
+(define-condition invalid-type-designator (type-resolution-error)
+  ()
   (:report (lambda (c s)
              (format s "Invalid type designator: ~s"
                      (invalid-type-designator-datum c)))))
 
-(define-condition type-resolution-error (bike-error)
-  ((%datum :initarg :datum :reader type-resolution-error-datum))
+(define-condition invalid-type-ast (invalid-type-designator)
+  ()
   (:report (lambda (c s)
-             (format s "Unable to resolve type: ~s"
+             (format s "Invalid type ast: ~s"
+                     (invalid-type-designator-datum c)))))
+
+(define-condition inner-ref-type-error (invalid-type-ast)
+  ()
+  (:report (lambda (c s)
+             (format s "Inner ref types are not allowed: ~s"
+                     (invalid-type-designator-datum c)))))
+
+(define-condition invalid-type-name (invalid-type-designator)
+  ()
+  (:report (lambda (c s)
+             (format s "Invalid type name: ~s"
+                     (slot-value c '%datum)))))
+
+(define-condition type-name-parser-error (invalid-type-name)
+  ((%c :initarg :character :reader type-name-parser-error-character)
+   ($pos :initarg :position :reader type-name-parser-error-position))
+  (:report (lambda (c s)
+             (format s "Unexpected character ~s at position ~d in type name string ~s"
+                     (type-name-parser-error-character c)
+                     (1+ (type-name-parser-error-position c))
+                     (type-name-parser-error-string c)))))
+
+(define-condition type-name-unexpected-token-error (type-name-parser-error)
+  ((%c :initarg :value
+       :reader type-name-unexpected-token-error-value
+       :reader type-name-parser-error-value)
+   (%tok :initarg :token
+         :reader type-name-unexpected-token-error-token
+         :reader type-name-parser-error-token))
+  (:report
+   (lambda (c s &aux (token (type-name-parser-error-token c))
+                     (value (type-name-parser-error-value c))
+                     (unnamed (member token '(:identifier :integer))))
+     (format s "~&Unexpected ~:[~(~a~)~;~s~] ~:[~;~:*~s ~]~% at position ~d in type name string ~s"
+             (not unnamed)
+             (if unnamed token value)
+             (when unnamed value)
+             (1+ (type-name-parser-error-position c))
+             (type-name-parser-error-string c)))))
+
+(define-condition generic-argument-count-mismatch (type-name-unexpected-token-error)
+  ()
+  (:report
+   (lambda (c stream &aux (token (type-name-parser-error-token c))
+                          (value (type-name-parser-error-value c)))
+     (format
+      stream
+      "~&Generic type argument count mismatch for type ~a~a~% at position ~d in type name string ~s"
+      token
+      value
+      (1+ (type-name-parser-error-position c))
+      (type-name-parser-error-string c)))))
+
+(defgeneric type-name-parser-error-string (parser-error)
+  (:method ((parser-error type-name-parser-error))
+    (slot-value parser-error '%datum)))
+
+(define-condition type-name-parser-eof (type-name-parser-error)
+  ()
+  (:report (lambda (c s)
+             (format s "Unexpected end of string while tokenizing type name ~s"
+                     (type-name-parser-error-string c))))
+  (:default-initargs :character nil))
+
+(define-condition enum-resolution-error (type-resolution-error)
+  ()
+  (:report (lambda (c s)
+             (format s "~s is not an enum type"
                      (type-resolution-error-datum c)))))
 
 (define-condition member-resolution-error (bike-error)

@@ -37,7 +37,7 @@
   (:export
 
    ;; types and stuff
-   #:import-type
+   #:*default-assemblies*
    #:resolve-type
    #:load-assembly
    #:load-assembly-from
@@ -45,12 +45,18 @@
    #:get-loaded-assemblies
    #:import-loaded-assemblies
    #:clear-type-cache
+
+   ;; namespaces
    #:use-namespace
    #:unuse-namespace
    #:unuse-all-namespaces
+
+   ;; type aliases
    #:use-type-alias
    #:unuse-type-alias
    #:unuse-all-type-aliases
+
+   ;; lisp type definitions
    #:dotnet-type-designator
    #:dotnet-method-designator
 
@@ -70,10 +76,31 @@
    #:bike-error
    #:dotnet-error
    #:dotnet-error-object
+   #:invalid-assembly-designator
+   #:invalid-assembly-designator-datum
    #:invalid-type-designator
    #:invalid-type-designator-datum
    #:type-resolution-error
    #:type-resolution-error-datum
+   #:invalid-type-ast
+   #:invalid-type-ast-datum
+   #:inner-ref-type-error
+   #:inner-ref-type-error-datum
+   #:invalid-type-name
+   #:invalid-type-name-datum
+   #:type-name-parser-error
+   #:type-name-parser-error-string
+   #:type-name-parser-error-character
+   #:type-name-parser-error-position
+   #:type-name-unexpected-token-error
+   #:type-name-unexpected-token-error-value
+   #:type-name-parser-error-value
+   #:type-name-unexpected-token-error-token
+   #:type-name-parser-error-token
+   #:generic-argument-count-mismatch
+   #:typename-parser-eof
+   #:enum-resolution-error
+   #:enum-resolution-error-datum
    #:member-resolution-error
    #:member-resolution-error-type
    #:member-resolution-error-field
@@ -95,6 +122,7 @@
    #:accessor-resolution-error-accessor-kind
    #:accessor-resolution-error-member-kind
    #:accessor-resolution-error-member
+   #:enum-resolution-error
 
    ;; reflection api
    #:reflection-invoke
@@ -103,6 +131,7 @@
    #:reflection-ref
 
    ;; api
+   #:enum
    #:get-type
    #:new
    #:invoke
