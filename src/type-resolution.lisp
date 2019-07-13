@@ -169,7 +169,7 @@
                   (let ((entries array-entries)
                         (array-type (%make-array-type type rank)))
                     (unless entries
-                      (setf entries (make-array +max-array-rank+)
+                      (setf entries (make-array +max-array-rank+ :initial-element nil)
                             array-entries entries))
                     (setf (svref entries (1- rank))
                           (%make-type-entry :type array-type

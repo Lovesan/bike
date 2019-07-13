@@ -1,3 +1,6 @@
+# 0.4.1 - Bugfixing release
+  * Fixed multidimensional array type resolution
+
 # 0.4.0 - AspNet Core MVC example. New type resolution process. Signal handling on linux improvements.
   * Improved coexistence of CoreCLR and Lisp runtimes on Linux.
     * Handle CoreFX signals by lisp, except SIGCHLD, which is perfectly handled by .Net
