@@ -1,3 +1,6 @@
+# 0.4.2 - Refert REF accessor to reflection
+  * Use reflection until method resolution would be implemented
+
 # 0.4.1 - Bugfixing release
   * Fixed multidimensional array type resolution
 

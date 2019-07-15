@@ -86,32 +86,14 @@
            (dynamic-extent indices))
   "Retrieves a value of an indexer from a TARGET, which
  must be an instance."
-  (let* ((entry (resolve-indexer target))
-         (reader (%indexer-entry-reader entry)))
-    (unless reader
-      (error 'accessor-resolution-error
-             :member (%indexer-entry-name entry)
-             :kind :reader
-             :member-kind :indexer
-             :type (reflection-property (%indexer-entry-info entry)
-                                        "DeclaringType")))
-    (apply reader target (cons index indices))))
+  (apply #'%get-index target index indices))
 
 (defun (setf ref) (new-value target index &rest indices)
   (declare (type dotnet-object target)
            (dynamic-extent indices))
   "Changes a value of an indexer from a TARGET, which
  must be an instance."
-  (let* ((entry (resolve-indexer target))
-         (writer (%indexer-entry-writer entry)))
-    (unless writer
-      (error 'accessor-resolution-error
-             :member (%indexer-entry-name entry)
-             :kind :writer
-             :member-kind :indexer
-             :type (reflection-property (%indexer-entry-info entry)
-                                        "DeclaringType")))
-    (apply writer target (cons index (nreverse (cons new-value indices))))))
+  (apply #'%set-index target new-value index indices))
 
 (defun field (target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
