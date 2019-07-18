@@ -162,36 +162,6 @@
                                                           :pointer data
                                                           :pointer ctx)))))
 
-
-  (defun initialize-dotnet-sigactions ()
-    "Initializes CoreFX sigactions, namely for SIGCHLD, SIGCONT, SIGINT, SIGQUIT.
- We utilize CoreFX handlers for some/all of this, but use lisp signal masks for others"
-    ;; first, force initialization of corefx signal handlers
-    (invoke (invoke (resolve-type "System.Diagnostics.Process") "GetMethod"
-                    "EnsureSigChildHandler"
-                    (enum "System.Reflection.BindingFlags" "Static" "NonPublic"))
-            "Invoke" nil (new '(:array :object) 0))
-    ;; save corefx signals
-    (dotimes (i +nsig+)
-      ;; Some of them would of course be ours lisp signals reestablished earlier
-      (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i)))
-    (setf +new-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
-    (foreign-funcall "memcpy" :pointer +new-sigactions+
-                              :pointer +lisp-sigactions+
-                              size-t (* +nsig+ (foreign-type-size '(:struct sigaction))))
-
-    ;; only use SIGCHLD for now, dotnet background thread perfectly handles it
-    (dolist (sig (list +sigchld+))
-      (let* ((addr (sigaction-address +new-sigactions+ sig))
-             (dotnet-addr (sigaction-address +dotnet-sigactions+ sig)))
-        (setf (foreign-slot-value addr '(:struct sigaction) 'handler)
-              (foreign-slot-value dotnet-addr '(:struct sigaction) 'handler))))
-
-    ;; init signals from new sigactions
-    (dotimes (i +nsig+)
-      (let ((addr (sigaction-address +new-sigactions+ i)))
-        (sigaction i addr (null-pointer)))))
-
   (defun restore-lisp-sigactions ()
     "Restores lisp signal actions"
     (dotimes (i +nsig+)

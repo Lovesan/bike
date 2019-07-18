@@ -1,4 +1,18 @@
-# 0.4.2 - Refert REF accessor to reflection
+# 0.5.0 - Target invocation cache. Internal DEFKNOWN API.
+  * Implemented target invocation cache akin to .Net DLR one. All non-reflection APIs use this
+    * Compiled trampolines are cached(based on member declaring type and argument types) and reused later on
+  * Added internal ```defknown``` API based on trampoline compilation
+    * A similiar API for establishing direct calls would be exposed to the user a bit later
+  * Optimize count of host methods in favor of ```defknown``` API
+  * Implemented generic type caster (use ```box``` function with optional parameter)
+  * Renamed ```get-type``` function to ```bike-type-of```
+    * ```get-type``` now acts exactly as ```Type.GetType```, i.e. retrieves a type by name
+      * You should use ```resolve-type``` function for that, however, because of it is being more robust
+  * .Net exceptions caught by Lisp code inside callbacks are now unwrapped into .Net exceptions on return to .Net code
+  * Moved .Net initialization to host.lisp file. Removed an amount of duplicate code
+  * Fixed few bugs in .Net type name parser
+
+# 0.4.2 - Revert REF accessor to reflection
   * Use reflection until method resolution would be implemented
 
 # 0.4.1 - Bugfixing release

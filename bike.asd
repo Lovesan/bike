@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike
-  :version "0.4.2"
+  :version "0.5.0"
   :description "Common Lisp .Net Core Interop"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
@@ -42,21 +42,19 @@
                              (:file "conditions")
                              (:file "api-low")
                              (:file "callbacks")
+                             (:file "trampolines")
+                             (:file "known")
+                             (:file "api-known")
+                             (:file "print")
                              (:file "type")
                              (:file "type-name-parser")
                              (:file "type-resolution")
                              (:file "assemblies")
-                             (:file "members-low")
-                             (:file "api-reflection")
-                             (:file "trampolines")
-                             (:file "methods")
-                             (:file "fields")
-                             (:file "properties")
-                             (:file "members")
-                             (:file "method-resolution")
                              (:file "enum")
-                             (:file "api")
-                             (:file "init"))))
+                             (:file "api-reflection")
+                             (:file "invocation-cache")
+                             (:file "members")
+                             (:file "api"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))
 
 ;;; vim: ft=lisp et

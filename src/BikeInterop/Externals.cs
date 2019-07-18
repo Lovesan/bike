@@ -25,6 +25,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -57,6 +58,21 @@ namespace BikeInterop
         private static readonly Type[] EmptyTypeArray = new Type[0];
 
         private static readonly Logger Log = Logger.Get(typeof(Externals));
+
+        /// <summary>
+        /// Linux(Unix?) specific
+        /// </summary>
+        public static void InitializeCoreFxSignals()
+        {
+            var method = typeof(Process)
+                .GetMethod(
+                    "EnsureSigChildHandler",
+                    BindingFlags.Static | BindingFlags.NonPublic);
+            if (method != null)
+            {
+                method.Invoke(null, new object[0]);
+            }
+        }
 
         public static void InstallCallbacks(
             IntPtr freeLispHandleCallback,
@@ -138,275 +154,6 @@ namespace BikeInterop
             result = BoxObject(invocationResult);
             typeCode = invocationResult.GetFullTypeCode();
             exception = BoxObject(e);
-        }
-
-        public static void GetGenericTypeByName(
-            [MarshalAs(UnmanagedType.LPWStr)] string name,
-            IntPtr args,
-            int nArgs,
-            bool throwOnError,
-            IntPtr assembly,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            typeCode = (int) TypeCode.Empty;
-            result = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var definitionName = string.Format(CultureInfo.InvariantCulture, "{0}`{1}", name, nArgs);
-                var realAssembly = UnboxObject(assembly) as Assembly;
-                var typeArgs = nArgs == 0 ? EmptyTypeArray : UnboxTypeArgs(args, nArgs);
-                var definition = realAssembly != null
-                    ? realAssembly.GetType(definitionName, throwOnError, true)
-                    : Type.GetType(definitionName, throwOnError, true);
-                // ReSharper disable once PossibleNullReferenceException
-                invocationResult = definition.MakeGenericType(typeArgs);
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            exception = BoxObject(e);
-        }
-
-        public static void MakeGenericType(
-            IntPtr type,
-            IntPtr args,
-            int nArgs,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            typeCode = (int)TypeCode.Empty;
-            result = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var definition = (Type) UnboxObject(type);
-                var typeArgs = nArgs == 0 ? EmptyTypeArray : UnboxTypeArgs(args, nArgs);
-                invocationResult = definition.MakeGenericType(typeArgs);
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            exception = BoxObject(e);
-        }
-
-        public static void MakeArrayType(
-            IntPtr type,
-            int rank,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            typeCode = (int)TypeCode.Empty;
-            result = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var underlyingType = (Type) UnboxObject(type);
-                invocationResult = underlyingType.MakeArrayType(rank);
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            exception = BoxObject(e);
-        }
-
-        public static void MakePointerType(
-            IntPtr type,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            typeCode = (int)TypeCode.Empty;
-            result = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var underlyingType = (Type)UnboxObject(type);
-                invocationResult = underlyingType.MakePointerType();
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            exception = BoxObject(e);
-        }
-        public static void MakeByRefType(
-            IntPtr type,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            typeCode = (int)TypeCode.Empty;
-            result = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var underlyingType = (Type)UnboxObject(type);
-                invocationResult = underlyingType.MakeByRefType();
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            exception = BoxObject(e);
-        }
-
-        public static bool IsDelegateType(IntPtr type)
-        {
-            var obj = UnboxObject(type);
-            return obj is Type realType &&
-                   realType.IsSubclassOf(typeof(Delegate));
-        }
-
-        public static bool IsPointerType(IntPtr type)
-        {
-            var obj = UnboxObject(type);
-            return obj is Type realType && realType.IsPointer;
-        }
-
-        public static bool IsByRefType(IntPtr type)
-        {
-            var obj = UnboxObject(type);
-            return obj is Type realType && realType.IsByRef;
-        }
-
-        public static bool IsArrayType(IntPtr type)
-        {
-            var obj = UnboxObject(type);
-            return obj is Type realType && realType.IsArray;
-        }
-
-        public static bool IsEnumType(IntPtr type)
-        {
-            var obj = UnboxObject(type);
-            return obj is Type realType && realType.IsEnum;
         }
 
         public static void Invoke(
@@ -848,56 +595,6 @@ namespace BikeInterop
             exception = BoxObject(e);
         }
 
-        public static void InvokeDelegate(
-            IntPtr boxedDelegate,
-            IntPtr args,
-            int nArgs,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            result = IntPtr.Zero;
-            typeCode = (int)TypeCode.Empty;
-            exception = IntPtr.Zero;
-            object e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var realDelegate = (Delegate) UnboxObject(boxedDelegate);
-                var realArgs = nArgs == 0 ? EmptyArray : UnboxArgs(args, nArgs);
-                invocationResult = realDelegate.DynamicInvoke(realArgs);
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            if (e is LispException lispException)
-                e = lispException.Value;
-            exception = BoxObject(e);
-        }
-
         public static void GetDelegateForLispFunction(
             IntPtr function,
             IntPtr delegateType,
@@ -967,13 +664,22 @@ namespace BikeInterop
             try
             {
 
-                var realMethodInfo = (MethodInfo)UnboxObject(methodInfo);
+                var methodBase = (MethodBase)UnboxObject(methodInfo);
                 var argTypes = nArgs == 0 ? EmptyTypeArray : UnboxTypeArgs(args, nArgs);
-                invocationResult = TrampolineCompiler.CompileMethod(
-                    realMethodInfo,
-                    out var ptr,
-                    argTypes);
-                pointer = ptr;
+                if (methodBase is MethodInfo realMethodInfo)
+                {
+                    invocationResult = TrampolineCompiler.CompileMethodInfo(
+                        realMethodInfo,
+                        out var ptr,
+                        argTypes);
+                    pointer = ptr;
+                }
+                else
+                {
+                    var constructorInfo = (ConstructorInfo) methodBase;
+                    invocationResult = TrampolineCompiler.CompileConstructor(constructorInfo, out var ptr);
+                    pointer = ptr;
+                }
             }
             catch (TargetInvocationException ex)
             {
@@ -1259,118 +965,16 @@ namespace BikeInterop
             return UnboxObject(value) is LispObject;
         }
 
-        public static bool IsType(IntPtr value)
-        {
-            if (value == IntPtr.Zero)
-                return false;
-            return UnboxObject(value) is Type;
-        }
-
-        public static bool IsTransientType(IntPtr type)
-        {
-            return (UnboxObject(type) as Type)?.Assembly.IsDynamic ?? false;
-        }
-
-        public static bool IsGenericType(IntPtr type)
-        {
-            return (UnboxObject(type) as Type)?.IsGenericType ?? false;
-        }
-
-        public static bool IsGenericTypeDefinition(IntPtr type)
-        {
-            return (UnboxObject(type) as Type)?.IsGenericTypeDefinition ?? false;
-        }
-
-        public static void GetGenericTypeDefinition(
+        public static void MakeVectorOf(
             IntPtr type,
+            int length,
             out IntPtr result,
             out int typeCode,
             out IntPtr exception)
         {
             result = IntPtr.Zero;
-            typeCode = (int) TypeCode.Empty;
-            Exception e = null;
-            Type definition = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var realType = (Type) UnboxObject(type);
-                definition = realType.GetGenericTypeDefinition();
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            typeCode = definition.GetFullTypeCode();
-            result = BoxObject(definition);
-            exception = BoxObject(e);
-        }
-
-        public static void GetGenericTypeArguments(
-            IntPtr type,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            result = IntPtr.Zero;
-            typeCode = (int) TypeCode.Empty;
-            Exception e = null;
-            Type[] arguments = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var realType = (Type)UnboxObject(type);
-                arguments = realType.GetGenericArguments();
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            typeCode = arguments.GetFullTypeCode();
-            result = BoxObject(arguments);
-            exception = BoxObject(e);
-        }
-
-        public static IntPtr GetElementType(IntPtr type, out IntPtr exception)
-        {
+            typeCode = (int)TypeCode.Empty;
+            exception = IntPtr.Zero;
             Exception e = null;
             object invocationResult = null;
 
@@ -1381,7 +985,7 @@ namespace BikeInterop
             try
             {
                 var realType = (Type) UnboxObject(type);
-                invocationResult = realType.GetElementType();
+                invocationResult = Array.CreateInstance(realType, length);
             }
             catch (TargetInvocationException ex)
             {
@@ -1402,20 +1006,9 @@ namespace BikeInterop
             Task.WaitAny(task);
 #endif
 
+            typeCode = invocationResult.GetFullTypeCode();
+            result = BoxObject(invocationResult);
             exception = BoxObject(e);
-            return BoxObject(invocationResult);
-        }
-
-        public static int GetArrayTypeRank(IntPtr value)
-        {
-            return ((Type)UnboxObject(value)).GetArrayRank();
-        }
-
-        public static bool IsCompilerGeneratedMember(IntPtr value)
-        {
-            var info = UnboxObject(value) as MemberInfo;
-            if (info == null) return false;
-            return info.GetCustomAttribute<CompilerGeneratedAttribute>() != null;
         }
 
         public static void ArrayLength(
@@ -1565,58 +1158,6 @@ namespace BikeInterop
             return BoxObject(((Type) UnboxObject(type)).FullName);
         }
 
-        public static IntPtr GetTypeAssemblyQualifiedName(IntPtr type)
-        {
-            return BoxObject(((Type)UnboxObject(type)).AssemblyQualifiedName);
-        }
-
-        public static void ConvertTo(
-            IntPtr value,
-            IntPtr type,
-            out IntPtr result,
-            out int typeCode,
-            out IntPtr exception)
-        {
-            result = IntPtr.Zero;
-            typeCode = (int) TypeCode.Empty;
-            exception = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                var realValue = UnboxObject(value);
-                var realType = (Type) UnboxObject(type);
-                invocationResult = Convert.ChangeType(realValue, realType);
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            result = BoxObject(invocationResult);
-            typeCode = invocationResult.GetFullTypeCode();
-            exception = BoxObject(e);
-        }
-
         public static IntPtr EnumToObject(
             IntPtr type,
             long value,
@@ -1634,50 +1175,6 @@ namespace BikeInterop
             {
                 var realType = (Type)UnboxObject(type);
                 invocationResult = Enum.ToObject(realType, value);
-            }
-            catch (TargetInvocationException ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex.InnerException;
-            }
-            catch (Exception ex)
-            {
-#if DEBUG
-                Log.Exception(ex);
-#endif
-                e = ex;
-            }
-#if ENABLE_TASK_HACK
-            });
-            Task.WaitAny(task);
-#endif
-
-            exception = BoxObject(e);
-            return BoxObject(invocationResult);
-        }
-
-        public static bool ObjectEquals(IntPtr left, IntPtr right)
-        {
-            return Equals(UnboxObject(left), UnboxObject(right));
-        }
-
-        public static IntPtr LoadAssembly(
-            [MarshalAs(UnmanagedType.LPWStr)] string assemblyString,
-            out IntPtr exception)
-        {
-            exception = IntPtr.Zero;
-            Exception e = null;
-            object invocationResult = null;
-
-#if ENABLE_TASK_HACK
-            var task = Task.Factory.StartNew(() =>
-            {
-#endif
-            try
-            {
-                invocationResult = Assembly.Load(assemblyString);
             }
             catch (TargetInvocationException ex)
             {

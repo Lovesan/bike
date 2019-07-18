@@ -28,13 +28,34 @@ using System;
 namespace BikeInterop
 {
     /// <summary>
-    /// Lisp callback which applies a Lisp function to the arguments
+    /// Generic type caster
     /// </summary>
-    /// <param name="function">Lisp function handle</param>
-    /// <param name="args">Argument array pointer</param>
-    /// <param name="typeCodes">Argument type code pointer</param>
-    /// <param name="nArgs">Argument count</param>
-    /// <param name="exception">An exception object, should one occur</param>
-    /// <returns></returns>
-    public delegate IntPtr ApplyCallback(IntPtr function, IntPtr args, IntPtr typeCodes, int nArgs, out IntPtr exception, out bool isDotnetException);
+    public static class TypeCaster
+    {
+        /// <summary>
+        /// Cast object to a type
+        /// </summary>
+        /// <typeparam name="T">Type</typeparam>
+        /// <param name="instance">object</param>
+        /// <returns>Converted object</returns>
+        public static T Cast<T>(object instance)
+        {
+            if (instance == null) return default(T);
+            if (instance is IConvertible && typeof(T).GetInterface("System.IConvertible") != null)
+                return (T)Convert.ChangeType(instance, typeof(T));
+            return (T) instance;
+        }
+
+        /// <summary>
+        /// Try cast object to a type
+        /// </summary>
+        /// <typeparam name="T">Type</typeparam>
+        /// <param name="instance">object</param>
+        /// <returns>Converted object or null</returns>
+        public static T As<T>(object instance)
+            where T : class
+        {
+            return instance as T;
+        }
+    }
 }

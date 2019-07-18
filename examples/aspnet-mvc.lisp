@@ -98,9 +98,10 @@
 (defun make-output-handler (stream)
   (declare (type stream stream))
   (new 'DataReceivedEventHandler
-       (lambda (sender e &aux (str (property e 'Data)))
+       (lambda (sender e)
          (declare (ignore sender))
-         (when str (write-line str stream)))))
+         (let ((str (property e 'Data)))
+           (when str (write-line str stream))))))
 
 (defun publish-project (project-file)
   (declare (type (or pathname string) project-file))

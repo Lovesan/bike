@@ -97,18 +97,25 @@
 
 qualifiedTypeDefinition -> maybeSpace typeDefinition maybeSpace maybeAssemblyDefinition EOF
 
-typeDefinition -> IDENTIFIER namespaces nestedTypes typeDefinitionRest
+typeDefinition -> IDENTIFIER namespaces typeDefinitionRest
 
 namespaces -> DOT IDENTIFIER namespaces / <empty>
 
-nestedTypes -> NEST IDENTIFIER nestedTypes
-              / <empty>
-
-typeDefinitionRest -> BACKQUOTE INTEGER maybeTypeArgs maybeHairyType
+typeDefinitionRest ->  BACKQUOTE INTEGER genericDefinitionRest
+                     / NEST IDENTIFIER typeDefinitionRest
                      / maybeHairyType
 
-maybeTypeArgs -> OPEN maybeSpace typeArgs maybeSpace CLOSE
-                 / <empty>
+genericDefinitionRest -> NEST IDENTIFIER genericDefinitionCont
+                        / genericDefinitionEnd
+
+genericDefinitionCont -> BACKQUOTE INTEGER genericDefinitionRest
+                        / NEST IDENTIFIER genericDefinitionCont
+                        / genericDefinitionEnd
+
+genericDefinitionEnd ->  OPEN maybeSpace typeArgs maybeSpace CLOSE maybeHairyType
+                        / POINTER maybeHairyType
+                        / REF maybeHairyType
+                        / <empty>
 
 typeArgs -> typeArg typeArgsRest
 
@@ -304,41 +311,68 @@ maybeIdentifier -> IDENTIFIER / <empty>
                  (cons (type-arg) (type-args-rest))))
              (type-args ()
                (cons (type-arg) (type-args-rest)))
-             (maybe-type-args ()
+             (gen-def-end (def-start n &aux (e 0) args)
                (peek)
-               (when (eq token :open)
-                 (next)
-                 (maybe-space)
-                 (prog1 (type-args)
-                   (maybe-space)
-                   (consume :close))))
-             (type-def-rest (def-start &aux (s 0) (e 0) (n 0) args)
+               (case token
+                 (:open
+                  (setf e start)
+                  (next)
+                  (maybe-space)
+                  (setf args (type-args))
+                  (maybe-space)
+                  (consume :close)
+                  (unless (= n (length args))
+                    (error 'generic-argument-count-mismatch
+                           :token (subseq name def-start e)
+                           :value (subseq name e start)
+                           :position e
+                           :datum name))
+                  (maybe-hairy-type (cons (subseq name def-start e) args)))
+                 (:pointer
+                  (setf e start)
+                  (next)
+                  (maybe-hairy-type (list '* (subseq name def-start e))))
+                 (:ref
+                  (setf e start)
+                  (next)
+                  (maybe-hairy-type (list :ref (subseq name def-start e))))
+                 (t (subseq name def-start start))))
+             (gen-def-cont (def-start n &aux (s 0) (e 0))
                (peek)
-               (cond ((eq token :backquote)
-                      (next)
-                      (setf s start)
-                      (consume :integer)
-                      (setf e start)
-                      (setf n (parse-integer name :start s :end e))
-                      (setf args (maybe-type-args))
-                      (when (and args (/= (length args) n))
-                        (error 'generic-argument-count-mismatch
-                               :datum name
-                               :token (subseq name def-start e)
-                               :position e
-                               :value (subseq name e start)))
-                      (maybe-hairy-type
-                       (let ((def-name (subseq name def-start e)))
-                         (if args
-                           (cons def-name args)
-                           def-name))))
-                     (t (maybe-hairy-type (subseq name def-start start)))))
-             (nested-types ()
+               (case token
+                 (:backquote
+                  (next)
+                  (setf s start)
+                  (consume :integer)
+                  (setf e start)
+                  (gen-def-rest def-start (+ n (parse-integer name :start s :end e))))
+                 (:nest
+                  (next)
+                  (consume :identifier)
+                  (gen-def-cont def-start n))
+                 (t (gen-def-end def-start n))))
+             (gen-def-rest (def-start n)
                (peek)
-               (when (eq token :nest)
-                 (next)
-                 (consume :identifier)
-                 (nested-types)))
+               (case token
+                 (:nest
+                  (next)
+                  (consume :identifier)
+                  (gen-def-cont def-start n))
+                 (t (gen-def-end def-start n))))
+             (type-def-rest (def-start &aux (s 0) (e 0))
+               (peek)
+               (case token
+                 (:backquote
+                  (next)
+                  (setf s start)
+                  (consume :integer)
+                  (setf e start)
+                  (gen-def-rest def-start (parse-integer name :start s :end e)))
+                 (:nest
+                  (next)
+                  (consume :identifier)
+                  (type-def-rest def-start))
+                 (t (maybe-hairy-type (subseq name def-start start)))))
              (namespaces ()
                (peek)
                (when (eq token :dot)
@@ -350,7 +384,6 @@ maybeIdentifier -> IDENTIFIER / <empty>
                (let ((def-start start))
                  (consume :identifier)
                  (namespaces)
-                 (nested-types)
                  (type-def-rest def-start)))
              (qualified-type-def ()
                (maybe-space)

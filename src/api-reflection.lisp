@@ -105,6 +105,20 @@
     (%set-field target nil (%mknetsym name) new-value)
     (%set-field (resolve-type target) t (%mknetsym name) new-value)))
 
+(defun reflection-new (type &rest args)
+  (declare (type dotnet-type-designator type)
+           (dynamic-extent args))
+  "Using reflection, creates an instance of the specified TYPE.
+In case of the TYPE being a delegate type, first,
+ and only, argument, must be a lisp function-like
+ object."
+  (let ((type (resolve-type type)))
+    (if (delegate-type-p type)
+      (let ((lisp-function (first args)))
+        (declare (type (or symbol function) lisp-function))
+        (%get-delegate-for-lisp-function lisp-function type))
+      (apply #'%invoke-constructor type args))))
+
 (defun list-to-bike-vector (list &key (start 0) end (element-type "System.Object"))
   (declare (type list list)
            (type non-negative-fixnum start)
@@ -122,31 +136,5 @@
                   (cdr sublist)))
         ((= i count) vector)
       (setf (dnvref vector i) (car sublist)))))
-
-(defmethod print-object ((dotnet-error dotnet-error) stream)
-  (let* ((object (dotnet-error-object dotnet-error))
-         (type (reflection-invoke (reflection-invoke object "GetType") "ToString"))
-         (message (remove #\Return (reflection-property object "Message")))
-         (trace (remove #\Return (reflection-property object "StackTrace"))))
-    (format stream ".Net exception ~a~%~a~%~a" type message trace))
-  dotnet-error)
-
-(defmethod print-object ((object dotnet-object) stream)
-  (print-unreadable-object (object stream)
-    (let ((type (reflection-invoke (reflection-invoke object "GetType") "ToString"))
-          (str (reflection-invoke object "ToString"))
-          (gc-handle (pointer-address (%dotnet-object-handle object))))
-      (if (string= str type)
-        (format stream "~a {~8,'0X}" type gc-handle)
-        (format stream "~a ~a {~8,'0X}" type str gc-handle))))
-  object)
-
-(defmethod print-object ((object type-entry) stream)
-  (print-unreadable-object (object stream :type t)
-    (with-type-entry (type) object
-      (let ((gc-handle (pointer-address (%dotnet-type-handle type)))
-            (name (reflection-invoke type "ToString")))
-        (format stream "~a {~8,'0X}" name gc-handle)))
-    object))
 
 ;;; vim: ft=lisp et

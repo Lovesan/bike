@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike-internals
-  :version "0.4.2"
+  :version "0.5.0"
   :description "Common Lisp .Net Core Interop Internals"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"

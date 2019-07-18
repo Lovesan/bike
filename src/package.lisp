@@ -33,7 +33,9 @@
                 #:removef
                 #:hash-table-alist
                 #:define-constant
-                #:non-negative-fixnum)
+                #:non-negative-fixnum
+                #:parse-body
+                #:ensure-list)
   (:export
 
    ;; types and stuff
@@ -129,10 +131,14 @@
    #:reflection-field
    #:reflection-property
    #:reflection-ref
+   #:reflection-new
 
    ;; api
    #:enum
    #:get-type
+   #:bike-type-of
+   #:bike-equals
+   #:bike-subclass-p
    #:new
    #:invoke
    #:field

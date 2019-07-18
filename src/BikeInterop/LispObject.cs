@@ -161,6 +161,7 @@ namespace BikeInterop
             return (Delegate)compiled;
         }
 
+        // TODO: Handle ref/out/params
         private unsafe object CallTrampoline(object[] args)
         {
             var argCount = args.Length;
@@ -172,8 +173,12 @@ namespace BikeInterop
                 typeCodes[i] = args[i].GetFullTypeCode();
             }
 
-            var rv = _apply(Handle, (IntPtr) realArgs, (IntPtr)typeCodes, argCount, out var exInfo);
-            var ex = Create(exInfo);
+            var rv = _apply(Handle, (IntPtr) realArgs, (IntPtr)typeCodes, argCount, out var exInfo, out var isDotnetException);
+            var ex = exInfo == IntPtr.Zero
+                ? null
+                : isDotnetException
+                    ? (Exception) Externals.UnboxObject(exInfo)
+                    : new LispException(Create(exInfo));
             object obj = null;
             if (rv != IntPtr.Zero)
             {
@@ -208,8 +213,9 @@ namespace BikeInterop
                     */
                 }
             }
+
             if (ex != null)
-                throw new LispException(ex);
+                throw ex;
             return obj;
         }
     }

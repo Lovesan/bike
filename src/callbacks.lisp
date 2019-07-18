@@ -24,16 +24,17 @@
 
 (in-package #:bike)
 
-(defcallback (free-lisp-handle :convention :stdcall)
+(defcallback (free-lisp-handle-callback :convention :stdcall)
     :void ((handle :pointer))
   (%free-lisp-handle (pointer-address handle)))
 
-(defcallback (apply :convention :stdcall)
+(defcallback (apply-callback :convention :stdcall)
     :pointer ((fun-handle :pointer)
               (args-ptr :pointer)
               (type-codes-ptr :pointer)
               (n-args :int)
-              (out-ex :pointer))
+              (out-ex :pointer)
+              (out-ex-from-dotnet :pointer))
   (handler-case
       (progn (let ((function (%handle-table-get (pointer-address fun-handle)))
                    (args '()))
@@ -45,9 +46,28 @@
                      (when cleanup (%free-handle boxed))
                      (push arg args))))
                (values (%box (apply function (nreverse args))))))
+    (dotnet-error (e)
+      (setf (mem-ref out-ex-from-dotnet :bool) t
+            (mem-ref out-ex :pointer)
+            (%dotnet-object-handle (dotnet-error-object e)))
+      (null-pointer))
     (error (e)
-      (setf (mem-ref out-ex :pointer)
+      (setf (mem-ref out-ex-from-dotnet :bool) nil
+            (mem-ref out-ex :pointer)
             (make-pointer (%alloc-lisp-handle e)))
       (null-pointer))))
+
+(#+sbcl sb-ext:defglobal #-sbcl defvar +callbacks-initialized-p+ nil)
+
+(defun initialize-callbacks ()
+  (with-foreign-object (ex :pointer)
+    (hostcall install-callbacks
+              :pointer (callback free-lisp-handle-callback)
+              :pointer (callback apply-callback)
+              :pointer ex)
+    (%transform-exception (mem-ref ex :pointer))
+    (setf +callbacks-initialized-p+ t)))
+
+(uiop:register-image-restore-hook #'initialize-callbacks (not +callbacks-initialized-p+))
 
 ;;; vim: ft=lisp et

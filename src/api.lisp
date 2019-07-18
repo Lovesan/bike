@@ -32,14 +32,21 @@
  either be a type specifier, in which case a static method is
  invoked, or an instance, which would lead to instance method
  invocation."
-  ;;; will use reflection until method resolution would be implemented
-  (multiple-value-bind (method-name type-args)
-      (if (consp method)
-        (%resolve-generic-types method)
-        (values (%mknetsym method) '()))
-    (if (dotnet-object-p target)
-      (apply #'%invoke target nil type-args method-name args)
-      (apply #'%invoke (resolve-type target) t type-args method-name args))))
+  (let* ((instancep (dotnet-object-p target))
+         (type (if instancep
+                 (%bike-type-of target)
+                 (resolve-type target)))
+         (genericp (consp method))
+         (name (%mknetsym (if genericp (car method) method)))
+         (type-args (when genericp
+                      (unless (cdr method)
+                        (error 'generic-argument-count-mismatch
+                               :token name
+                               :value ""
+                               :position 0
+                               :datum method))
+                      (mapcar #'resolve-type (cdr method)))))
+    (apply #'%invoke-method type (%mknetsym name) (and instancep target) type-args args)))
 
 (defun property (target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -48,18 +55,11 @@
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (let* ((entry (resolve-property target name))
-         (reader (%property-entry-reader entry)))
-    (unless reader
-      (error 'accessor-resolution-error
-             :member (%property-entry-name entry)
-             :kind :reader
-             :member-kind :property
-             :type (reflection-property (%property-entry-info entry)
-                                        "DeclaringType")))
-    (if (%property-entry-staticp entry)
-      (funcall reader)
-      (funcall reader target))))
+  (let* ((instancep (dotnet-object-p target))
+         (type (if instancep
+                 (%bike-type-of target)
+                 (resolve-type target))))
+    (%access-property type (%mknetsym name) (and instancep target) t nil)))
 
 (defun (setf property) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -68,32 +68,25 @@
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (let* ((entry (resolve-property target name))
-         (writer (%property-entry-writer entry)))
-    (unless writer
-      (error 'accessor-resolution-error
-             :member (%property-entry-name entry)
-             :kind :writer
-             :member-kind :property
-             :type (reflection-property (%property-entry-info entry)
-                                        "DeclaringType")))
-    (if (%property-entry-staticp entry)
-      (funcall writer new-value)
-      (funcall writer target new-value))))
+  (let* ((instancep (dotnet-object-p target))
+         (type (if instancep
+                 (%bike-type-of target)
+                 (resolve-type target))))
+    (%access-property type (%mknetsym name) (and instancep target) nil new-value)))
 
 (defun ref (target index &rest indices)
   (declare (type dotnet-object target)
            (dynamic-extent indices))
   "Retrieves a value of an indexer from a TARGET, which
  must be an instance."
-  (apply #'%get-index target index indices))
+  (apply #'%access-indexer target t nil (cons index indices)))
 
 (defun (setf ref) (new-value target index &rest indices)
   (declare (type dotnet-object target)
            (dynamic-extent indices))
   "Changes a value of an indexer from a TARGET, which
  must be an instance."
-  (apply #'%set-index target new-value index indices))
+  (apply #'%access-indexer target nil new-value (cons index indices)))
 
 (defun field (target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -102,18 +95,11 @@
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (let* ((entry (resolve-field target name))
-         (reader (%field-entry-reader entry)))
-    (unless reader
-      (error 'accessor-resolution-error
-             :member (%field-entry-name entry)
-             :kind :reader
-             :member-kind :field
-             :type (reflection-property (%field-entry-info entry)
-                                        "DeclaringType")))
-    (if (%field-entry-staticp entry)
-      (funcall reader)
-      (funcall reader target))))
+  (let* ((instancep (dotnet-object-p target))
+         (type (if instancep
+                 (%bike-type-of target)
+                 (resolve-type target))))
+    (%access-field type (%mknetsym name) (and instancep target) t nil)))
 
 (defun (setf field) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -122,18 +108,12 @@
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (let* ((entry (resolve-field target name))
-         (writer (%field-entry-writer entry)))
-    (unless writer
-      (error 'accessor-resolution-error
-             :member (%field-entry-name entry)
-             :kind :writer
-             :member-kind :field
-             :type (reflection-property (%field-entry-info entry)
-                                        "DeclaringType")))
-    (if (%field-entry-staticp entry)
-      (funcall writer new-value)
-      (funcall writer target new-value))))
+  (let* ((instancep (dotnet-object-p target))
+         (type (if instancep
+                 (%bike-type-of target)
+                 (resolve-type target))))
+    (%access-field type (%mknetsym name) (and instancep target) nil new-value))
+  new-value)
 
 (defun new (type &rest args)
   (declare (type dotnet-type-designator type)
@@ -143,11 +123,11 @@ In case of the TYPE being a delegate type, first,
  and only, argument, must be a lisp function-like
  object."
   (let ((type (resolve-type type)))
-    (if (%is-delegate-type type)
+    (if (delegate-type-p type)
       (let ((lisp-function (first args)))
         (declare (type (or symbol function) lisp-function))
         (%get-delegate-for-lisp-function lisp-function type))
-      (apply #'%invoke-constructor type args))))
+      (apply #'%new type args))))
 
 (defun unbox (object)
   "Attempts to unbox an OBJECT into lisp object"
@@ -165,7 +145,7 @@ In case of the TYPE being a delegate type, first,
                         (code (%get-full-type-code ptr)))
                    (%get-boxed-object ptr (ash code -8) nil)))))
     (if typep
-      (%convert-to boxed (resolve-type type))
+      (invoke 'BikeInterop.TypeCaster (list 'Cast type) object)
       boxed)))
 
 ;;; vim: ft=lisp et

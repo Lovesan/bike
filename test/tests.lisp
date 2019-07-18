@@ -80,7 +80,7 @@
   (let* ((boxed-string (box "Hello"))
          (ex (nth-value 1 (ignore-errors
                            (setf (ref boxed-string 0) #\A)))))
-    (is (typep ex 'dotnet-error))))
+    (is (typep ex 'accessor-resolution-error))))
 
 (test test-callback
   (let* ((x 1)

@@ -52,19 +52,19 @@
   (declare (type dotnet-type type))
   "Retrieves qualified name of a type unless it is dynamic"
   (unless (transient-type-p type)
-    (%get-type-assembly-qualified-name type)))
+    (type-assembly-qualified-name type)))
 
 (defun %ensure-generic-type-definition-entry (type)
   (declare (type dotnet-type type))
   "Ensures generic type definition entry"
-  (let ((name (%mknetsym (%get-type-full-name type))))
+  (let ((name (%mknetsym (type-full-name type))))
     (or (%type-entry name)
         (with-type-table-lock (:write)
           (or (%type-entry name)
-              (let ((args (get-generic-type-arguments type)))
+              (let ((args (type-generic-arguments type)))
                 (setf (%type-entry name)
                       (%make-type-entry
-                       :type type
+                       type
                        :qualified-name (%maybe-get-qualified-name type)
                        :type-args args))))))))
 
@@ -72,19 +72,19 @@
   (declare (type dotnet-type type))
   "Ensures instantiated generic type entry"
   (let* ((definition (%ensure-generic-type-definition-entry
-                      (get-generic-type-definition type))))
+                      (generic-type-definition-of type))))
     (with-type-entry (instances) definition
       (flet ((lookup (&aux (arg-type type))
                (dolist (instance instances)
                  (with-type-entry (type) instance
-                   (when (%object-equals arg-type type)
+                   (when (bike-equals arg-type type)
                      (return instance))))))
         (or (lookup)
             (with-type-table-lock (:write)
               (or (lookup)
-                  (let ((args (get-generic-type-arguments type)))
+                  (let ((args (type-generic-arguments type)))
                     (car (push (%make-type-entry
-                                :type type
+                                type
                                 :qualified-name (%maybe-get-qualified-name type)
                                 :type-args args)
                                instances))))))))))
@@ -101,7 +101,7 @@
                    (when (loop :for def :in args
                                :for def-arg = (%type-entry-type def)
                                :for instance-arg :in instance-args
-                               :unless (%object-equals instance-arg def-arg)
+                               :unless (bike-equals instance-arg def-arg)
                                  :do (return nil)
                                :finally (return t))
                      (return instance))))))
@@ -109,9 +109,9 @@
             (with-type-table-lock (:write)
               (or (lookup)
                   (let* ((args (mapcar #'%type-entry-type args))
-                         (type (%make-generic-type definition-type args)))
+                         (type (apply #'make-generic-type definition-type args)))
                     (car (push (%make-type-entry
-                                :type type
+                                type
                                 :qualified-name (%maybe-get-qualified-name type)
                                 :type-args args)
                                instances))))))))))
@@ -124,15 +124,15 @@
       (or pointer-entry
           (with-type-table-lock (:write)
             (or pointer-entry
-                (let ((ptr-type (%make-pointer-type type)))
+                (let ((ptr-type (make-pointer-type type)))
                   (setf pointer-entry
-                        (%make-type-entry :type ptr-type
+                        (%make-type-entry ptr-type
                                           :element-entry entry)))))))))
 
 (defun %ensure-pointer-type-entry (type)
   (declare (type dotnet-type type))
   "Ensures pointer type entry"
-  (let ((base-type (get-element-type type)))
+  (let ((base-type (element-type-of type)))
     (%ensure-pointer-type-entry-by-element-type base-type)))
 
 (defun %ensure-ref-type-entry-by-element-type (type)
@@ -143,15 +143,15 @@
       (or ref-entry
           (with-type-table-lock (:write)
             (or ref-entry
-                (let ((ref-type (%make-ref-type type)))
+                (let ((ref-type (make-ref-type type)))
                   (setf ref-entry
-                        (%make-type-entry :type ref-type
+                        (%make-type-entry ref-type
                                           :element-entry entry)))))))))
 
 (defun %ensure-ref-type-entry (type)
   (declare (type dotnet-type type))
   "Ensures ref type entry"
-  (let ((base-type (get-element-type type)))
+  (let ((base-type (element-type-of type)))
     (%ensure-ref-type-entry-by-element-type base-type)))
 
 (defun %ensure-array-type-entry-by-element-type (type rank)
@@ -161,26 +161,27 @@
   (let ((entry (%ensure-type-entry type)))
     (with-type-entry (array-entries type) entry
       (flet ((lookup ()
-               (and array-entries
-                    (svref array-entries (1- rank)))))
+               (and array-entries (svref array-entries (1- rank)))))
         (or (lookup)
             (with-type-table-lock (:write)
               (or (lookup)
                   (let ((entries array-entries)
-                        (array-type (%make-array-type type rank)))
+                        (array-type (if (= rank 1)
+                                      (make-array-type type)
+                                      (make-array-type* type rank))))
                     (unless entries
                       (setf entries (make-array +max-array-rank+ :initial-element nil)
                             array-entries entries))
                     (setf (svref entries (1- rank))
-                          (%make-type-entry :type array-type
+                          (%make-type-entry array-type
                                             :element-entry entry
                                             :rank rank))))))))))
 
 (defun %ensure-array-type-entry (type)
   (declare (type dotnet-type type))
   "Ensures array type entry"
-  (let ((base-type (get-element-type type))
-        (rank (get-array-type-rank type)))
+  (let ((base-type (element-type-of type))
+        (rank (array-type-rank type)))
     (%ensure-array-type-entry-by-element-type base-type rank)))
 
 (defun %ensure-simple-type-entry (type)
@@ -192,7 +193,7 @@
           (or (%type-entry name)
               (setf (%type-entry name)
                     (%make-type-entry
-                     :type type
+                     type
                      :qualified-name (%maybe-get-qualified-name type))))))))
 
 (defun %ensure-type-entry (type)
@@ -216,7 +217,7 @@
         ((dotnet-object-p assembly)
          assembly)
         ((typep assembly 'string-designator)
-         (load-assembly (string assembly)))
+         (load-assembly assembly))
         (t (error 'invalid-assembly-designator :datum assembly))))
 
 (defvar *intern-typespec-toplevel* nil)
@@ -268,11 +269,10 @@
     (%intern-type-ast ast 0 assembly)))
 
 (defun %parse-typespec (type)
-  (declare (type dotnet-type-designator type))
   "Parses external API type designator"
   (cond ((dotnet-type-p type)
-         (parse-type-name (or (%get-type-assembly-qualified-name type)
-                              (%get-type-full-name type))))
+         (parse-type-name (or (type-assembly-qualified-name type)
+                              (type-full-name type))))
         ((typep type 'string-designator)
          (parse-type-name (dotnet-name type)))
         ((consp type)

@@ -24,162 +24,278 @@
 
 (in-package #:bike)
 
-(defun %ref-param-handler (e)
-  (declare (type dotnet-error e))
-  (let ((ex (dotnet-error-object e)))
-    (when (string-equal "BikeInterop.RefStructParameterException"
-                        (reflection-property (reflection-invoke ex "GetType")
-                                             "FullName"))
-      (invoke-restart 'skip))))
+(declaim (inline %call-ientry))
+(defun %call-ientry-accessor (entry instance readp new-value)
+  (declare (type invocation-entry entry)
+           (type (or null dotnet-object) instance))
+  (with-ientry (type name reader writer) entry
+    (cond ((and readp reader instance)
+           (funcall (the function reader) instance))
+          ((and readp reader)
+           (funcall (the function reader)))
+          ((and writer instance)
+           (funcall (the function writer) instance new-value))
+          (writer (funcall (the function writer) new-value))
+          (t (error 'accessor-resolution-error :type type
+                                               :static-p (not instance)
+                                               :member name
+                                               :member-kind (ientry-kind entry)
+                                               :kind (if readp :reader :writer))))))
 
-(defun %init-members (entry)
-  (with-type-entry ((fields-hash fields)
-                    (props-hash properties)
-                    (methods-hash methods)
-                    (entry-indexer indexer)
-                    (enum-values-hash enum-values)
-                    enum-p
-                    members-initialized-p
-                    type)
-                   entry
-    (handler-bind ((dotnet-error #'%ref-param-handler))
-      (let ((fields (reflection-invoke type "GetFields"))
-            (properties (reflection-invoke type "GetProperties"))
-            (methods (reflection-invoke type "GetMethods"))
-            indexer)
-        (when (> (%array-length methods) 0)
-          (setf methods-hash (make-hash-table :test #'equal))
-          (do-bike-vector (info methods)
-            (restart-case
-                (%add-method-entry info methods-hash)
-              (skip () ()))))
-        (when (> (%array-length fields) 0)
-          (setf fields-hash (make-hash-table :test #'equal))
-          (do-bike-vector (info fields)
-            (restart-case
-                (let* ((entry (%make-field-entry info))
-                       (name (%field-entry-name entry)))
-                  (setf (gethash name fields-hash) entry))
-              (skip () ()))))
-        (when (> (%array-length properties) 0)
-          (setf props-hash (make-hash-table :test #'equal))
-          (do-bike-vector (info properties)
-            (if (%is-indexer info)
-              (setf indexer info)
-              (restart-case
-                  (let* ((entry (%make-property-entry info))
-                         (name (%property-entry-name entry)))
-                    (setf (gethash name props-hash) entry))
-                (skip () ())))))
-        (when indexer
-          (restart-case
-              (setf (%type-entry-indexer entry)
-                    (%make-indexer-entry indexer))
-            (skip () ())))
-        (setf members-initialized-p t))
-      (when enum-p
-        (setf enum-values-hash (make-hash-table :test #'equal))
-        (let ((integral-type (reflection-invoke type 'GetEnumUnderlyingType))
-              (enum-values (reflection-invoke type 'GetEnumValues)))
-          (do-bike-vector (val enum-values)
-            (setf (gethash (%mknetsym (reflection-invoke type 'GetEnumName val))
-                           enum-values-hash)
-                  (%convert-to val integral-type t))))))
-    (values)))
+(declaim (inline %ensure-ientry-accessor))
+(defun %ensure-ientry-accessor (type info member-type name kind instance)
+  (declare (type dotnet-type type)
+           (type dotnet-name name)
+           (type (member :field :property) kind)
+           (type (or null dotnet-object) instance))
+  (multiple-value-bind (reader-delegate reader-ptr
+                        writer-delegate writer-ptr)
+      (%get-accessor-trampolines info kind)
+    (let* ((member-type-full-name (type-full-name member-type))
+           (primitive-type (%get-primitive-type member-type-full-name))
+           (lisp-type (%get-lisp-primitive-type member-type-full-name))
+           (reader (when reader-delegate
+                     (compile-reader-trampoline reader-ptr
+                                                (not instance)
+                                                primitive-type
+                                                lisp-type)))
+           (writer (when writer-delegate
+                     (compile-writer-trampoline writer-ptr
+                                                (not instance)
+                                                primitive-type
+                                                lisp-type))))
+      (add-ientry type name kind
+                  :reader reader
+                  :reader-delegate reader-delegate
+                  :writer writer
+                  :writer-delegate writer-delegate))))
 
-(defun %clear-members-cache (type-entry)
-  (declare (type type-entry type-entry))
-  (with-type-entry (methods properties fields indexer
-                    members-initialized-p)
-                   type-entry
-    (setf methods nil
-          properties nil
-          fields nil
-          indexer nil
-          members-initialized-p nil))
-  (values))
+(defun %access-field (type name instance readp new-value)
+  (declare (type dotnet-type type)
+           (type dotnet-name name)
+           (type (or null dotnet-object) instance))
+  (let ((entry (get-ientry type name :field)))
+    (unless entry
+      (let ((info (type-get-field type name (enum 'System.Reflection.BindingFlags
+                                                  'IgnoreCase
+                                                  'Public
+                                                  (if instance 'Instance 'Static)))))
+        (unless info
+          (error 'field-resolution-error :type type
+                                         :member name
+                                         :static-p (not instance)))
+        (setf entry (%ensure-ientry-accessor
+                     type info (field-type info) name :field instance))))
+    (%call-ientry-accessor entry instance readp new-value)))
 
-(defun clear-members-cache (type &optional assembly)
-  (declare (type dotnet-type-designator type))
-  "Clears member cache for a specified TYPE"
-  (with-type-table-lock (:read)
-    (let ((entry (ignore-errors (%resolve-type-entry type assembly))))
-      (when entry
-        (with-type-table-lock (:write)
-          (%clear-members-cache entry))))))
+(defun %access-property (type name instance readp new-value)
+  (declare (type dotnet-type type)
+           (type dotnet-name name)
+           (type (or null dotnet-object) instance))
+  (let ((entry (get-ientry type name :property)))
+    (unless entry
+      (let ((info (type-get-property type name
+                                     (enum 'System.Reflection.BindingFlags
+                                           'IgnoreCase
+                                           'Public
+                                           (if instance 'Instance 'Static))
+                                     nil
+                                     nil
+                                     (empty-types)
+                                     nil)))
+        (unless info
+          (error 'property-resolution-error :type type
+                                            :member name
+                                            :static-p (not instance)))
+        (setf entry (%ensure-ientry-accessor
+                     type info (property-type info) name :property instance))))
+    (%call-ientry-accessor entry instance readp new-value)))
 
-(defun %ensure-members-initialized (entry)
-  (declare (type type-entry entry))
-  (with-type-entry (members-initialized-p type) entry
-    (unless members-initialized-p
-      (with-type-table-lock (:write)
-        (if (or (generic-type-definition-p type)
-                (pointer-type-p type)
-                (ref-type-p type))
-          (setf members-initialized-p t)
-          (%init-members entry))))
-    (values)))
+(defun %compile-method (info fptr &optional name doc decls)
+  (declare (type dotnet-object info))
+  (let* ((void-type (%get-type "System.Void" t nil))
+         (return-type (method-return-type info))
+         (voidp (bike-equals void-type return-type))
+         (staticp (method-static-p info))
+         (params (%method-parameters info))
+         (iter (%make-param-array-iterator params)))
+    (compile-method-trampoline fptr staticp voidp iter name doc decls)))
 
-(defun ensure-members-initialized (type)
-  (declare (type dotnet-type-designator type))
-  "Ensures that compiled trampolines are ready on a TYPE"
-  (with-type-table-lock (:read)
-    (%ensure-members-initialized
-     (%resolve-type-entry type))))
+(defun %compile-constructor (info fptr &optional name doc decls)
+  (declare (type dotnet-object info))
+  (let* ((params (%method-parameters info))
+         (iter (%make-param-array-iterator params)))
+    (compile-method-trampoline fptr t nil iter name doc decls)))
 
-(defmacro with-initialized-type-entry ((entry-var object-or-type &rest slots) &body body)
-  (with-gensyms (target)
-    `(with-type-table-lock (:read)
-       (let* ((,target ,object-or-type)
-              (,entry-var (if (dotnet-object-p ,target)
-                            (%ensure-type-entry (get-type ,target))
-                            (%resolve-type-entry ,target))))
-         (declare (type type-entry ,entry-var))
-         (%ensure-members-initialized ,entry-var)
-         (with-type-entry ,slots ,entry-var ,@body)))))
+(define-constant +empty-dotnet-name+ (%mknetsym "") :test #'equal)
 
-(defun resolve-field (target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
-           (type string-designator name))
-  "Resolves a field named NAME for a TARGET which can either be
- a .Net object or a type designator. Static field is resolved in
- latter case."
-  (with-initialized-type-entry (entry target type fields)
-    (let* ((name (%mknetsym name))
-           (field (and fields (gethash name fields)))
-           (instancep (dotnet-object-p target)))
-      (when (or (null field)
-                (and instancep (%field-entry-staticp field)))
-        (error 'field-resolution-error :type type
-                                       :static-p (not instancep)
-                                       :member name))
-      field)))
+(defun %access-indexer (instance readp new-value &rest args)
+  (declare (type dotnet-object instance)
+           (dynamic-extent args))
+  (let* ((arg-type-count (length args))
+         (type (%bike-type-of instance))
+         (arg-types (mapcar #'bike-type-of args)))
+    (let ((entry (get-ientry type +empty-dotnet-name+
+                             :indexer :arg-type-count arg-type-count
+                             :arg-types arg-types)))
+      (unless entry
+        (let* ((indexers (list-to-bike-vector
+                          (type-indexers type)
+                          :element-type 'System.Reflection.PropertyInfo))
+               (info (select-property (default-binder)
+                                      (enum 'System.Reflection.BindingFlags
+                                            'Public 'Instance 'IgnoreCase)
+                                      indexers
+                                      nil
+                                      arg-types
+                                      nil)))
+          (unless info
+            (error 'indexer-resolution-error :type type
+                                             :member "this[*]"))
+          (multiple-value-bind (reader-delegate
+                                reader-ptr
+                                writer-delegate
+                                writer-ptr)
+              (%get-accessor-trampolines info :indexer)
+            (let (reader writer)
+              (when reader-delegate
+                (setf reader (%compile-method (property-get-method info) reader-ptr)))
+              (when writer-delegate
+                (setf writer (%compile-method (property-set-method info) writer-ptr)))
+              (setf entry (add-ientry type +empty-dotnet-name+
+                                      :indexer
+                                      :arg-types arg-types
+                                      :arg-type-count arg-type-count
+                                      :reader reader
+                                      :reader-delegate reader-delegate
+                                      :writer writer
+                                      :writer-delegate writer-delegate))))))
+      (with-ientry (type reader writer) entry
+        (cond ((and readp reader instance)
+               (apply (the function reader) instance args))
+              ((and readp reader)
+               (apply (the function reader) args))
+              ((and writer instance)
+               (setf (cdr (last args)) (cons new-value nil))
+               (apply (the function writer) instance args))
+              (writer
+               (setf (cdr (last args)) (cons new-value nil))
+               (apply (the function writer) args))
+              (t (error 'accessor-resolution-error
+                        :type type
+                        :static-p (not instance)
+                        :member "this[*]"
+                        :member-kind :indexer
+                        :kind (if readp :reader :writer))))))))
 
-(defun resolve-property (target name)
-  "Resolves a property named NAME for a TARGET which can either be
- a .Net object or a type designator. Static field is resolved in
- latter case."
-  (declare (type (or dotnet-object dotnet-type-designator) target)
-           (type string-designator name))
-  (with-initialized-type-entry (entry target type properties)
-    (let* ((name (%mknetsym name))
-           (property (and properties (gethash name properties)))
-           (instancep (dotnet-object-p target)))
-      (when (or (null property)
-                (and instancep (%property-entry-staticp property)))
-        (error 'property-resolution-error :type type
-                                          :static-p (not instancep)
-                                          :member name))
-      property)))
+(defun %invoke-method (type name instance type-args &rest args)
+  (declare (type dotnet-type type)
+           (type dotnet-name name)
+           (type (or null dotnet-object) instance)
+           (type list type-args args))
+  (let* ((arg-type-count (length args))
+         (type-arg-count (length type-args))
+         (arg-types (mapcar #'bike-type-of args))
+         (entry (get-ientry type name :method
+                            :type-arg-count type-arg-count
+                            :type-args type-args
+                            :arg-type-count arg-type-count
+                            :arg-types arg-types)))
+    (unless entry
+      (let* ((applicable* (type-get-members type name
+                                            (enum 'System.Reflection.MemberTypes 'Method)
+                                            (enum 'System.Reflection.BindingFlags
+                                                  'Public
+                                                  'IgnoreCase
+                                                  (if instance 'Instance 'Static)
+                                                  'InvokeMethod)))
+             (applicable
+               (if type-args
+                 (loop :for i :below (%array-length applicable*)
+                       :for method = (%net-vref applicable* i)
+                       :when (and (generic-method-definition-p method)
+                                  (= type-arg-count
+                                     (%array-length
+                                      (method-generic-arguments method))))
+                         :collect (apply #'make-generic-method method type-args) :into candidates
+                       :finally
+                          (return (list-to-bike-vector
+                                   candidates
+                                   :element-type 'System.Reflection.MethodBase)))
+                 applicable*))
+             (args* (list-to-bike-vector args))
+             (info (unless (zerop (%array-length applicable))
+                     (bind-to-method (default-binder)
+                                     (enum 'System.Reflection.BindingFlags
+                                           'Public
+                                           'InvokeMethod
+                                           'IgnoreCase
+                                           (if instance 'Instance 'Static))
+                                     applicable
+                                     args*
+                                     nil
+                                     nil
+                                     nil))))
+        (unless info
+          (error 'method-resolution-error :type type
+                                          :static-p (not instance)
+                                          :member name
+                                          :args args))
+        (multiple-value-bind (delegate fptr)
+            (%get-delegate-trampoline info '())
+          (let ((callable (%compile-method info fptr)))
+            (setf entry (add-ientry type name :method
+                                    :type-arg-count type-arg-count
+                                    :type-args type-args
+                                    :arg-type-count arg-type-count
+                                    :arg-types arg-types
+                                    :reader callable
+                                    :reader-delegate delegate))))))
+    (with-ientry (reader) entry
+      (if instance
+        (apply (the function reader) (cons instance args))
+        (apply (the function reader) args)))))
 
-(defun resolve-indexer (target)
-  "Resolves indexer on a TARGET"
-  (declare (type dotnet-object target))
-  (with-initialized-type-entry (entry target type indexer)
-    (unless indexer
-      (error 'indexer-resolution-error
-             :type type
-             :static-p nil))
-    indexer))
+(defun %new (type &rest args)
+  (declare (type dotnet-type type)
+           (type list args))
+  (let* ((arg-type-count (length args))
+         (arg-types (mapcar #'bike-type-of args))
+         (entry (get-ientry type +empty-dotnet-name+ :constructor
+                            :arg-type-count arg-type-count
+                            :arg-types arg-types)))
+    (unless entry
+      (let* ((applicable (list-to-bike-vector
+                          (bike-vector-to-list
+                           (type-constructors type))
+                          :element-type 'System.Reflection.MethodBase))
+             (args* (list-to-bike-vector args))
+             (info (unless (zerop (%array-length applicable))
+                     (bind-to-method (default-binder)
+                                     (enum 'System.Reflection.BindingFlags
+                                           'Public
+                                           'CreateInstance
+                                           'IgnoreCase
+                                           'Instance)
+                                     applicable
+                                     args*
+                                     nil
+                                     nil
+                                     nil))))
+        (unless info
+          (error 'method-resolution-error :type type
+                                          :member "new()"
+                                          :args args))
+        (multiple-value-bind (delegate fptr)
+            (%get-delegate-trampoline info '())
+          (let ((callable (%compile-constructor info fptr)))
+            (setf entry (add-ientry type +empty-dotnet-name+
+                                    :constructor
+                                    :arg-type-count arg-type-count
+                                    :arg-types arg-types
+                                    :reader callable
+                                    :reader-delegate delegate))))))
+    (with-ientry (reader) entry
+      (apply (the function reader) args))))
 
 ;;; vim: ft=lisp et

@@ -134,16 +134,14 @@ Testers are welcome.
 
 * Fancy reader syntax like the one RDNZL had
 
-* Implement method lookup based on existing type member cache
-
 * Implement some cache for parsed type definitions
 
-* Refactor trampoline compiler code
-
-* Implement direct function definitions akin to CFFI's ```defcfun```
+* Expose DEFKNOW-alike API to the user
 
 * Investigate CoreCLR interop on Linux. Fix SBCL crashes on Windows with NullReferenceException.
 
-* Merge host structure definition and initialization using a macro
+* Optimize invocation cache (maybe write some hash functions instead of using ```sxhash``` etc)
+
+* Write compiler macros for API and type resolution
 
 * etc.

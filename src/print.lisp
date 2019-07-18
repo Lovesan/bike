@@ -24,12 +24,22 @@
 
 (in-package #:bike)
 
-;;; Mini-CLOS would be here
-;;; We need to implement a resolution of the concrete method entry using
-;;;   the supplied args or arg types
-;;; The problem is that such 'multiple-dispatch'
-;;;   implementation would be a cross-boundary thing.
-;;; We need to make a dispatch of .Net methods on Lisp objects
+(defmethod print-object ((dotnet-error dotnet-error) stream)
+  (let* ((object (dotnet-error-object dotnet-error))
+         (type (%to-string (%bike-type-of object)))
+         (message (remove #\Return (exception-message object)))
+         (trace (remove #\Return (exception-stack-trace object))))
+    (format stream ".Net exception ~a~%~a~%~a" type message trace))
+  dotnet-error)
 
+(defmethod print-object ((object dotnet-object) stream)
+  (print-unreadable-object (object stream)
+    (let ((type (%to-string (%bike-type-of object)))
+          (str (%to-string object))
+          (gc-handle (pointer-address (%dotnet-object-handle object))))
+      (if (string= str type)
+        (format stream "~a {~8,'0X}" type gc-handle)
+        (format stream "~a ~a {~8,'0X}" type str gc-handle))))
+  object)
 
 ;;; vim: ft=lisp et

@@ -24,226 +24,202 @@
 
 (in-package #:bike)
 
-(defstruct (coreclr-host
-            (:constructor %coreclr-host)
-            (:conc-name %coreclr-host-)
-            (:predicate coreclr-host-p))
-  (handle (null-pointer) :type foreign-pointer)
-  (domain-id 0 :type (unsigned-byte 32))
-  (domain-name "" :type string)
-  (free-handle (null-pointer) :type foreign-pointer)
-  (get-type-by-name (null-pointer) :type foreign-pointer)
-  (get-generic-type-by-name (null-pointer) :type foreign-pointer)
-  (make-generic-type (null-pointer) :type foreign-pointer)
-  (make-array-type (null-pointer) :type foreign-pointer)
-  (is-delegate-type (null-pointer) :type foreign-pointer)
-  (invoke (null-pointer) :type foreign-pointer)
-  (invoke-constructor (null-pointer) :type foreign-pointer)
-  (invoke-delegate (null-pointer) :type foreign-pointer)
-  (get-field (null-pointer) :type foreign-pointer)
-  (set-field (null-pointer) :type foreign-pointer)
-  (get-property (null-pointer) :type foreign-pointer)
-  (set-property (null-pointer) :type foreign-pointer)
-  (get-index (null-pointer) :type foreign-pointer)
-  (set-index (null-pointer) :type foreign-pointer)
-  (box-boolean (null-pointer) :type foreign-pointer)
-  (box-char (null-pointer) :type foreign-pointer)
-  (box-uint8 (null-pointer) :type foreign-pointer)
-  (box-int8 (null-pointer) :type foreign-pointer)
-  (box-int16 (null-pointer) :type foreign-pointer)
-  (box-uint16 (null-pointer) :type foreign-pointer)
-  (box-int32 (null-pointer) :type foreign-pointer)
-  (box-uint32 (null-pointer) :type foreign-pointer)
-  (box-int64 (null-pointer) :type foreign-pointer)
-  (box-uint64 (null-pointer) :type foreign-pointer)
-  (box-intptr (null-pointer) :type foreign-pointer)
-  (box-single (null-pointer) :type foreign-pointer)
-  (box-double (null-pointer) :type foreign-pointer)
-  (box-string (null-pointer) :type foreign-pointer)
-  (box-lisp-object (null-pointer) :type foreign-pointer)
-  (unbox-boolean (null-pointer) :type foreign-pointer)
-  (unbox-char (null-pointer) :type foreign-pointer)
-  (unbox-uint8 (null-pointer) :type foreign-pointer)
-  (unbox-int8 (null-pointer) :type foreign-pointer)
-  (unbox-int16 (null-pointer) :type foreign-pointer)
-  (unbox-uint16 (null-pointer) :type foreign-pointer)
-  (unbox-int32 (null-pointer) :type foreign-pointer)
-  (unbox-uint32 (null-pointer) :type foreign-pointer)
-  (unbox-int64 (null-pointer) :type foreign-pointer)
-  (unbox-uint64 (null-pointer) :type foreign-pointer)
-  (unbox-intptr (null-pointer) :type foreign-pointer)
-  (unbox-single (null-pointer) :type foreign-pointer)
-  (unbox-double (null-pointer) :type foreign-pointer)
-  (unbox-string (null-pointer) :type foreign-pointer)
-  (unbox-lisp-object (null-pointer) :type foreign-pointer)
-  (get-string-length (null-pointer) :type foreign-pointer)
-  (get-delegate-for-lisp-function (null-pointer) :type foreign-pointer)
-  (install-callbacks (null-pointer) :type foreign-pointer)
-  (is-lisp-object (null-pointer) :type foreign-pointer)
-  (is-type (null-pointer) :type foreign-pointer)
-  (vector-get (null-pointer) :type foreign-pointer)
-  (vector-set (null-pointer) :type foreign-pointer)
-  (array-length (null-pointer) :type foreign-pointer)
-  (convert-to (null-pointer) :type foreign-pointer)
-  (get-delegate-trampoline (null-pointer) :type foreign-pointer)
-  (get-accessor-trampolines (null-pointer) :type foreign-pointer)
-  (get-full-type-code (null-pointer) :type foreign-pointer)
-  (get-type-of (null-pointer) :type foreign-pointer)
-  (get-type-full-name (null-pointer) :type foreign-pointer)
-  (get-type-assembly-qualified-name (null-pointer) :type foreign-pointer)
-  (is-generic-type (null-pointer) :type foreign-pointer)
-  (is-generic-type-definition (null-pointer) :type foreign-pointer)
-  (get-generic-type-definition (null-pointer) :type foreign-pointer)
-  (get-generic-type-arguments (null-pointer) :type foreign-pointer)
-  (is-compiler-generated-member (null-pointer) :type foreign-pointer)
-  (is-transient-type (null-pointer) :type foreign-pointer)
-  (enum-to-object (null-pointer) :type foreign-pointer)
-  (object-equals (null-pointer) :type foreign-pointer)
-  (load-assembly (null-pointer) :type foreign-pointer)
-  (is-pointer-type (null-pointer) :type foreign-pointer)
-  (is-by-ref-type (null-pointer) :type foreign-pointer)
-  (is-array-type (null-pointer) :type foreign-pointer)
-  (make-pointer-type (null-pointer) :type foreign-pointer)
-  (make-by-ref-type (null-pointer) :type foreign-pointer)
-  (get-element-type (null-pointer) :type foreign-pointer)
-  (get-array-type-rank (null-pointer) :type foreign-pointer)
-  (is-enum-type (null-pointer) :type foreign-pointer))
+(defun %get-delegate (host-handle domain-id name)
+  (with-foreign-object (pp :pointer)
+    (let ((rv (coreclr-create-delegate host-handle
+                                       domain-id
+                                       "BikeInterop"
+                                       "BikeInterop.Externals"
+                                       name
+                                       pp)))
+      (if (zerop rv)
+        (mem-ref pp :pointer)
+        (error "Unable to get interop delegate '~a'" name)))))
 
-#+sbcl
-(sb-ext:defglobal *coreclr-host* nil)
-#-sbcl
-(defvar *coreclr-host* nil)
+(defmacro define-coreclr-host
+    (name (handle-slot domain-id-slot domain-name-slot vtable-slot)
+     &body delegates)
+  (let* ((var-name (symbolicate '+ name '+))
+         (index-var-name (symbolicate '+ name '- 'indices '+))
+         (predicate (symbolicate name '- 'p))
+         (conc-name (symbolicate '% name '-))
+         (constructor (symbolicate '% name))
+         (delegate-count (length delegates))
+         (vtable-accessor (symbolicate conc-name vtable-slot)))
+    `(progn (#+sbcl sb-ext:defglobal #-sbcl defvar ,var-name nil)
+            (defstruct (,name (:constructor ,constructor (,handle-slot
+                                                          ,domain-id-slot
+                                                          ,domain-name-slot))
+                              (:copier nil)
+                              (:predicate ,predicate)
+                              (:conc-name ,conc-name))
+              "Represents initialized CoreCLR host"
+              (,handle-slot (required-slot) :type foreign-pointer :read-only t)
+              (,domain-id-slot (required-slot) :type (unsigned-byte 32)
+                                               :read-only t)
+              (,domain-name-slot (required-slot) :type string
+                                                 :read-only t)
+              (,vtable-slot
+               (foreign-alloc :pointer :count ,delegate-count)
+               :type foreign-pointer
+               :read-only t))
+            (declaim (type (or null ,name) ,var-name))
+            (eval-when (:compile-toplevel :load-toplevel :execute)
+              (#+sbcl sb-ext:defglobal #-sbcl defvar ,index-var-name (make-hash-table :test #'eq))
+              (clrhash ,index-var-name)
+              ,@(loop :for i :from 0
+                      :for form :in delegates
+                      :collect `(setf (gethash ',(car form) ,index-var-name) ,i)))
+            (defun ,name (,handle-slot ,domain-id-slot ,domain-name-slot)
+              (declare (type foreign-pointer ,handle-slot)
+                       (type (unsigned-byte 32) ,domain-id-slot)
+                       (type string ,domain-name-slot))
+              "Initializes CoreCLR host"
+              (let* ((,name (,constructor ,handle-slot ,domain-id-slot ,domain-name-slot))
+                     (,vtable-slot (,vtable-accessor ,name)))
+                ,@(loop :for i :from 0
+                        :for form :in delegates
+                        :collect
+                        (destructuring-bind
+                            (lisp-name foreign-name) form
+                          (declare (ignore lisp-name))
+                          `(setf (mem-aref ,vtable-slot :pointer ,i)
+                                 (%get-delegate ,handle-slot
+                                                ,domain-id-slot
+                                                ,foreign-name))))
+                (setf ,var-name ,name)
+                (values)))
+            (defmacro hostcall (name &rest args-and-types)
+              (let ((index (gethash name ,index-var-name)))
+                (unless index (error "Undefined host call: ~s" name))
+                `(foreign-funcall-pointer
+                  (mem-aref (,',vtable-accessor (the ,',name ,',var-name)) :pointer ,index)
+                  (:convention :stdcall)
+                  ,@args-and-types))))))
 
-(declaim (type (or coreclr-host null) *coreclr-host*))
+(define-coreclr-host coreclr-host (handle domain-id domain-name vtable)
+  (free-handle "FreeHandle")
+  (get-type-of "GetTypeOf")
+  (get-type-by-name "GetTypeByName")
+  (get-type-full-name "GetTypeFullName")
+  (get-full-type-code "GetFullTypeCode")
+  (box-boolean "BoxBoolean")
+  (box-char "BoxChar")
+  (box-uint8 "BoxUInt8")
+  (box-int8 "BoxInt8")
+  (box-uint16 "BoxUInt16")
+  (box-int16 "BoxInt16")
+  (box-uint32 "BoxUInt32")
+  (box-int32 "BoxInt32")
+  (box-uint64 "BoxUInt64")
+  (box-int64 "BoxInt64")
+  (box-intptr "BoxIntPtr")
+  (box-single "BoxSingle")
+  (box-double "BoxDouble")
+  (box-string "BoxString")
+  (unbox-boolean "UnboxBoolean")
+  (unbox-char "UnboxChar")
+  (unbox-uint8 "UnboxUInt8")
+  (unbox-int8 "UnboxInt8")
+  (unbox-uint16 "UnboxUInt16")
+  (unbox-int16 "UnboxInt16")
+  (unbox-uint32 "UnboxUInt32")
+  (unbox-int32 "UnboxInt32")
+  (unbox-uint64 "UnboxUInt64")
+  (unbox-int64 "UnboxInt64")
+  (unbox-intptr "UnboxIntPtr")
+  (unbox-single "UnboxSingle")
+  (unbox-double "UnboxDouble")
+  (unbox-string "UnboxString")
+  (get-string-length "GetStringLength")
+  (box-lisp-object "BoxLispObject")
+  (unbox-lisp-object "UnboxLispObject")
+  (is-lisp-object "IsLispObject")
+  (vector-get "VectorGet")
+  (vector-set "VectorSet")
+  (array-length "ArrayLength")
+  (get-field "GetField")
+  (set-field "SetField")
+  (get-property "GetProperty")
+  (set-property "SetProperty")
+  (get-index "GetIndex")
+  (set-index "SetIndex")
+  (invoke-constructor "InvokeConstructor")
+  (invoke "Invoke")
+  (get-delegate-for-lisp-function "GetDelegateForLispFunction")
+  (get-delegate-trampoline "GetDelegateTrampoline")
+  (get-accessor-trampolines "GetAccessorTrampolines")
+  (enum-to-object "EnumToObject")
+  (make-vector-of "MakeVectorOf")
+  (install-callbacks "InstallCallbacks")
+  (initialize-corefx-signals "InitializeCoreFxSignals"))
 
-(macrolet
-    ((frob (name type &optional (converter 'progn))
-       (let ((fname (intern (format nil "~a~a" '%box- name)))
-             (conc-name (intern (format nil "~a~a"
-                                        '%coreclr-host-box-
-                                        name)))
-             (val (gensym (string :value))))
-         `(progn (declaim (inline ,fname))
-                 (defun ,fname (,val)
-                   (foreign-funcall-pointer
-                    (,conc-name *coreclr-host*)
-                    (:convention :stdcall)
-                    ,type (,converter ,val)
-                    :pointer))))))
-  (frob boolean :bool)
-  (frob char :uint16 char-code)
-  (frob int8 :int8)
-  (frob uint8 :uint8)
-  (frob int16 :int16)
-  (frob uint16 :uint16)
-  (frob int32 :int32)
-  (frob uint32 :uint32)
-  (frob int64 :int64)
-  (frob uint64 :uint64)
-  (frob single :float)
-  (frob double :double)
-  (frob intptr :pointer)
-  (frob string lpwstr))
+(defun initialize-coreclr (&optional (domain-name "CommonLisp"))
+  (declare (type string domain-name))
+  (let* ((exe (get-exe-path))
+         (tpa (convert-to-foreign (%get-tpa-string) 'lpastr)))
+    (unwind-protect
+         (with-foreign-string (propkey "TRUSTED_PLATFORM_ASSEMBLIES"
+                                       :encoding :ascii)
+           (with-foreign-objects ((keys :pointer)
+                                  (vals :pointer)
+                                  (host :pointer)
+                                  (domain-id :uint))
+             (setf (mem-ref keys :pointer) propkey
+                   (mem-ref vals :pointer) tpa)
+             (locally (declare (optimize (speed 3) (safety 0) (space 0) (debug 0)))
+               (let ((rv (coreclr-initialize exe
+                                             domain-name
+                                             1
+                                             keys
+                                             vals
+                                             host
+                                             domain-id)))
+                 (declare (type (unsigned-byte 32) rv))
+                 #+(and sbcl coreclr-restore-signals)
+                 (foreign-funcall "restore_sbcl_signals")
+                 #+(and (not sbcl) coreclr-restore-signals)
+                 (restore-lisp-sigactions)
+                 (unless (zerop rv)
+                   (error "Unable to initialize coreclr: HRESULT ~8,'0X" rv))))
+             (coreclr-host (mem-ref host :pointer)
+                           (mem-ref domain-id :uint)
+                           domain-name)
+             (values)))
+      (free-converted-object tpa 'lpastr nil))))
 
-(macrolet ((frob (name type &optional (converter '(progn)))
-             (let ((fname (intern (format nil "~a~a" '%unbox- name)))
-                   (conc-name (intern (format nil "~a~a"
-                                              '%coreclr-host-unbox-
-                                              name)))
-                   (val (gensym (string :value))))
-               `(progn (declaim (inline ,fname))
-                       (defun ,fname (,val)
-                         (declare (type foreign-pointer ,val))
-                         (,@converter
-                          (foreign-funcall-pointer
-                           (the foreign-pointer (,conc-name (the coreclr-host *coreclr-host*)))
-                           (:convention :stdcall)
-                           :pointer (the foreign-pointer ,val)
-                           ,type)))))))
-  (frob boolean :bool (the boolean))
-  (frob char :uint16 (code-char))
-  (frob int8 :int8 (the (signed-byte 8)))
-  (frob uint8 :uint8 (the (unsigned-byte 8)))
-  (frob int16 :int16 (the (signed-byte 16)))
-  (frob uint16 :uint16 (the (unsigned-byte 16)))
-  (frob int32 :int32 (the (signed-byte 32)))
-  (frob uint32 :uint32 (the (unsigned-byte 32)))
-  (frob int64 :int64 (the (signed-byte 64)))
-  (frob uint64 :uint64 (the (unsigned-byte 64)))
-  (frob single :float (the single-float))
-  (frob double :double (the double-float))
-  (frob intptr :pointer (the foreign-pointer)))
+(uiop:register-image-restore-hook #'initialize-coreclr (not +coreclr-host+))
 
-(defmacro hostcall (name &rest args-and-types)
-  (let ((conc-name (intern (format nil "~a~a" '%coreclr-host- name) :bike)))
-    `(foreign-funcall-pointer
-      (,conc-name *coreclr-host*)
-      (:convention :stdcall)
-      ,@args-and-types)))
+#+coreclr-restore-signals
+(progn
 
-(declaim (inline %get-string-length))
-(defun %get-string-length (value)
-  (declare (type foreign-pointer value))
-  (hostcall get-string-length :pointer value :int))
+  (defun initialize-dotnet-sigactions ()
+    "Initializes CoreFX sigactions, namely for SIGCHLD, SIGCONT, SIGINT, SIGQUIT.
+ We utilize CoreFX handlers for some/all of this, but use lisp signal masks for others"
+    ;; first, force initialization of corefx signal handlers
+    (hostcall initialize-corefx-signals :void)
+    ;; save corefx signals
+    (dotimes (i +nsig+)
+      ;; Some of them would of course be ours lisp signals reestablished earlier
+      (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i)))
+    (setf +new-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (foreign-funcall "memcpy" :pointer +new-sigactions+
+                              :pointer +lisp-sigactions+
+                              size-t (* +nsig+ (foreign-type-size '(:struct sigaction))))
 
-(declaim (inline %unbox-string))
-(defun %unbox-string (value)
-  (declare (type foreign-pointer value))
-  (let* ((length (the fixnum (%get-string-length value)))
-         (size (* (foreign-type-size :short)
-                  length)))
-    (if (zerop size)
-      ""
-      (with-foreign-objects ((ptr :uint8 size))
-        (hostcall unbox-string
-                  :pointer value
-                  :pointer ptr
-                  :int size
-                  :void)
-        (values (foreign-string-to-lisp ptr :count size
-                                            :max-chars length
-                                            :encoding :utf-16/le))))))
+    ;; only use SIGCHLD for now, dotnet background thread perfectly handles it
+    (dolist (sig (list +sigchld+))
+      (let* ((addr (sigaction-address +new-sigactions+ sig))
+             (dotnet-addr (sigaction-address +dotnet-sigactions+ sig)))
+        (setf (foreign-slot-value addr '(:struct sigaction) 'handler)
+              (foreign-slot-value dotnet-addr '(:struct sigaction) 'handler))))
 
-(declaim (inline %free-handle))
-(defun %free-handle (handle)
-  (declare (type foreign-pointer handle))
-  (hostcall free-handle :pointer handle :void)
-  (values))
+    ;; init signals from new sigactions
+    (dotimes (i +nsig+)
+      (let ((addr (sigaction-address +new-sigactions+ i)))
+        (sigaction i addr (null-pointer)))))
 
-(defun %install-callbacks (free-handle-callback apply-callback)
-  (declare (type foreign-pointer free-handle-callback apply-callback))
-  (with-foreign-object (ex :pointer)
-    (hostcall install-callbacks
-              :pointer free-handle-callback
-              :pointer apply-callback
-              :pointer ex)
-    (mem-ref ex :pointer)))
-
-(declaim (inline %is-lisp-object))
-(defun %is-lisp-object (ptr)
-  (hostcall is-lisp-object :pointer ptr :bool))
-
-(declaim (inline %is-type))
-(defun %is-type (ptr)
-  (hostcall is-type :pointer ptr :bool))
-
-(declaim (inline %%box-lisp-object))
-(defun %%box-lisp-object (handle)
-  (hostcall box-lisp-object
-            :pointer (make-pointer handle)
-            :pointer))
-
-(declaim (inline %%unbox-lisp-object))
-(defun %%unbox-lisp-object (ptr)
-  (hostcall unbox-lisp-object
-            :pointer ptr
-            :pointer))
-
-(declaim (inline %get-full-type-code))
-(defun %get-full-type-code (ptr)
-  (declare (type foreign-pointer ptr))
-  (hostcall get-full-type-code
-            :pointer ptr
-            :int))
+  (uiop:register-image-restore-hook #'initialize-dotnet-sigactions
+                                    (null-pointer-p +new-sigactions+)))
 
 ;;; vim: ft=lisp et

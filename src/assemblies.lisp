@@ -30,14 +30,6 @@
 
 (declaim (type list *default-assembles*))
 
-(defun load-assembly-from (path)
-  (declare (type (or pathname string) path))
-  "Loads an assembly from a file designated by PATH"
-  (let* ((path (uiop:truename* path))
-         (assembly-type-name "System.Reflection.Assembly")
-         (assembly-type (resolve-type assembly-type-name)))
-    (%invoke assembly-type t () "LoadFrom" (uiop:native-namestring path))))
-
 (defun import-assembly (assembly-designator)
   (declare (type (or dotnet-object string-designator)
                  assembly-designator))
@@ -45,25 +37,18 @@
   (let* ((assembly (if (dotnet-object-p assembly-designator)
                      assembly-designator
                      (load-assembly assembly-designator)))
-         (types (%invoke assembly nil () "GetExportedTypes")))
+         (types (assembly-exported-types assembly)))
     (with-type-table (data ns lock)
       (with-write-lock (lock)
-        (do-bike-vector (type types)
+        (dolist (type types)
           (unless (compiler-generated-member-p type)
             (%ensure-type-entry type))))))
   (values))
 
-(defun get-loaded-assemblies ()
-  "Returns a list of currently loaded assemblies"
-  (let* ((loader-ctx-type-name "System.Runtime.Loader.AssemblyLoadContext")
-         (loader-ctx-type (resolve-type loader-ctx-type-name))
-         (assemblies (%invoke loader-ctx-type t () "GetLoadedAssemblies")))
-    (bike-vector-to-list assemblies)))
-
 (defun import-loaded-assemblies ()
   "Imports all currently loaded assemblies into type cache"
   (dolist (assembly (get-loaded-assemblies))
-    (unless (%get-property assembly nil "IsDynamic")
+    (unless (dynamic-assembly-p assembly)
       (import-assembly assembly)))
   (values))
 
@@ -117,5 +102,7 @@
 (defun clear-type-cache ()
   "Clears type and namespace cache and restores it to current defaults."
   (%init-type-table '() '() '()))
+
+(uiop:register-image-restore-hook #'%reload-type-table (not *type-table*))
 
 ;;; vim: ft=lisp et

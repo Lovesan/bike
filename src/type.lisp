@@ -59,23 +59,27 @@
 
 (defstruct (type-entry (:constructor
                            %make-type-entry
-                           (&key type
-                                 qualified-name
-                                 (type-args '())
-                                 (rank 0)
-                                 element-entry
-                                 (delegate-p (%is-delegate-type type))
-                            &aux (generic-p (not (endp type-args)))
+                           (type &key qualified-name
+                                      (type-args '())
+                                      (rank 0)
+                                      element-entry
+                                 &aux
+                                 (hash-code (%get-hash-code type))
+                                 (delegate-p (delegate-type-p type))
+                                 (generic-p (not (endp type-args)))
                                  (array-p (> rank 0))
                                  (pointer-p (pointer-type-p type))
                                  (ref-p (ref-type-p type))
                                  (enum-p (enum-type-p type))
+                                 (enum-values (and enum-p (get-enum-hash-table type)))
                                  (type-arg-count (length type-args))
                                  (has-members-p (not (or pointer-p ref-p)))))
                        (:predicate type-entry-p)
-                       (:conc-name %type-entry-))
+                       (:conc-name %type-entry-)
+                       (:copier nil))
   "Represents an entry in the type table"
   (type (required-slot) :type dotnet-type :read-only t)
+  (hash-code 0 :type (signed-byte 32) :read-only t)
   (qualified-name nil :type (or null string) :read-only t)
   (generic-p nil :type boolean :read-only t)
   (pointer-p nil :type boolean :read-only t)
@@ -87,17 +91,12 @@
   (element-entry nil :type (or null type-entry) :read-only t)
   (rank 0 :type (integer 0 32) :read-only t)
   (type-args '() :type list :read-only t)
-  (type-arg-count 0 :type non-negative-fixnum)
+  (type-arg-count 0 :type non-negative-fixnum :read-only t)
   (instances '() :type (or (cons type-entry list) null))
   (ref-entry nil :type (or null type-entry))
   (pointer-entry nil :type (or null type-entry))
-  (enum-values nil :type (or null hash-table))
-  (array-entries nil :type (or null (simple-array type-entry (#.+max-array-rank+))))
-  (fields nil :type (or null hash-table))
-  (properties nil :type (or null hash-table))
-  (methods nil :type (or null hash-table))
-  (indexer nil)
-  (members-initialized-p nil :type boolean))
+  (enum-values nil :type (or null hash-table) :read-only t)
+  (array-entries nil :type (or null (simple-array type-entry (#.+max-array-rank+)))))
 
 #+sbcl
 (sb-ext:defglobal *type-table* nil)
@@ -190,5 +189,13 @@
     (with-write-lock (lock)
       (clrhash aliases)))
   (values))
+
+(defmethod print-object ((object type-entry) stream)
+  (print-unreadable-object (object stream :type t)
+    (with-type-entry (type) object
+      (let ((gc-handle (pointer-address (%dotnet-type-handle type)))
+            (name (%to-string type)))
+        (format stream "~a {~8,'0X}" name gc-handle)))
+    object))
 
 ;;; vim: ft=lisp et

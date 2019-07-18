@@ -77,7 +77,7 @@
   ()
   (:report (lambda (c s)
              (format s "Invalid type name: ~s"
-                     (slot-value c '%datum)))))
+                     (invalid-type-name-datum c)))))
 
 (define-condition type-name-parser-error (invalid-type-name)
   ((%c :initarg :character :reader type-name-parser-error-character)
@@ -99,7 +99,7 @@
    (lambda (c s &aux (token (type-name-parser-error-token c))
                      (value (type-name-parser-error-value c))
                      (unnamed (member token '(:identifier :integer))))
-     (format s "~&Unexpected ~:[~(~a~)~;~s~] ~:[~;~:*~s ~]~% at position ~d in type name string ~s"
+     (format s "~&Unexpected ~:[~(~a~)~;~s~] ~:[~;~:*~s ~]~% at position ~d in type name ~s"
              (not unnamed)
              (if unnamed token value)
              (when unnamed value)
@@ -113,7 +113,7 @@
                           (value (type-name-parser-error-value c)))
      (format
       stream
-      "~&Generic type argument count mismatch for type ~a~a~% at position ~d in type name string ~s"
+      "~&Generic type argument count mismatch for ~a~a~% at position ~d in name ~s"
       token
       value
       (1+ (type-name-parser-error-position c))
@@ -138,7 +138,8 @@
 
 (define-condition member-resolution-error (bike-error)
   ((%type :initarg :type :reader member-resolution-error-type)
-   (%staticp :initarg :static-p :reader member-resolution-error-static-p)))
+   (%staticp :initarg :static-p :reader member-resolution-error-static-p))
+  (:default-initargs :static-p nil))
 
 (define-condition field-resolution-error (member-resolution-error)
   ((%field :initarg :field
@@ -146,7 +147,7 @@
            :reader field-resulution-error-field
            :reader member-resolution-error-member))
   (:report (lambda (c s)
-             (format s "Unable to resolve ~:[instance~;static~] field ~s in type ~s"
+             (format s "Unable to resolve ~:[~;static~] field ~s in type ~s"
                      (member-resolution-error-static-p c)
                      (member-resolution-error-member c)
                      (member-resolution-error-type c)))))
@@ -157,16 +158,13 @@
               :reader property-resulution-error-property
               :reader member-resolution-error-member))
   (:report (lambda (c s)
-             (format s "Unable to resolve ~:[instance~;static~] property ~s in type ~s"
+             (format s "Unable to resolve ~:[~;static~] property ~s in type ~s"
                      (member-resolution-error-static-p c)
                      (member-resolution-error-member c)
                      (member-resolution-error-type c)))))
 
-(define-condition indexer-resolution-error (member-resolution-error)
-  ()
-  (:report (lambda (c s)
-             (format s "Unable to resolve indexer in type ~s"
-                     (member-resolution-error-type c)))))
+(define-condition indexer-resolution-error (property-resolution-error)
+  ())
 
 (define-condition method-resolution-error (member-resolution-error)
   ((%method :initarg :method
@@ -177,7 +175,7 @@
           :reader method-resolution-error-args
           :reader member-resolution-error-args))
   (:report (lambda (c s)
-             (format s "Unable to resolve ~:[instance~;static~] method ~s ~s in type ~s"
+             (format s "Unable to resolve ~:[~;static~] method ~s ~s in type ~s"
                      (member-resolution-error-static-p c)
                      (member-resolution-error-member c)
                      (member-resolution-error-args c)
@@ -206,18 +204,5 @@
   ((%object :reader dotnet-error-object
             :initarg :object))
   (:documentation "Represents a .Net Exception"))
-
-(defmacro check-exception (form)
-  (with-gensyms (result exception handle)
-    `(multiple-value-bind (,result ,exception)
-         ,form
-       (when ,exception
-         (let ((,handle (%dotnet-exception-handle ,exception)))
-           (if (%is-lisp-object ,handle)
-             (error (%handle-table-get
-                     (pointer-address
-                      (%%unbox-lisp-object ,handle))))
-             (error 'dotnet-error :object ,exception))))
-       ,result)))
 
 ;;; vim: ft=lisp et
