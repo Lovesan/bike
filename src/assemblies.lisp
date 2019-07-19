@@ -33,7 +33,7 @@
 (defun import-assembly (assembly-designator)
   (declare (type (or dotnet-object string-designator)
                  assembly-designator))
-  "Loads an assembly designated by ASSEMBLY-STRING"
+  "Imports an assembly designated by ASSEMBLY-STRING"
   (let* ((assembly (if (dotnet-object-p assembly-designator)
                      assembly-designator
                      (load-assembly assembly-designator)))
@@ -42,8 +42,15 @@
       (with-write-lock (lock)
         (dolist (type types)
           (unless (compiler-generated-member-p type)
-            (%ensure-type-entry type))))))
-  (values))
+            (%ensure-type-entry type)))))
+    assembly))
+
+(defun import-assembly-from (path)
+  (declare (type (or pathname string) path))
+  "Imports an assembly from PATH"
+  (let* ((path (uiop:native-namestring (uiop:truename* path)))
+         (assembly (load-assembly-from path)))
+    (import-assembly assembly)))
 
 (defun import-loaded-assemblies ()
   "Imports all currently loaded assemblies into type cache"

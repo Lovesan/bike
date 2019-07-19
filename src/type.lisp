@@ -139,23 +139,43 @@
           (,lock)
           ,@body)))))
 
-(defun use-namespace (namespace)
+(declaim (inline %make-namespace-prefix))
+(defun %make-namespace-prefix (namespace)
   (declare (type string-designator namespace))
-  "Adds a NAMESPACE to the list of used namespaces."
-  (let ((namespace-prefix (uiop:strcat (%mknetsym namespace) ".")))
-    (with-type-table (namespaces lock)
-      (with-write-lock (lock)
-        (pushnew namespace-prefix namespaces :test #'equal))))
+  (string-upcase (concatenate 'string (string namespace) ".")))
+
+(defun %use-namespace (namespace)
+  (declare (type string-designator namespace))
+  (let ((prefix (%make-namespace-prefix namespace)))
+    (with-type-table (namespaces)
+      (pushnew prefix namespaces :test #'equal)
+      (values))))
+
+(defun use-namespace (namespaces)
+  (declare (type (or list string-designator) namespaces))
+  "Adds a namespace (or a list of namespaces) to the list of used namespaces."
+  (with-type-table-lock (:write)
+    (if (listp namespaces)
+      (dolist (ns namespaces)
+        (%use-namespace ns))
+      (%use-namespace namespaces)))
   (values))
 
-(defun unuse-namespace (namespace)
+(defun %unuse-namespace (namespace)
   (declare (type string-designator namespace))
-  "Removes a NAMESPACE from the list of used namespaces."
-  (let ((namespace-prefix (uiop:strcat (%mknetsym namespace) ".")))
-    (with-type-table (namespaces lock)
-      (with-write-lock (lock)
-        (removef namespaces namespace-prefix
-                 :test #'equal))))
+  (let ((prefix (%make-namespace-prefix namespace)))
+    (with-type-table (namespaces)
+      (removef namespaces prefix :test #'equal))
+    (values)))
+
+(defun unuse-namespace (namespaces)
+  (declare (type (or list string-designator) namespaces))
+  "Removes a namespace (or a list of namespaces) from the list of used namespaces."
+  (with-type-table-lock (:write)
+    (if (listp namespaces)
+      (dolist (ns namespaces)
+        (%unuse-namespace ns))
+      (%unuse-namespace namespaces)))
   (values))
 
 (defun unuse-all-namespaces ()

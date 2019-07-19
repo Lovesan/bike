@@ -1,3 +1,8 @@
+# 0.5.2 Make use of TargetInvocationException for callbacks
+  * Wrap .Net exceptions coming from callbacks into TargetInvocationException for not losing .Net stack traces
+  * Added ```import-assembly-from``` function for importing assemblies from files
+  * Allowed use and unuse a list of namespaces at a time
+
 # 0.5.1 APP_PATHS
   * Made use of APP_PATHS and APP_NI_PATHS during CoreCLR initialization
 

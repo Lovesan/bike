@@ -45,7 +45,7 @@ namespace BikeInterop
         /// <param name="readerPtr">Unmanaged pointer to reader delegate</param>
         /// <param name="writer">Writer delegate</param>
         /// <param name="writerPtr">Unmanaged pointer to writer delegate</param>
-        /// 
+        ///
         public static void CompileIndexer(
             PropertyInfo info,
             out Delegate reader,
@@ -158,15 +158,7 @@ namespace BikeInterop
                     Expression.Property(selfUnbox, info),
                     directlyConvertible ? (type.IsPointer ? val.ConvertToPointer(type) : val) : val.Unbox(type));
 
-            var innerBlock = Expression.Block(typeof(void), accessExpression);
-
-            var exVar = Expression.Variable(typeof(Exception), "ex");
-            var catchBody = Expression.Block(
-                typeof(void),
-                Expression.Assign(exception, exVar.ConvertExpression<object>()));
-            var catchBlock = Expression.Catch(exVar, catchBody);
-            var tryCatch = Expression.TryCatch(innerBlock, catchBlock);
-
+            var tryCatch = exception.WrapInTryCatch(accessExpression);
 
             // And try catch block
 #if ENABLE_TASK_HACK
@@ -253,7 +245,7 @@ namespace BikeInterop
                 typeCode,
                 ex
             }.RemoveNulls();
-            
+
 
             // Possible outer block variables
             var exception = GetVariable<object>(false, "exception");
@@ -276,7 +268,7 @@ namespace BikeInterop
                 }
             }
 
-            var selfUnbox = instance ? self.Unbox(info.DeclaringType) : null; 
+            var selfUnbox = instance ? self.Unbox(info.DeclaringType) : null;
             var accessExpression = getter
                 ? Expression.Assign(
                     invocationResult,
@@ -285,15 +277,7 @@ namespace BikeInterop
                     Expression.Field(selfUnbox, info),
                     directlyConvertible ? (type.IsPointer ? val.ConvertToPointer(type) : val) : val.Unbox(type));
 
-            var innerBlock = Expression.Block(typeof(void), accessExpression);
-
-            var exVar = Expression.Variable(typeof(Exception), "ex");
-            var catchBody = Expression.Block(
-                typeof(void),
-                Expression.Assign(exception, exVar.ConvertExpression<object>()));
-            var catchBlock = Expression.Catch(exVar, catchBody);
-            var tryCatch = Expression.TryCatch(innerBlock, catchBlock);
-
+            var tryCatch = exception.WrapInTryCatch(accessExpression);
 
             // And try catch block
 #if ENABLE_TASK_HACK
@@ -301,7 +285,7 @@ namespace BikeInterop
 #else
             outerExpressions.Add(tryCatch);
 #endif
-            
+
             outerExpressions.AddAssignBox(
                 ex,
                 exception.TypeIs<LispException>().Then(
@@ -488,14 +472,8 @@ namespace BikeInterop
                     callExpression.ConvertExpression<object>());
             }
             innerBlockExpressions.AddRange(assignmentsToOuterRef);
-            var innerBlock = Expression.Block(typeof(void), internalRefVariables, innerBlockExpressions);
 
-            var exVar = Expression.Variable(typeof(Exception), "ex");
-            var catchBody = Expression.Block(
-                typeof(void),
-                Expression.Assign(objectExceptionVar, exVar.ConvertExpression<object>()));
-            var catchBlock = Expression.Catch(exVar, catchBody);
-            var tryCatch = Expression.TryCatch(innerBlock, catchBlock);
+            var tryCatch = objectExceptionVar.WrapInTryCatch(internalRefVariables, innerBlockExpressions);
 
             // And try catch block
 #if ENABLE_TASK_HACK
@@ -724,14 +702,8 @@ namespace BikeInterop
                 innerBlockExpressions.Add(callExpression);
             }
             innerBlockExpressions.AddRange(assignmentsToOuterRef);
-            var innerBlock = Expression.Block(typeof(void), internalRefVariables, innerBlockExpressions);
 
-            var exVar = Expression.Variable(typeof(Exception), "ex");
-            var catchBody = Expression.Block(
-                typeof(void),
-                Expression.Assign(objectExceptionVar, exVar.ConvertExpression<object>()));
-            var catchBlock = Expression.Catch(exVar, catchBody);
-            var tryCatch = Expression.TryCatch(innerBlock, catchBlock);
+            var tryCatch = objectExceptionVar.WrapInTryCatch(internalRefVariables, innerBlockExpressions);
 
             // And try catch block
 #if ENABLE_TASK_HACK
@@ -779,6 +751,7 @@ namespace BikeInterop
             return compiled;
         }
 
+
         private static ParameterExpression GetVariable<T>(bool byRef, string name = null)
         {
             return GetVariable(typeof(T), byRef, name);
@@ -820,7 +793,7 @@ namespace BikeInterop
         }
 
         private static readonly Func<Type, bool> IsByRefLike;
-        
+
         static TrampolineCompiler()
         {
             var prop = typeof(Type).GetProperty(IsByRefLikeTypePropertyName, typeof(bool));

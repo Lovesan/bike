@@ -177,8 +177,8 @@ namespace BikeInterop
             var ex = exInfo == IntPtr.Zero
                 ? null
                 : isDotnetException
-                    ? (Exception) Externals.UnboxObject(exInfo)
-                    : new LispException(Create(exInfo));
+                    ? new TargetInvocationException((Exception) Externals.UnboxObject(exInfo))
+                    : (Exception)new LispException(Create(exInfo));
             object obj = null;
             if (rv != IntPtr.Zero)
             {

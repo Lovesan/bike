@@ -44,6 +44,7 @@
    #:load-assembly
    #:load-assembly-from
    #:import-assembly
+   #:import-assembly-from
    #:get-loaded-assemblies
    #:import-loaded-assemblies
    #:clear-type-cache

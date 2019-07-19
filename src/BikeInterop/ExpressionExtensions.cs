@@ -34,6 +34,36 @@ namespace BikeInterop
 {
     public static class ExpressionExtensions
     {
+        public static TryExpression WrapInTryCatch(
+            this ParameterExpression outVariable,
+            params Expression[] expressions)
+        {
+            return outVariable.WrapInTryCatch(Enumerable.Empty<ParameterExpression>(), expressions);
+        }
+
+        public static TryExpression WrapInTryCatch(
+            this ParameterExpression outVariable,
+            IEnumerable<ParameterExpression> blockVariables,
+            IEnumerable<Expression> expressions)
+        {
+            var innerBlock = Expression.Block(typeof(void), blockVariables, expressions);
+            var tiExVar = Expression.Variable(typeof(TargetInvocationException), "ex");
+            var innerExceptionProp = typeof(TargetInvocationException).GetProperty(nameof(TargetInvocationException.InnerException));
+            var exVar = Expression.Variable(typeof(Exception), "ex");
+            var catchBodyTargetInvocation = Expression.Block(
+                typeof(void),
+                Expression.Assign(
+                    outVariable,
+                    // ReSharper disable once AssignNullToNotNullAttribute
+                    Expression.Property(tiExVar, innerExceptionProp).ConvertExpression<object>()));
+            var catchBodyGeneric = Expression.Block(
+                typeof(void),
+                Expression.Assign(outVariable, exVar.ConvertExpression<object>()));
+            var targetInvocationCatchBlock = Expression.Catch(tiExVar, catchBodyTargetInvocation);
+            var genericCatchBlock = Expression.Catch(exVar, catchBodyGeneric);
+            return Expression.TryCatch(innerBlock, targetInvocationCatchBlock, genericCatchBlock);
+        }
+
         public static Expression WrapToTask(this Expression expression)
         {
             var lambda = Expression.Lambda(expression, true);

@@ -35,7 +35,7 @@
 (defmethod print-object ((object dotnet-object) stream)
   (print-unreadable-object (object stream)
     (let ((type (%to-string (%bike-type-of object)))
-          (str (%to-string object))
+          (str (remove #\Return (%to-string object)))
           (gc-handle (pointer-address (%dotnet-object-handle object))))
       (if (string= str type)
         (format stream "~a {~8,'0X}" type gc-handle)
