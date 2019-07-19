@@ -1,3 +1,6 @@
+# 0.5.1 APP_PATHS
+  * Made use of APP_PATHS and APP_NI_PATHS during CoreCLR initialization
+
 # 0.5.0 - Target invocation cache. Internal DEFKNOWN API.
   * Implemented target invocation cache akin to .Net DLR one. All non-reflection APIs use this
     * Compiled trampolines are cached(based on member declaring type and argument types) and reused later on

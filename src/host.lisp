@@ -157,20 +157,30 @@
 (defun initialize-coreclr (&optional (domain-name "CommonLisp"))
   (declare (type string domain-name))
   (let* ((exe (get-exe-path))
-         (tpa (convert-to-foreign (%get-tpa-string) 'lpastr)))
+         (tpa (convert-to-foreign (%get-tpa-string) 'lpastr))
+         (app-paths (convert-to-foreign (%get-app-paths) 'lpastr))
+         (app-ni-paths (convert-to-foreign (%get-app-paths) 'lpastr)))
     (unwind-protect
-         (with-foreign-string (propkey "TRUSTED_PLATFORM_ASSEMBLIES"
-                                       :encoding :ascii)
-           (with-foreign-objects ((keys :pointer)
-                                  (vals :pointer)
+         (with-foreign-strings ((tpa-key "TRUSTED_PLATFORM_ASSEMBLIES"
+                                         :encoding :ascii)
+                                (app-paths-key "APP_PATHS"
+                                               :encoding :ascii)
+                                (app-ni-paths-key "APP_NI_PATHS"
+                                                  :encoding :ascii))
+           (with-foreign-objects ((keys :pointer 3)
+                                  (vals :pointer 3)
                                   (host :pointer)
                                   (domain-id :uint))
-             (setf (mem-ref keys :pointer) propkey
-                   (mem-ref vals :pointer) tpa)
+             (setf (mem-aref keys :pointer 0) tpa-key
+                   (mem-aref keys :pointer 1) app-paths-key
+                   (mem-aref keys :pointer 2) app-ni-paths-key
+                   (mem-aref vals :pointer 0) tpa
+                   (mem-aref vals :pointer 1) app-paths
+                   (mem-aref vals :pointer 2) app-ni-paths)
              (locally (declare (optimize (speed 3) (safety 0) (space 0) (debug 0)))
                (let ((rv (coreclr-initialize exe
                                              domain-name
-                                             1
+                                             3
                                              keys
                                              vals
                                              host
@@ -186,7 +196,9 @@
                            (mem-ref domain-id :uint)
                            domain-name)
              (values)))
-      (free-converted-object tpa 'lpastr nil))))
+      (free-converted-object tpa 'lpastr nil)
+      (free-converted-object app-paths 'lpastr nil)
+      (free-converted-object app-ni-paths 'lpastr nil))))
 
 (uiop:register-image-restore-hook #'initialize-coreclr (not +coreclr-host+))
 

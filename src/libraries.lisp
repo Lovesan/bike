@@ -69,4 +69,13 @@
         :when (uiop:string-prefix-p "System." name)
           :collect name))
 
+(defun %get-app-paths ()
+  (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}")
+          (mapcar #'uiop:native-namestring
+                  (list (uiop:get-pathname-defaults)
+                        (uiop:lisp-implementation-directory)
+                        (uiop:pathname-directory-pathname (get-exe-path))
+                        (uiop:pathname-directory-pathname *interop-location*)
+                        (uiop:pathname-directory-pathname *coreclr-location*)))))
+
 ;;; vim: ft=lisp et
