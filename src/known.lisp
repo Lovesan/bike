@@ -54,6 +54,10 @@
 (defconstant +binding-flags-optional-param-binding+ 262144)
 (defconstant +binding-flags-ignore-return+ 16777216)
 (defconstant +binding-flags-do-not-wrap-exceptions+ 33554432)
+(defconstant +default-binding-flags+ (logior +binding-flags-public+
+                                             +binding-flags-static+
+                                             +binding-flags-instance+
+                                             +binding-flags-ignore-case+))
 
 
 (define-constant +primitive-types+ '(("System.Char" . dnchar)
@@ -97,6 +101,7 @@
   "Represents a known member descriptor"
   (type-name (required-slot) :type string :read-only t)
   (member-name (required-slot) :type string :read-only t)
+  (type-args '() :type list :read-only t)
   (kind (required-slot) :type known-kind :read-only t)
   (arg-types '() :type list :read-only t)
   (delegates '() :type list :read-only t)
@@ -151,16 +156,17 @@
                       (%params-array-p param))
             (incf i)))))))
 
-(defun %register-known (name type-name member-name kind delegates &optional arg-types)
+(defun %register-known (name type-name member-name type-args kind delegates &optional arg-types)
   (declare (type symbol name)
            (type string type-name member-name)
            (type known-kind kind)
            (type (or list dotnet-object) delegates)
-           (type list arg-types))
+           (type list arg-types type-args))
   (setf delegates (ensure-list delegates))
   (setf (gethash name +knowns+)
         (%make-known-entry :type-name type-name
                            :member-name member-name
+                           :type-args type-args
                            :kind kind
                            :arg-types arg-types
                            :delegates delegates))
@@ -192,7 +198,7 @@
         (when writer
           (compile-writer-trampoline
            writer-ptr staticp primitive-type lisp-type `(setf ,name) doc decls))
-        (%register-known name type-name member-name :field (cons reader writer))))))
+        (%register-known name type-name member-name '() :field (cons reader writer))))))
 
 (defun %ensure-known-property (name type type-name member-name doc decls)
   (declare (type symbol name)
@@ -221,7 +227,7 @@
         (when writer
           (compile-writer-trampoline
            writer-ptr staticp primitive-type lisp-type `(setf ,name) doc decls))
-        (%register-known name type-name member-name :property (cons reader writer))))))
+        (%register-known name type-name member-name '() :property (cons reader writer))))))
 
 (defun %compile-known-method (info name doc decls)
   (declare (type dotnet-object info)
@@ -238,32 +244,62 @@
       (compile-method-trampoline fptr staticp voidp iter name doc decls)
       delegate)))
 
-(defun %ensure-known-method (name type type-name member-name arg-types doc decls)
+(defun %filter-know-generic-methods (candidates type-args)
+  (declare (type dotnet-object candidates)
+           (list type-args))
+  (let* ((initial (bike-vector-to-list candidates))
+         (type-args (mapcar (lambda (n) (%get-type-by-name n t nil)) type-args))
+         (argc (length type-args))
+         (defs (remove-if (lambda (m)
+                            (not (%get-property m nil "IsGenericMethodDefinition")))
+                          initial))
+         (candidates (remove-if (lambda (md)
+                                  (/= argc (%array-length
+                                            (%invoke md nil '() "GetGenericArguments"))))
+                                defs))
+         (instances (mapcar (lambda (md)
+                              (apply #'%invoke md nil '() "MakeGenericMethod" type-args))
+                            candidates))
+         (mb-type (%get-type-by-name "System.Reflection.MethodBase" t nil)))
+    (%list-to-bike-vector instances mb-type)))
+
+(defun %ensure-known-method (name type type-name member-name type-args arg-types doc decls)
   (declare (type symbol name)
            (type dotnet-type type)
            (type string type-name member-name)
-           (type list arg-types decls)
+           (type list arg-types type-args decls)
            (type (or null string) doc))
   (let* ((argc (length arg-types))
          (args-vector (%make-vector-of (%get-type-by-name "System.Type" t nil) argc)))
     (loop :for i :from 0
           :for arg-type :in arg-types
           :do (setf (%net-vref args-vector i) (%get-type-by-name arg-type t nil)))
-    (let ((info (%invoke type nil '() "GetMethod"
-                         member-name
-                         (%binding-flags +binding-flags-public+
-                                         +binding-flags-static+
-                                         +binding-flags-instance+
-                                         +binding-flags-ignore-case+)
-                         nil
-                         args-vector
-                         nil)))
+    (let* ((binding-flags (%binding-flags +binding-flags-public+
+                                          +binding-flags-static+
+                                          +binding-flags-instance+
+                                          +binding-flags-ignore-case+
+                                          +binding-flags-invoke-method+))
+           (candidates (%invoke type nil '() "GetMember"
+                                member-name
+                                (%%enum-to-object
+                                 (%get-type-by-name "System.Reflection.MemberTypes" t nil)
+                                 +member-type-method+)
+                                binding-flags))
+           (applicable (if type-args
+                         (%filter-know-generic-methods candidates type-args)
+                         candidates))
+           (binder (%get-property (%get-type-by-name "System.Type" t nil) t "DefaultBinder"))
+           (info (%invoke binder nil '() "SelectMethod"
+                          binding-flags
+                          applicable
+                          args-vector
+                          nil)))
       (unless info
         (error 'method-resolution-error :type type
                                         :method member-name
                                         :args (bike-vector-to-list args-vector)))
       (let ((delegate (%compile-known-method info name doc decls)))
-        (%register-known name type-name member-name :method delegate arg-types)))))
+        (%register-known name type-name member-name type-args :method delegate arg-types)))))
 
 (defun %ensure-known-indexer (name type type-name member-name arg-types doc decls)
   (declare (type symbol name)
@@ -293,18 +329,18 @@
              (writer (cdr accessors)))
         (when reader (setf reader (%compile-known-method reader name doc decls)))
         (when writer (setf writer (%compile-known-method writer `(setf ,name) doc decls)))
-        (%register-known name type-name member-name
+        (%register-known name type-name member-name '()
                          :property (cons reader writer) arg-types)))))
 
-(defun %ensure-known (name type-name member-name kind arg-types doc decls)
+(defun %ensure-known (name type-name member-name type-args kind arg-types doc decls)
   (declare (type symbol name)
            (type string type-name member-name)
-           (type list arg-types)
+           (type list arg-types type-args)
            (type known-kind kind))
   (let ((type (%get-type-by-name type-name t nil)))
     (ecase kind
       (:method
-          (%ensure-known-method name type type-name member-name arg-types doc decls))
+          (%ensure-known-method name type type-name member-name type-args arg-types doc decls))
       (:property
        (if (endp arg-types)
          (%ensure-known-property name type type-name member-name doc decls)
@@ -316,7 +352,8 @@
 (defmacro defknown (name (type-name kind member-name &rest arg-types) &body docs-and-decls)
   (declare (type symbol name)
            (type known-kind kind)
-           (type string-designator type-name member-name))
+           (type string-designator type-name)
+           (type (or cons string-designator) member-name))
   "Establishes internal direct binding to .Net member"
   (multiple-value-bind
         (forms decls doc) (parse-body docs-and-decls :documentation t)
@@ -326,11 +363,13 @@
       (setf doc (car forms)
             forms '()))
     (when forms (error "Unexpected forms in ~s: ~{~s~^ ~}" 'defknown forms))
-    (let ((type-name (string type-name))
-          (member-name (string member-name))
-          (arg-types (mapcar #'string arg-types)))
+    (let* ((type-name (string type-name))
+           (genericp (consp member-name))
+           (type-args (if genericp (mapcar #'string (cdr member-name)) '()))
+           (member-name (string (if genericp (car member-name) member-name)))
+           (arg-types (mapcar #'string arg-types)))
       `(eval-when (:load-toplevel :execute)
-         (%ensure-known ',name ,type-name ,member-name ',kind ',arg-types ,doc ',decls)
+         (%ensure-known ',name ,type-name ,member-name ',type-args ',kind ',arg-types ,doc ',decls)
          ',name))))
 
 (defun initialize-knowns ()
@@ -341,6 +380,7 @@
                  (%ensure-known name
                                 (%known-type-name entry)
                                 (%known-member-name entry)
+                                (%known-type-args entry)
                                 (%known-kind entry)
                                 (%known-arg-types entry)
                                 (%known-doc entry)

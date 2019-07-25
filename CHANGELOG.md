@@ -1,3 +1,9 @@
+# 0.6.0 Exception handlers, interface methods and IDisposable
+  * Added the ability to invoke interface methods of an object (i.e. implemented by private interface implementation)
+  * Added useful macros for working with ```IDisposable``` - ```WITH-DISPOSABLE``` and friends
+  * Added ```DO-ENUMERABLE``` macro, which works like C# ```foreach```
+  * Added ```EXCEPTION-BIND``` and ```EXCEPTION-CASE``` macros which act like their ```HANDLER-*``` counterparts but for .Net exceptions
+
 # 0.5.2 Make use of TargetInvocationException for callbacks
   * Wrap .Net exceptions coming from callbacks into TargetInvocationException for not losing .Net stack traces
   * Added ```import-assembly-from``` function for importing assemblies from files

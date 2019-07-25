@@ -40,7 +40,7 @@
   ((%datum :initarg :datum
            :reader invalid-assembly-designator-datum))
   (:report (lambda (c s)
-             (format s "Invalid assembly designator: ~s"
+             (format s "~&Invalid assembly designator: ~s"
                      (invalid-assembly-designator-datum c)))))
 
 (define-condition type-resolution-error (bike-error)
@@ -52,38 +52,38 @@
            :reader inner-ref-type-error-datum
            :reader enum-resolution-error-datum))
   (:report (lambda (c s)
-             (format s "Unable to resolve type: ~s"
+             (format s "~&Unable to resolve type: ~s"
                      (type-resolution-error-datum c)))))
 
 (define-condition invalid-type-designator (type-resolution-error)
   ()
   (:report (lambda (c s)
-             (format s "Invalid type designator: ~s"
+             (format s "~&Invalid type designator: ~s"
                      (invalid-type-designator-datum c)))))
 
 (define-condition invalid-type-ast (invalid-type-designator)
   ()
   (:report (lambda (c s)
-             (format s "Invalid type ast: ~s"
+             (format s "~&Invalid type ast: ~s"
                      (invalid-type-designator-datum c)))))
 
 (define-condition inner-ref-type-error (invalid-type-ast)
   ()
   (:report (lambda (c s)
-             (format s "Inner ref types are not allowed: ~s"
+             (format s "~&Inner ref types are not allowed: ~s"
                      (invalid-type-designator-datum c)))))
 
 (define-condition invalid-type-name (invalid-type-designator)
   ()
   (:report (lambda (c s)
-             (format s "Invalid type name: ~s"
+             (format s "~&Invalid type name: ~s"
                      (invalid-type-name-datum c)))))
 
 (define-condition type-name-parser-error (invalid-type-name)
   ((%c :initarg :character :reader type-name-parser-error-character)
    ($pos :initarg :position :reader type-name-parser-error-position))
   (:report (lambda (c s)
-             (format s "Unexpected character ~s at position ~d in type name string ~s"
+             (format s "~&Unexpected character ~s at position ~d in type name string ~s"
                      (type-name-parser-error-character c)
                      (1+ (type-name-parser-error-position c))
                      (type-name-parser-error-string c)))))
@@ -126,14 +126,14 @@
 (define-condition type-name-parser-eof (type-name-parser-error)
   ()
   (:report (lambda (c s)
-             (format s "Unexpected end of string while tokenizing type name ~s"
+             (format s "~&Unexpected end of string while tokenizing~% type name ~s"
                      (type-name-parser-error-string c))))
   (:default-initargs :character nil))
 
 (define-condition enum-resolution-error (type-resolution-error)
   ()
   (:report (lambda (c s)
-             (format s "~s is not an enum type"
+             (format s "~&~s is not an enum type"
                      (type-resolution-error-datum c)))))
 
 (define-condition member-resolution-error (bike-error)
@@ -147,7 +147,7 @@
            :reader field-resulution-error-field
            :reader member-resolution-error-member))
   (:report (lambda (c s)
-             (format s "Unable to resolve ~:[~;static~] field ~s in type ~s"
+             (format s "~&Unable to resolve ~:[~;static ~]field ~a~% of type ~s"
                      (member-resolution-error-static-p c)
                      (member-resolution-error-member c)
                      (member-resolution-error-type c)))))
@@ -158,7 +158,7 @@
               :reader property-resulution-error-property
               :reader member-resolution-error-member))
   (:report (lambda (c s)
-             (format s "Unable to resolve ~:[~;static~] property ~s in type ~s"
+             (format s "~&Unable to resolve ~:[~;static ~]property ~a~% of type ~s"
                      (member-resolution-error-static-p c)
                      (member-resolution-error-member c)
                      (member-resolution-error-type c)))))
@@ -175,11 +175,19 @@
           :reader method-resolution-error-args
           :reader member-resolution-error-args))
   (:report (lambda (c s)
-             (format s "Unable to resolve ~:[~;static~] method ~s ~s in type ~s"
+             (format s "~&Unable to resolve ~:[~;static ~]method ~a(~{~a~^, ~})~% of type ~s"
                      (member-resolution-error-static-p c)
                      (member-resolution-error-member c)
                      (member-resolution-error-args c)
                      (member-resolution-error-type c)))))
+
+(define-condition constructor-resolution-error (method-resolution-error)
+  ()
+  (:report (lambda (c s)
+             (format s "~&Unable to resolve constructor of type ~s~% with arguments (~{~a~^, ~})"
+                     (member-resolution-error-type c)
+                     (member-resolution-error-args c))))
+  (:default-initargs :method ".ctor"))
 
 (define-condition accessor-resolution-error (member-resolution-error)
   ((%kind :initarg :kind
@@ -194,7 +202,7 @@
             :reader accessor-resolution-error-member
             :reader member-resolution-error-member))
   (:report (lambda (c s)
-             (format s "Unable to resolve ~(~a~) on ~(~a~) ~s in type ~s"
+             (format s "~&Unable to resolve ~(~a~) on ~(~a~) ~s~% in type ~s"
                      (member-resolution-error-accessor-kind c)
                      (member-resolution-error-member-kind c)
                      (member-resolution-error-member c)

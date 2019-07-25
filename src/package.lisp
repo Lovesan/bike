@@ -34,6 +34,7 @@
                 #:hash-table-alist
                 #:define-constant
                 #:non-negative-fixnum
+                #:positive-fixnum
                 #:parse-body
                 #:ensure-list)
   (:export
@@ -121,6 +122,7 @@
    #:method-resolution-error
    #:method-resolution-error-method
    #:method-resolution-error-args
+   #:constructor-resolution-error
    #:accessor-resolution-error
    #:accessor-resolution-error-accessor-kind
    #:accessor-resolution-error-member-kind
@@ -147,6 +149,12 @@
    #:ref
    #:box
    #:unbox
+   #:with-disposable
+   #:with-disposables
+   #:with-disposables*
+   #:do-enumerable
+   #:exception-bind
+   #:exception-case
 
    ;; arrays
    #:do-bike-vector

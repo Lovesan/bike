@@ -88,4 +88,50 @@
     (invoke delegate 'invoke)
     (is (= x 2))))
 
+(test test-enumerable
+  (let ((list (new '(System.Collections.Generic.List :int)))
+        (sum 0))
+    (dotimes (i 10)
+      (invoke list 'Add i))
+    (do-enumerable (x list)
+      (incf sum x))
+    (is (= sum 45))))
+
+(test test-exception-bind
+  (is-true (block ex-block
+             (exception-bind ((System.IndexOutOfRangeException
+                               (lambda (e)
+                                 (declare (ignore e))
+                                 (return-from ex-block t))))
+               (progn (ref (box "") 0) nil)))))
+
+(test test-exception-bind-restart
+  (is-true (exception-bind ((System.IndexOutOfRangeException
+                             (lambda (e)
+                               (declare (ignore e))
+                               (invoke-restart 'return-t))))
+             (restart-case
+                 (progn (ref (box "") 0) nil)
+               (return-t () t)))))
+
+(test test-exception-case
+  (is-true
+   (exception-case (progn (ref (box "") 0) nil)
+     (System.IndexOutOfRangeException () t)
+     (System.Exception () nil))))
+
+(test test-exception-case-no-exception
+  (is (eql 6 (exception-case (values 1 2 3)
+               (System.Exception () nil)
+               (:no-exception (a b c) (+ a b c))))))
+
+(test test-disposable
+  (let ((reader (new 'System.IO.StringReader "Hello, World!"))
+        (got-ex nil))
+    (with-disposable (r reader)
+      (declare (ignore r)))
+    (exception-case (invoke reader 'ReadToEnd)
+      (System.ObjectDisposedException () (setf got-ex t)))
+    (is-true got-ex)))
+
 ;;; vim: ft=lisp et

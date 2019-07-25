@@ -148,4 +148,152 @@ In case of the TYPE being a delegate type, first,
       (invoke 'BikeInterop.TypeCaster (list 'Cast type) object)
       boxed)))
 
+(defmacro with-disposable ((var object) &body body)
+  "Binds VAR to an IDisposable OBJECT during the execution of BODY forms.
+ OBJECT is disposed right before BODY forms exit."
+  `(let ((,var (%to-disposable ,object)))
+     (unwind-protect
+          (let ((,var ,var))
+            ,@body)
+       (%dispose ,var))))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun %collect-disposable-bindings (specs seqp)
+    (loop :for (var object) :in specs
+          :for real-var = (if seqp var (gensym))
+          :collect `(,real-var (%to-disposable ,object))
+            :into bindings
+          :collect `(,var ,real-var)
+            :into inner-bindings
+          :collect `(when ,real-var (%dispose ,real-var))
+            :into cleanups
+          :finally (return (values bindings
+                                   inner-bindings
+                                   cleanups))))
+  (defun %expand-disposable-bindings (specs body &optional seqp)
+    (multiple-value-bind (bindings inner-bindings cleanups)
+        (%collect-disposable-bindings specs seqp)
+      (labels ((expand (bindings cleanups)
+                 (if (endp bindings)
+                   `(,(if seqp 'let* 'let) ,inner-bindings
+                     (declare (ignorable ,@(mapcar #'car inner-bindings)))
+                     ,@body)
+                   `(let (,(first bindings))
+                      (unwind-protect
+                           ,(expand (rest bindings)
+                                    (rest cleanups))
+                        ,(first cleanups))))))
+        (expand bindings cleanups)))))
+
+(defmacro with-disposables ((&rest specs) &body body)
+  "Binds variables to IDisposable objects during the execution of BODY forms.
+ Variables are bound by means of LET form.
+ Objects are disposed right before BODY forms exit."
+  (%expand-disposable-bindings specs body))
+
+(defmacro with-disposables* ((&rest specs) &body body)
+  "Binds variables to IDisposable objects during the execution of BODY forms.
+ Variables are bound in a sequence, as in LET* form.
+ Objects are disposed right before BODY forms exit."
+  (%expand-disposable-bindings specs body t))
+
+(defmacro do-enumerable ((var enumerable &optional result) &body body)
+  "A direct analogue of C# `foreach' statement.
+ Binds VAR to each element of an ENUMERABLE and executes BODY forms
+  on each iteration.
+ Returns a result of an execution of RESULT form."
+  (with-gensyms (e start)
+    `(prog ((,e (%get-enumerator ,enumerable))
+            ,var)
+        ,start
+        (unless (%enumerator-move-next ,e) (return ,result))
+        (setf ,var (%enumerator-current ,e))
+        (let ((,var ,var))
+          ,@body)
+        (go ,start))))
+
+(defmacro exception-bind ((&rest bindings) &body body)
+  "(EXCEPTION-BIND ( {(exception-type handler)}* ) body)
+
+Executes body in a dynamic context where the given handler bindings are in
+effect. Each handler must take the exception being signalled as an argument.
+The bindings are searched first to last in the event of a thrown exception"
+  (with-gensyms (err err-type)
+    (multiple-value-bind (bindings cases)
+        (loop :for (type handler) :in bindings
+              :for type-var = (gensym)
+              :collect `(,type-var (resolve-type ',type))
+                :into bindings
+              :collect `((or (bike-equals ,err-type ,type-var)
+                             (bike-subclass-p ,err-type ,type-var))
+                         (funcall ,handler ,err))
+                :into cases
+              :finally (return (values bindings cases)))
+      `(let ,bindings
+         (handler-bind ((dotnet-error
+                          (lambda (,err)
+                            (declare (type dotnet-error ,err))
+                            (let* ((,err (dotnet-error-object ,err))
+                                   (,err-type (%bike-type-of ,err)))
+                              (declare (ignorable ,err-type)
+                                       (type dotnet-exception ,err))
+                              (cond ,@cases)))))
+           ,@body)))))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun %get-no-error-handler (cases)
+    (let (no-err-handler err-cases)
+      (dolist (spec cases)
+        (destructuring-bind (&whole form spec (&rest args) &body body)
+            spec
+          (if (member spec '(:no-error :no-exception))
+            (progn (when no-err-handler
+                     (error "~s case is already specified" :no-exception))
+                   (setf no-err-handler `(lambda ,args ,@body)))
+            (push form err-cases))))
+      (values no-err-handler
+              (nreverse err-cases))))
+  (defun %process-exception-cases (error-return cases)
+    (let ((var-bindings)
+          (handler-bindings))
+      (dolist (spec cases)
+        (destructuring-bind (typespec (&optional (var (gensym)))
+                             &body body)
+            spec
+          (let ((handler-var (gensym))
+                (handler `(lambda (,var)
+                            (declare (type dotnet-exception ,var)
+                                     (ignorable ,var))
+                            (return-from ,error-return (locally ,@body)))))
+            (push `(,handler-var ,handler) var-bindings)
+            (push `(,typespec ,handler-var) handler-bindings))))
+      (values var-bindings
+              (nreverse handler-bindings)))))
+
+(defmacro exception-case (form &body cases)
+  "(EXCEPTION-CASE form { (exception-type ([var]) body) }* )
+
+Executes FORM in a context with handlers established for the condition types. A
+peculiar property allows type to be :NO-EXCEPTION. If such a clause occurs, and
+form returns normally, all its values are passed to this clause as if by
+MULTIPLE-VALUE-CALL. The :NO-EXCEPTION clause accepts more than one var
+specification."
+  (multiple-value-bind (no-err-handler cases)
+      (%get-no-error-handler cases)
+    (if no-err-handler
+      (with-gensyms (normal-return)
+        `(multiple-value-call ,no-err-handler
+           (block ,normal-return
+             (exception-case
+                 (return-from ,normal-return ,form)
+               ,@cases))))
+      (with-gensyms (error-return)
+        (multiple-value-bind
+              (var-bindings handler-bindings)
+            (%process-exception-cases error-return cases)
+          `(block ,error-return
+             (let ,var-bindings
+               (declare (dynamic-extent ,@(mapcar #'car var-bindings)))
+               (exception-bind ,handler-bindings ,form))))))))
+
 ;;; vim: ft=lisp et

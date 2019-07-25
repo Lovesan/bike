@@ -46,6 +46,9 @@
   (or (%get-type (string name) errorp t)
       error-value))
 
+(defknown type-base-type (System.Type :property BaseType)
+    "Retrieves base type for a type")
+
 (declaim (ftype (function (dotnet-type) dotnet-type) element-type-of))
 (defknown element-type-of (System.Type :method GetElementType)
     "Returns an element type for a TYPE")
@@ -329,7 +332,7 @@
                                         System.String
                                         System.Reflection.MemberTypes
                                         System.Reflection.BindingFlags)
-    "Gets a list of members which satisfy name, member types and binding flags")
+    "Gets a .Net array of members which satisfy name, member types and binding flags")
 
 (defknown type-get-field (System.Type :method GetField
                                       System.String
@@ -391,5 +394,24 @@
 
 (defknown type-constructors (System.Type :method GetConstructors)
     "Returns a .Net array of type constructors")
+
+(defknown type-interfaces (System.Type :method GetInterfaces)
+    "Returns a .Net array of interfaces implemented by a type")
+
+(defknown %to-disposable (BikeInterop.TypeCaster :method (Cast System.IDisposable)
+                                                 System.Object)
+    "Casts an object to IDisposable")
+
+(defknown %dispose (System.IDisposable :method Dispose)
+    "Disposes an object")
+
+(defknown %get-enumerator (System.Collections.IEnumerable :method GetEnumerator)
+    "Returns an enumerator for an IEnumerable")
+
+(defknown %enumerator-current (System.Collections.IEnumerator :property Current)
+    "Returns current element of an IEnumerator")
+
+(defknown %enumerator-move-next (System.Collections.IEnumerator :method MoveNext)
+    "Advances the IEnumerator")
 
 ;;; vim: ft=lisp et

@@ -24,6 +24,8 @@
 
 (in-package #:bike)
 
+(define-constant +empty-dotnet-name+ (%mknetsym "") :test #'equal)
+
 (declaim (inline %call-ientry))
 (defun %call-ientry-accessor (entry instance readp new-value)
   (declare (type invocation-entry entry)
@@ -70,16 +72,110 @@
                   :writer writer
                   :writer-delegate writer-delegate))))
 
+(declaim (inline %get-binding-flags))
+(defun %get-binding-flags (&optional instancep methodp)
+  (%%enum-to-object (resolve-type 'System.Reflection.BindingFlags)
+                    (logior +binding-flags-public+
+                            +binding-flags-ignore-case+
+                            (if instancep
+                              +binding-flags-instance+
+                              (logior +binding-flags-static+
+                                      +binding-flags-flatten-hierarchy+))
+                            (if methodp
+                              +binding-flags-invoke-method+
+                              +binding-flags-default+))))
+
+(defun %make-type-iterator (type instancep)
+  (let ((list (if instancep
+                (cons type (bike-vector-to-list (type-interfaces type)))
+                (list type))))
+    (lambda () (pop list))))
+
+(defmacro do-type-iterator ((type-var type instancep &optional result) &body body)
+  (with-gensyms (iter start)
+    `(prog* ((,type-var ,type)
+             (,iter (%make-type-iterator ,type-var ,instancep)))
+        (declare (type (or null dotnet-type) ,type-var))
+        ,start
+        (setf ,type-var (funcall ,iter))
+        (unless ,type-var (return ,result))
+        (let ((,type-var ,type-var))
+          ,@body)
+        (go ,start))))
+
+(defun %find-named-property (type name instancep &aux (empty-types (empty-types)))
+  (declare (type dotnet-type type)
+           (type dotnet-name name))
+  (do-type-iterator (type type instancep)
+    (let ((property (type-get-property type name
+                                       (%get-binding-flags instancep)
+                                       nil
+                                       nil
+                                       empty-types
+                                       nil)))
+      (when property (return property)))))
+
+(defun %find-indexer (type arg-types)
+  (declare (type dotnet-type type)
+           (type dotnet-object arg-types))
+  (do-type-iterator (type type t)
+    (let* ((indexers (list-to-bike-vector (type-indexers type)
+                                          :element-type 'System.Reflection.PropertyInfo))
+           (selected (unless (zerop (%array-length indexers))
+                       (select-property (default-binder)
+                                        (%get-binding-flags t)
+                                        indexers
+                                        nil
+                                        arg-types
+                                        nil))))
+      (when selected (return selected)))))
+
+(defun %filter-generic-methods (candidates type-arg-count type-args)
+  (declare (type dotnet-object candidates)
+           (type positive-fixnum type-arg-count)
+           (type list type-args))
+  (let ((selected '()))
+    (do-bike-vector (method candidates)
+      (when (generic-method-definition-p method)
+        (let ((args (method-generic-arguments method)))
+          (when (= (%array-length args) type-arg-count)
+            (push (apply #'make-generic-method method type-args) selected)))))
+    (list-to-bike-vector selected :element-type 'System.Reflection.MethodBase)))
+
+(defun %find-method (type name type-arg-count type-args args instancep)
+  (declare (type dotnet-type type)
+           (type dotnet-name name)
+           (type non-negative-fixnum type-arg-count)
+           (type list type-args)
+           (type dotnet-object args))
+  (do-type-iterator (type type instancep)
+    (let* ((binding-flags (%get-binding-flags instancep t))
+           (candidates (type-get-members
+                        type name
+                        (enum 'System.Reflection.MemberTypes 'Method)
+                        binding-flags))
+           (applicable (if type-args
+                         (%filter-generic-methods candidates
+                                                  type-arg-count
+                                                  type-args)
+                         candidates))
+           (selected (ignore-errors
+                      (bind-to-method (default-binder)
+                                      binding-flags
+                                      applicable
+                                      args
+                                      nil
+                                      nil
+                                      nil))))
+      (when selected (return selected)))))
+
 (defun %access-field (type name instance readp new-value)
   (declare (type dotnet-type type)
            (type dotnet-name name)
            (type (or null dotnet-object) instance))
   (let ((entry (get-ientry type name :field)))
     (unless entry
-      (let ((info (type-get-field type name (enum 'System.Reflection.BindingFlags
-                                                  'IgnoreCase
-                                                  'Public
-                                                  (if instance 'Instance 'Static)))))
+      (let ((info (type-get-field type name (%get-binding-flags instance))))
         (unless info
           (error 'field-resolution-error :type type
                                          :member name
@@ -94,15 +190,7 @@
            (type (or null dotnet-object) instance))
   (let ((entry (get-ientry type name :property)))
     (unless entry
-      (let ((info (type-get-property type name
-                                     (enum 'System.Reflection.BindingFlags
-                                           'IgnoreCase
-                                           'Public
-                                           (if instance 'Instance 'Static))
-                                     nil
-                                     nil
-                                     (empty-types)
-                                     nil)))
+      (let ((info (%find-named-property type name instance)))
         (unless info
           (error 'property-resolution-error :type type
                                             :member name
@@ -127,8 +215,6 @@
          (iter (%make-param-array-iterator params)))
     (compile-method-trampoline fptr t nil iter name doc decls)))
 
-(define-constant +empty-dotnet-name+ (%mknetsym "") :test #'equal)
-
 (defun %access-indexer (instance readp new-value &rest args)
   (declare (type dotnet-object instance)
            (dynamic-extent args))
@@ -139,16 +225,9 @@
                              :indexer :arg-type-count arg-type-count
                              :arg-types arg-types)))
       (unless entry
-        (let* ((indexers (list-to-bike-vector
-                          (type-indexers type)
-                          :element-type 'System.Reflection.PropertyInfo))
-               (info (select-property (default-binder)
-                                      (enum 'System.Reflection.BindingFlags
-                                            'Public 'Instance 'IgnoreCase)
-                                      indexers
-                                      nil
-                                      arg-types
-                                      nil)))
+        (let ((info (%find-indexer type (list-to-bike-vector
+                                         arg-types
+                                         :element-type 'System.Type))))
           (unless info
             (error 'indexer-resolution-error :type type
                                              :member "this[*]"))
@@ -202,45 +281,15 @@
                             :arg-type-count arg-type-count
                             :arg-types arg-types)))
     (unless entry
-      (let* ((applicable* (type-get-members type name
-                                            (enum 'System.Reflection.MemberTypes 'Method)
-                                            (enum 'System.Reflection.BindingFlags
-                                                  'Public
-                                                  'IgnoreCase
-                                                  (if instance 'Instance 'Static)
-                                                  'InvokeMethod)))
-             (applicable
-               (if type-args
-                 (loop :for i :below (%array-length applicable*)
-                       :for method = (%net-vref applicable* i)
-                       :when (and (generic-method-definition-p method)
-                                  (= type-arg-count
-                                     (%array-length
-                                      (method-generic-arguments method))))
-                         :collect (apply #'make-generic-method method type-args) :into candidates
-                       :finally
-                          (return (list-to-bike-vector
-                                   candidates
-                                   :element-type 'System.Reflection.MethodBase)))
-                 applicable*))
-             (args* (list-to-bike-vector args))
-             (info (unless (zerop (%array-length applicable))
-                     (bind-to-method (default-binder)
-                                     (enum 'System.Reflection.BindingFlags
-                                           'Public
-                                           'InvokeMethod
-                                           'IgnoreCase
-                                           (if instance 'Instance 'Static))
-                                     applicable
-                                     args*
-                                     nil
-                                     nil
-                                     nil))))
+      (let* ((info (%find-method type name
+                                 type-arg-count type-args
+                                 (list-to-bike-vector args)
+                                 instance)))
         (unless info
           (error 'method-resolution-error :type type
                                           :static-p (not instance)
                                           :member name
-                                          :args args))
+                                          :args (mapcar #'type-full-name arg-types)))
         (multiple-value-bind (delegate fptr)
             (%get-delegate-trampoline info '())
           (let ((callable (%compile-method info fptr)))
@@ -283,9 +332,8 @@
                                      nil
                                      nil))))
         (unless info
-          (error 'method-resolution-error :type type
-                                          :member "new()"
-                                          :args args))
+          (error 'constructor-resolution-error :type type
+                                               :args (mapcar #'type-full-name arg-types)))
         (multiple-value-bind (delegate fptr)
             (%get-delegate-trampoline info '())
           (let ((callable (%compile-constructor info fptr)))
