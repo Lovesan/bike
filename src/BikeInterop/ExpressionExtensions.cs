@@ -28,6 +28,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BikeInterop
@@ -126,6 +127,14 @@ namespace BikeInterop
         public static Expression TypeIs(this Expression expression, Type type)
         {
             return Expression.TypeIs(expression, type);
+        }
+
+        public static Expression Cast(this Expression expression, Type type)
+        {
+            var def = typeof(TypeCaster).GetMethod(nameof(TypeCaster.Cast));
+            // ReSharper disable once PossibleNullReferenceException
+            var method = def.MakeGenericMethod(type);
+            return Expression.Call(null, method, expression);
         }
 
         public static Expression ConvertExpression<T>(this Expression expression)

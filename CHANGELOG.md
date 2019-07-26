@@ -1,3 +1,8 @@
+# 0.6.1 Bugfixing release
+  * Fixed return value cast for callbacks
+  * Added few more examples
+  * Use ```flet``` inside of ```exception-case``` instead of lambdas
+
 # 0.6.0 Exception handlers, interface methods and IDisposable
   * Added the ability to invoke interface methods of an object (i.e. implemented by private interface implementation)
   * Added useful macros for working with ```IDisposable``` - ```WITH-DISPOSABLE``` and friends

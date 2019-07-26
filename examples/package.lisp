@@ -25,12 +25,16 @@
 (in-package #:cl-user)
 
 (uiop:define-package #:bike-examples
-  (:use #:cl #:bike)
+  (:use #:cl #:uiop #:bike)
   (:export #:hello
            #:hello-datetime
            #:hello-callback
            #:start-hello-host
            #:stop-hello-host
-           #:get-hello-response))
+           #:get-hello-response
+           #:simple-callback
+           #:enumerable-callbacks
+           #:example-exception-case
+           #:example-exception-bind))
 
 ;;; vim: ft=lisp et

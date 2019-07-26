@@ -35,11 +35,19 @@
                 (uiop:make-pathname*
                  :directory '(:relative "src" "BikeInterop" "obj"))
                 current-dir))
+       (examples-bindir (uiop:merge-pathnames*
+                         (uiop:make-pathname*
+                          :directory '(:relative "examples" "BikeExamples" "bin"))
+                         current-dir))
+       (examples-objdir (uiop:merge-pathnames*
+                         (uiop:make-pathname*
+                          :directory '(:relative "examples" "BikeExamples" "obj"))
+                         current-dir))
        (aspnet-assemblies (uiop:merge-pathnames*
                            (uiop:make-pathname*
                             :directory '(:relative "examples" "AspNetMvcAssemblies"))
                            current-dir)))
-  (dolist (dir (list bindir objdir aspnet-assemblies))
+  (dolist (dir (list bindir objdir examples-bindir examples-objdir aspnet-assemblies))
     (let ((dir (uiop:probe-file* dir)))
       (when dir
         (handler-case

@@ -254,20 +254,20 @@ The bindings are searched first to last in the event of a thrown exception"
       (values no-err-handler
               (nreverse err-cases))))
   (defun %process-exception-cases (error-return cases)
-    (let ((var-bindings)
+    (let ((flet-bindings)
           (handler-bindings))
       (dolist (spec cases)
         (destructuring-bind (typespec (&optional (var (gensym)))
                              &body body)
             spec
-          (let ((handler-var (gensym))
-                (handler `(lambda (,var)
-                            (declare (type dotnet-exception ,var)
-                                     (ignorable ,var))
-                            (return-from ,error-return (locally ,@body)))))
-            (push `(,handler-var ,handler) var-bindings)
-            (push `(,typespec ,handler-var) handler-bindings))))
-      (values var-bindings
+          (let* ((handler-var (gensym))
+                 (handler `(,handler-var (,var)
+                                         (declare (type dotnet-exception ,var)
+                                                  (ignorable ,var))
+                                         (return-from ,error-return (locally ,@body)))))
+            (push handler flet-bindings)
+            (push `(,typespec (function ,handler-var)) handler-bindings))))
+      (values flet-bindings
               (nreverse handler-bindings)))))
 
 (defmacro exception-case (form &body cases)
@@ -289,11 +289,10 @@ specification."
                ,@cases))))
       (with-gensyms (error-return)
         (multiple-value-bind
-              (var-bindings handler-bindings)
+              (flet-bindings handler-bindings)
             (%process-exception-cases error-return cases)
           `(block ,error-return
-             (let ,var-bindings
-               (declare (dynamic-extent ,@(mapcar #'car var-bindings)))
+             (flet ,flet-bindings
                (exception-bind ,handler-bindings ,form))))))))
 
 ;;; vim: ft=lisp et

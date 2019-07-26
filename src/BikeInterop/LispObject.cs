@@ -136,13 +136,9 @@ namespace BikeInterop
             {
                 blockExpressions.Add(callExpr);
             }
-            else if(returnType.IsValueType)
-            {
-                blockExpressions.Add(Expression.Convert(callExpr, returnType));
-            }
             else
             {
-                blockExpressions.Add(Expression.TypeAs(callExpr, returnType));
+                blockExpressions.Add(callExpr.Cast(returnType));
             }
             var block = Expression.Block(
                 new[] {arrayVariable},

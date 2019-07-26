@@ -438,7 +438,7 @@
                                         :pointer boxed
                                         :pointer))))
       (when cleanup (%free-handle boxed))
-      (the dotnet-type type))))
+      type)))
 
 (defun %get-type-full-name (type)
   (declare (type dotnet-type type))
