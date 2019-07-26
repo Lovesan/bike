@@ -1,3 +1,6 @@
+# 0.6.2 Bugfixing release
+  * Fixed callbacks.lisp example file: use namespaces before building an assembly
+
 # 0.6.1 Bugfixing release
   * Fixed return value cast for callbacks
   * Added few more examples

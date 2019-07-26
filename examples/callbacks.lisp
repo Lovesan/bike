@@ -24,6 +24,13 @@
 
 (in-package #:bike-examples)
 
+(use-namespace 'System)
+(use-namespace 'System.Diagnostics)
+(use-namespace 'System.Text)
+(use-namespace 'System.IO)
+(use-namespace 'System.Linq)
+(use-namespace 'BikeExamples)
+
 (defvar *examples-project-dir*
   (native-namestring
    (merge-pathnames*
@@ -81,10 +88,6 @@
     (import-assembly-from bin-path)))
 
 (ensure-examples-assembly)
-
-(use-namespace 'System)
-(use-namespace 'System.Linq)
-(use-namespace 'BikeExamples)
 
 (defun simple-callback ()
   "Passes simple callback to .Net code"
