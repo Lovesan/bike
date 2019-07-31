@@ -2,7 +2,7 @@ version: 2
 jobs:
   build_ccl_amd64:
     docker:
-      - image: "love5an/dotnet-core-sdk-common-lisp:2.2-ccl-1.11.5-stretch"
+      - image: "love5an/dotnet-core-sdk-common-lisp:2.2-ccl-latest-stretch"
 
     working_directory: ~/quicklisp/local-projects/bike
 

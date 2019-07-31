@@ -1,3 +1,7 @@
+# 0.6.3 Revert deps for bike.asd
+  * Put all the dependencies into ```bike.asd``` file
+  * Make use of latest CCL for CI tests
+
 # 0.6.2 Bugfixing release
   * Fixed callbacks.lisp example file: use namespaces before building an assembly
 

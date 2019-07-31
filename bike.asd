@@ -29,7 +29,16 @@
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :licence "MIT"
   :defsystem-depends-on (#:bike-internals)
-  :depends-on (#:bike-internals)
+  :depends-on (#:uiop
+               #:alexandria
+               #:cffi
+               #:cl-ppcre
+               #:split-sequence
+               #:flexi-streams
+               #:trivial-features
+               #:trivial-garbage
+               #:bordeaux-threads
+               #:bike-internals)
   :serial t
   :components ((:module "src"
                 :serial t
