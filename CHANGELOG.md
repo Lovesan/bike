@@ -1,5 +1,5 @@
 # 0.7.1 Fix compatibility with previous versions
-  * ```GET-LOADED-ASSEMBLIES`` now utilizes interop library method and does not accept any arguments
+  * ```GET-LOADED-ASSEMBLIES``` now utilizes interop library method and does not accept any arguments
   * Removed ```CURRENT-APP-DOMAIN``` function from the list of exported functions
 
 # 0.7.0 .Net Core 3.0 compatibility
