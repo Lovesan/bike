@@ -42,6 +42,7 @@
    ;; types and stuff
    #:*default-assemblies*
    #:resolve-type
+   #:current-app-domain
    #:load-assembly
    #:load-assembly-from
    #:import-assembly

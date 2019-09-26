@@ -1,3 +1,7 @@
+# 0.7.0 .Net Core 3.0 compatibility
+  * Added few fixes for .Net Core 3.0 compatibility
+  * ```GET-LOADED-ASSEMBLIES``` now accepts optional ```AppDomain``` argument
+
 # 0.6.3 Revert deps for bike.asd
   * Put all the dependencies into ```bike.asd``` file
   * Make use of latest CCL for CI tests

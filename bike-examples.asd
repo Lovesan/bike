@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike-examples
-  :version "0.6.2"
+  :version "0.7.0"
   :description "Common Lisp .Net Core Interop examples"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"

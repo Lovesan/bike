@@ -209,7 +209,9 @@
     ;; Now we need to do two things, first - configure Kestrel as
     ;;   our server.
     ;; Second - configure services available through AspNet dependency injections
-    (setf builder (invoke 'WebHostBuilderKestrelExtensions 'UseKestrel builder
+    (setf builder (invoke 'HostingAbstractionsWebHostBuilderExtensions 'UseContentRoot
+                          builder *deps-directory*)
+          builder (invoke 'WebHostBuilderKestrelExtensions 'UseKestrel builder
                           (new '(Action KestrelServerOptions)
                                'configure-kestrel))
           builder (invoke builder 'ConfigureServices

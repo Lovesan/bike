@@ -74,13 +74,14 @@
   "Loads an assembly designated by assembly string"
   (%load-assembly-from (uiop:native-namestring (uiop:truename* path))))
 
-(declaim (ftype (function () dotnet-object) %get-loaded-assemblies))
-(defknown %get-loaded-assemblies
-    (System.Runtime.Loader.AssemblyLoadContext :method GetLoadedAssemblies))
+(declaim (ftype (function (dotnet-object) dotnet-object) %app-domain-assemblies))
+(defknown %app-domain-assemblies
+    (System.AppDomain :method GetAssemblies))
 
-(defun get-loaded-assemblies ()
-  "Returns a list of currently loaded assemblies"
-  (bike-vector-to-list (%get-loaded-assemblies)))
+(declaim (ftype (function () dotnet-object) current-app-domain))
+(defknown current-app-domain
+    (System.AppDomain :property CurrentDomain)
+    "Returns current app domain")
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %assembly-exported-types))
 (defknown %assembly-exported-types (System.Reflection.Assembly :method GetExportedTypes))
@@ -405,13 +406,21 @@
 (defknown %dispose (System.IDisposable :method Dispose)
     "Disposes an object")
 
+(declaim (ftype (function (dotnet-object) dotnet-object) %get-enumerator))
 (defknown %get-enumerator (System.Collections.IEnumerable :method GetEnumerator)
     "Returns an enumerator for an IEnumerable")
 
+(declaim (ftype (function (dotnet-object) t) %enumerator-current))
 (defknown %enumerator-current (System.Collections.IEnumerator :property Current)
     "Returns current element of an IEnumerator")
 
+(declaim (ftype (function (dotnet-object) boolean) %enumerator-move-next))
 (defknown %enumerator-move-next (System.Collections.IEnumerator :method MoveNext)
     "Advances the IEnumerator")
+
+(defun get-loaded-assemblies (&optional (app-domain (current-app-domain)))
+  (declare (type dotnet-object app-domain))
+  "Returns a list of assemblies loaded into specified AppDomain"
+  (bike-vector-to-list (%app-domain-assemblies app-domain)))
 
 ;;; vim: ft=lisp et
