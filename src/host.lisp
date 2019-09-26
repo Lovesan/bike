@@ -152,7 +152,8 @@
   (enum-to-object "EnumToObject")
   (make-vector-of "MakeVectorOf")
   (install-callbacks "InstallCallbacks")
-  (initialize-corefx-signals "InitializeCoreFxSignals"))
+  (initialize-corefx-signals "InitializeCoreFxSignals")
+  (get-loaded-assemblies "GetLoadedAssemblies"))
 
 (defun initialize-coreclr (&optional (domain-name "CommonLisp"))
   (declare (type string domain-name))

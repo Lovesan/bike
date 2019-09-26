@@ -74,14 +74,6 @@
   "Loads an assembly designated by assembly string"
   (%load-assembly-from (uiop:native-namestring (uiop:truename* path))))
 
-(declaim (ftype (function (dotnet-object) dotnet-object) %app-domain-assemblies))
-(defknown %app-domain-assemblies
-    (System.AppDomain :method GetAssemblies))
-
-(declaim (ftype (function () dotnet-object) current-app-domain))
-(defknown current-app-domain
-    (System.AppDomain :property CurrentDomain)
-    "Returns current app domain")
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %assembly-exported-types))
 (defknown %assembly-exported-types (System.Reflection.Assembly :method GetExportedTypes))
@@ -417,10 +409,5 @@
 (declaim (ftype (function (dotnet-object) boolean) %enumerator-move-next))
 (defknown %enumerator-move-next (System.Collections.IEnumerator :method MoveNext)
     "Advances the IEnumerator")
-
-(defun get-loaded-assemblies (&optional (app-domain (current-app-domain)))
-  (declare (type dotnet-object app-domain))
-  "Returns a list of assemblies loaded into specified AppDomain"
-  (bike-vector-to-list (%app-domain-assemblies app-domain)))
 
 ;;; vim: ft=lisp et

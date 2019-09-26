@@ -30,6 +30,10 @@
 
 (declaim (type list *default-assembles*))
 
+(defun get-loaded-assemblies ()
+  "Returns a list of currently loaded assemblies"
+  (bike-vector-to-list (%get-loaded-assemblies)))
+
 (defun import-assembly (assembly-designator)
   (declare (type (or dotnet-object string-designator)
                  assembly-designator))

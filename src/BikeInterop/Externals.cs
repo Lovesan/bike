@@ -73,6 +73,37 @@ namespace BikeInterop
                 method.Invoke(null, new object[0]);
             }
         }
+        public static void GetLoadedAssemblies(
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            Exception e = null;
+            object assemblies = null;
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+            result = BoxObject(assemblies);
+            typeCode = assemblies.GetFullTypeCode();
+            exception = BoxObject(e);
+        }
 
         public static void InstallCallbacks(
             IntPtr freeLispHandleCallback,

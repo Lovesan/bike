@@ -23,12 +23,11 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike
-  :version "0.7.0"
+  :version "0.7.1"
   :description "Common Lisp .Net Core Interop"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :licence "MIT"
-  :defsystem-depends-on (#:bike-internals)
   :depends-on (#:uiop
                #:alexandria
                #:cffi

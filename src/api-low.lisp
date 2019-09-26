@@ -86,6 +86,17 @@
               :void)
     (%transform-rv rv code ex)))
 
+(defun %get-loaded-assemblies ()
+  (with-foreign-objects ((rv :pointer)
+                         (code :int)
+                         (ex :pointer))
+    (hostcall get-loaded-assemblies
+              :pointer rv
+              :pointer code
+              :pointer ex
+              :void)
+    (%transform-rv rv code ex)))
+
 (defun %invoke-constructor (type &rest args)
   (declare (type dotnet-type type)
            (dynamic-extent args))
