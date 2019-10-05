@@ -1,3 +1,6 @@
+# 0.7.3 Revert use of APP_PATHS and NI_PATHS
+  * Fixed misprint left from previous version
+
 # 0.7.2 Removed use of uiop:native-namestring in favor of native-path function
   * ```uiop:native-namestring``` function seems to be somewhat broken on CCL on Windows.
     It does not provide paths with backslashes which are expected by ```coreclr_initialize```

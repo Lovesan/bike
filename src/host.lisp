@@ -183,7 +183,7 @@
              (locally (declare (optimize (speed 3) (safety 0) (space 0) (debug 0)))
                (let ((rv (coreclr-initialize exe
                                              domain-name
-                                             1
+                                             3
                                              keys
                                              vals
                                              host
