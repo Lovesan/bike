@@ -72,7 +72,7 @@
 (defun load-assembly-from (path)
   (declare (type (or pathname string) path))
   "Loads an assembly designated by assembly string"
-  (%load-assembly-from (uiop:native-namestring (uiop:truename* path))))
+  (%load-assembly-from (native-path (uiop:truename* path))))
 
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %assembly-exported-types))

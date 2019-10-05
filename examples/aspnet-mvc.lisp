@@ -53,7 +53,7 @@
   :test #'equal)
 
 (defvar *deps-directory*
-  (native-namestring
+  (native-path
    (merge-pathnames*
     (make-pathname* :directory (list :relative +tmp-project-name+))
     (pathname-directory-pathname #.(current-lisp-file-pathname)))))
@@ -87,7 +87,7 @@
                      "</ItemGroup>"
                      "</Project>"))
         (encoding (new 'UTF8Encoding :false :false))
-        (file (native-namestring
+        (file (native-path
                (make-pathname :defaults *deps-directory*
                               :name +tmp-project-name+
                               :type "csproj"))))
@@ -142,11 +142,11 @@
 (defun cleanup-temporary-project ()
   "Cleans up a temporary project build"
   ;; delete temporary project files and directories
-  (let ((bin (native-namestring
+  (let ((bin (native-path
               (merge-pathnames*
                (make-pathname :directory '(:relative "bin"))
                *deps-directory*)))
-        (obj (native-namestring
+        (obj (native-path
               (merge-pathnames*
                (make-pathname :directory '(:relative "obj"))
                *deps-directory*))))
@@ -169,7 +169,7 @@
         :for name = (pathname-name path)
         :when (string-prefix-p "Microsoft." name)
           :do (handler-case
-                  (import-assembly (load-assembly-from (native-namestring path)))
+                  (import-assembly (load-assembly-from (native-path path)))
                 (error (e) (format *error-output* "~a~%" e)))))
 
 (defun ensure-asp-net-assemblies ()

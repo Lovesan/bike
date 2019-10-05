@@ -52,7 +52,7 @@
 (defun import-assembly-from (path)
   (declare (type (or pathname string) path))
   "Imports an assembly from PATH"
-  (let* ((path (uiop:native-namestring (uiop:truename* path)))
+  (let* ((path (native-path (uiop:truename* path)))
          (assembly (load-assembly-from path)))
     (import-assembly assembly)))
 

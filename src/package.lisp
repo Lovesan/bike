@@ -38,6 +38,8 @@
                 #:parse-body
                 #:ensure-list)
   (:export
+   ;; some internals reexports
+   #:native-path
 
    ;; types and stuff
    #:*default-assemblies*

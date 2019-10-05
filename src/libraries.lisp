@@ -57,10 +57,10 @@
 
 (defun %get-tpa-string ()
   (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}~a~a")
-          (mapcar #'uiop:native-namestring
+          (mapcar #'native-path
                   (get-trusted-platform-assemblies))
           (uiop:inter-directory-separator)
-          (uiop:native-namestring *interop-location*)))
+          (native-path *interop-location*)))
 
 (defun %get-trusted-assembly-names ()
   (loop :with tpa-dlls = (get-trusted-platform-assemblies)
@@ -71,7 +71,7 @@
 
 (defun %get-app-paths ()
   (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}")
-          (mapcar #'uiop:native-namestring
+          (mapcar #'native-path
                   (list (uiop:get-pathname-defaults)
                         (uiop:lisp-implementation-directory)
                         (uiop:pathname-directory-pathname (get-exe-path))

@@ -32,7 +32,7 @@
 (use-namespace 'BikeExamples)
 
 (defvar *examples-project-dir*
-  (native-namestring
+  (native-path
    (merge-pathnames*
     (make-pathname* :directory '(:relative "BikeExamples"))
     (pathname-directory-pathname #.(current-lisp-file-pathname)))))
@@ -47,7 +47,7 @@
 
 (defun build-examples-assembly ()
   "Builds examples project"
-  (let* ((project-file (native-namestring
+  (let* ((project-file (native-path
                         (make-pathname*
                          :name "BikeExamples"
                          :type "csproj"

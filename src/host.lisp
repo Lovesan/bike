@@ -177,11 +177,13 @@
                    (mem-aref keys :pointer 2) app-ni-paths-key
                    (mem-aref vals :pointer 0) tpa
                    (mem-aref vals :pointer 1) app-paths
-                   (mem-aref vals :pointer 2) app-ni-paths)
+                   (mem-aref vals :pointer 2) app-ni-paths
+                   (mem-ref domain-id :uint) 0
+                   (mem-ref host :pointer) (null-pointer))
              (locally (declare (optimize (speed 3) (safety 0) (space 0) (debug 0)))
                (let ((rv (coreclr-initialize exe
                                              domain-name
-                                             3
+                                             1
                                              keys
                                              vals
                                              host

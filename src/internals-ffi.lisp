@@ -94,7 +94,15 @@
     (mbstr :pointer)
     (cbmbstr :int)
     (p-default-char (:pointer :char))
-    (p-used-default-char (:pointer :bool))))
+    (p-used-default-char (:pointer :bool)))
+  (defcfun (get-full-path-name
+            "GetFullPathNameW" :convention :stdcall
+            :library kernel32)
+      :int
+    (file-name lpwstr)
+    (buffer-length :uint32)
+    (buffer :pointer)
+    (file-part :pointer)))
 
 #+corecl-macos
 (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -144,6 +152,19 @@
     (unless argv0
       (error "Unable to get executable name"))
     argv0))
+
+(defun native-path (path)
+  "Retrieves real path of the file or directory"
+  (declare (type (or pathname string) path))
+  #+coreclr-windows
+  (let* ((path (uiop:native-namestring path))
+         (count (get-full-path-name path 0 (null-pointer) (null-pointer))))
+    (with-foreign-object (ptr :uint16 count)
+      (let ((rv (get-full-path-name path count ptr (null-pointer))))
+        (when (zerop rv) (error "Unable to get native path"))
+        (values (foreign-string-to-lisp ptr :encoding :utf-16/le)))))
+  #-coreclr-windows
+  (uiop:native-namestring path))
 
 
 ;; i hope that no one who is in his mind

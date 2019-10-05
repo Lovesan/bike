@@ -1,3 +1,7 @@
+# 0.7.2 Removed use of uiop:native-namestring in favor of native-path function
+  * ```uiop:native-namestring``` function seems to be somewhat broken on CCL on Windows.
+    It does not provide paths with backslashes which are expected by ```coreclr_initialize```
+
 # 0.7.1 Fix compatibility with previous versions
   * ```GET-LOADED-ASSEMBLIES``` now utilizes interop library method and does not accept any arguments
   * Removed ```CURRENT-APP-DOMAIN``` function from the list of exported functions

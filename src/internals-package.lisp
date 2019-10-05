@@ -38,6 +38,7 @@
            #:lpastr
            #:dnchar
            #:size-t
+           #:native-path
 
            #:slot-initializer-missing
            #:slot-initializer-missing-message

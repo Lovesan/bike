@@ -55,7 +55,7 @@
           :message (or ,message "Slot is required.")))
 
 (defvar *interop-build-dir*
-  (uiop:native-namestring
+  (native-path
    (merge-pathnames*
     (make-pathname*
      :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
