@@ -50,7 +50,13 @@ This library implements cross-platform Common Lisp interface to .Net Core platfo
 
 ## Installation
 
-The most basic way to install the library at this moment would be to drop the contents of the repository into ````~/quicklisp/local-projects/bike```` directory.
+The most basic way to install the library at this moment would be to use [quicklisp](https://www.quicklisp.org/):
+
+````lisp
+(ql:quickload :bike)
+````
+
+Alternatively, you can drop the contents of the repository into ````~/quicklisp/local-projects/bike```` directory.
 
 The library, once loaded, searches for .Net Core runtime and for ````BikeInterop.dll```` library in several places, like in the executable directory.
 

@@ -1,3 +1,7 @@
+# 0.8.0 Improved printing
+  * Print dotnet object using plain ```.ToString()``` in case when both ```*PRINT-READABLY*``` and ```*PRINT-ESCAPE*``` are ```NIL```
+  * Updated installation guide in README
+
 # 0.7.3 Revert use of APP_PATHS and NI_PATHS
   * Fixed misprint left from previous version
 
