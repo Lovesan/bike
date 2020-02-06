@@ -410,4 +410,10 @@
 (defknown %enumerator-move-next (System.Collections.IEnumerator :method MoveNext)
     "Advances the IEnumerator")
 
+(defknown gc-collect (System.GC :method Collect)
+    "Invokes .Net garbage collector")
+
+(defknown gc-wait-for-pending-finalizers (System.GC :method WaitForPendingFinalizers)
+    "Waits for pending finalizers")
+
 ;;; vim: ft=lisp et

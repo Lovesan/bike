@@ -76,7 +76,9 @@
                          (if (null-pointer-p pointer)
                            nil
                            (let ((object (,%%ctr pointer)))
-                             (tg:finalize object (lambda () (%free-handle pointer)))
+                             (tg:finalize object (lambda ()
+                                                   (when +coreclr-host+
+                                                     (%free-handle pointer))))
                              object)))))))
   (frob object nil)
   (frob type)

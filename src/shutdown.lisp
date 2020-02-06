@@ -22,28 +22,28 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
-(asdf:defsystem #:bike-internals
-  :version "0.9.0"
-  :description "Common Lisp .Net Core Interop Internals"
-  :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
-  :licence "MIT"
-  :depends-on (#:uiop
-               #:alexandria
-               #:cffi
-               #:cl-ppcre
-               #:split-sequence
-               #:flexi-streams
-               #:trivial-features
-               #:trivial-garbage
-               #:bordeaux-threads)
-  :serial t
-  :components ((:module "src"
-                :serial t
-                :components ((:file "internals-package")
-                             (:file "features")
-                             (:file "internals-ffi")
-                             (:file "rwlock")
-                             (:file "internals")))))
+(in-package #:bike)
+
+(defun shutdown-bike ()
+  (format *error-output* "~&[bike] Clearing invocation cache~%")
+  (clear-invocation-cache)
+  (format *error-output* "~&[bike] Wiping out lisp handles~%")
+  (%clear-handle-table)
+  (format *error-output* "~&[bike] Performing full GC~%")
+  (tg:gc :full t)
+  (format *error-output* "~&[bike] Performing CoreCLR GC~%")
+  (gc-collect)
+  (gc-wait-for-pending-finalizers)
+  (format *error-output* "~&[bike] Shutting down CoreCLR~%")
+  (shutdown-coreclr)
+  #+(and sbcl coreclr-windows)
+  (progn
+    ;; TODO: Figure out why sbcl crashes without this
+    (format *error-output* "~&[bike] Waiting 5 sec. for CoreCLR to shut down~%")
+    (tg:gc :full t)
+    (sleep 5))
+  (format *error-output* "~&[bike] Shutdown complete~%"))
+
+(uiop:register-image-dump-hook 'shutdown-bike)
 
 ;;; vim: ft=lisp et

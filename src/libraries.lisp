@@ -43,10 +43,11 @@
     (values))
   (uiop:register-image-restore-hook 'init-coreclr-search-location))
 
-(define-foreign-library coreclr
-  (t #.+coreclr-library-file+))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (define-foreign-library coreclr
+    (t #.+coreclr-library-file+))
 
-(use-foreign-library coreclr)
+  (use-foreign-library coreclr))
 
 (defun get-trusted-platform-assemblies ()
   "Retrieves a list of pathnames of trusted platform assemblies"

@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike
-  :version "0.8.0"
+  :version "0.9.0"
   :description "Common Lisp .Net Core Interop"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
@@ -62,7 +62,8 @@
                              (:file "api-reflection")
                              (:file "invocation-cache")
                              (:file "members")
-                             (:file "api"))))
+                             (:file "api")
+                             (:file "shutdown"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))
 
 ;;; vim: ft=lisp et

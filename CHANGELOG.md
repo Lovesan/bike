@@ -1,3 +1,6 @@
+# 0.9.0 Perform proper cleanup on lisp image dump
+  * Implemented proper shutdown sequence which gets invoked on image dump
+
 # 0.8.0 Improved printing
   * Print dotnet object using plain ```.ToString()``` in case when both ```*PRINT-READABLY*``` and ```*PRINT-ESCAPE*``` are ```NIL```
   * Updated installation guide in README

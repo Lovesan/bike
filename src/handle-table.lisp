@@ -106,4 +106,10 @@
                (< handle length))
       (svref data handle))))
 
+(defun %clear-handle-table ()
+  (with-handle-table (data length :write)
+    (dotimes (i length)
+      (setf (svref data i) nil))
+    (values)))
+
 ;;; vim: ft=lisp et

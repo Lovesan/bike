@@ -205,6 +205,19 @@
 
 (uiop:register-image-restore-hook #'initialize-coreclr (not +coreclr-host+))
 
+(defun shutdown-coreclr ()
+  (let ((host +coreclr-host+))
+    (if host
+      (with-foreign-object (pcode :int)
+        (setf +coreclr-host+ nil)
+        (let ((rv (coreclr-shutdown-2 (%coreclr-host-handle host)
+                                      (%coreclr-host-domain-id host)
+                                      pcode)))
+          (unless (zerop rv)
+            (error "Unable to shutdown coreclr: HRESULT ~8,'0X" rv))
+          (mem-ref pcode :int)))
+      0)))
+
 #+coreclr-restore-signals
 (progn
 
