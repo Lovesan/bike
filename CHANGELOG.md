@@ -1,3 +1,6 @@
+# 0.9.1 Invocation cache-related bugfix
+  * Fixed a small bug with wrong keyword arguments
+
 # 0.9.0 Perform proper cleanup on lisp image dump
   * Implemented proper shutdown sequence which gets invoked on image dump
 

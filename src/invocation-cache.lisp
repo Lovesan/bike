@@ -103,7 +103,10 @@
 (defun ientry-hash-code (entry)
   (declare (type invocation-entry entry))
   (with-ientry (type name kind type-arg-count type-args arg-type-count arg-types) entry
-    (ientry-hash-code* type name kind type-arg-count type-args arg-type-count arg-types)))
+    (ientry-hash-code* type name kind :type-arg-count type-arg-count
+                                      :type-args type-args
+                                      :arg-type-count arg-type-count
+                                      :arg-types arg-types)))
 
 (defun ientry-equals* (entry type* name* kind* &key ((:type-arg-count type-arg-count*) 0)
                                                     ((:type-args type-args*) '())
@@ -134,7 +137,10 @@
 (defun ientry-equals (left right)
   (declare (type invocation-entry left right))
   (with-ientry (type name kind type-arg-count type-args arg-type-count arg-types) right
-    (ientry-equals* left type name kind type-arg-count type-args arg-type-count arg-types)))
+    (ientry-equals* left type name kind :type-arg-count type-arg-count
+                                        :type-args type-args
+                                        :arg-type-count arg-type-count
+                                        :arg-types arg-types)))
 
 (defun %get-ientry (type name kind &key (type-arg-count 0)
                                         (type-args '())
