@@ -280,12 +280,26 @@ namespace BikeInterop
             {
                 var instance = isStatic ? null : UnboxObject(target);
                 var type = isStatic ? (Type)UnboxObject(target) : instance.GetType();
-                var flags = BindingFlags.Public | BindingFlags.GetProperty | BindingFlags.IgnoreCase;
-                flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
-                var property = type.GetProperty(propertyName, flags);
-                if (property == null || property.GetIndexParameters().Length > 0)
-                    throw new MissingMemberException(type.FullName, propertyName);
-                invocationResult = property.GetValue(instance);
+                if (type.IsCOMObject)
+                {
+                    invocationResult = type.InvokeMember(
+                        propertyName,
+                        BindingFlags.GetProperty | BindingFlags.IgnoreCase,
+                        null,
+                        instance,
+                        EmptyArray,
+                        CultureInfo.CurrentCulture
+                    );
+                }
+                else
+                {
+                    var flags = BindingFlags.Public | BindingFlags.GetProperty | BindingFlags.IgnoreCase;
+                    flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
+                    var property = type.GetProperty(propertyName, flags);
+                    if (property == null || property.GetIndexParameters().Length > 0)
+                        throw new MissingMemberException(type.FullName, propertyName);
+                    invocationResult = property.GetValue(instance);
+                }
             }
             catch (TargetInvocationException ex)
             {
@@ -331,12 +345,25 @@ namespace BikeInterop
                 var instance = isStatic ? null : UnboxObject(target);
                 var type = isStatic ? (Type)UnboxObject(target) : instance.GetType();
                 var realValue = UnboxObject(value);
-                var flags = BindingFlags.Public | BindingFlags.SetProperty | BindingFlags.IgnoreCase;
-                flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
-                var property = type.GetProperty(propertyName, flags);
-                if(property == null || property.GetIndexParameters().Length > 0)
-                    throw new MissingMemberException(type.FullName, propertyName);
-                property.SetValue(instance, realValue);
+                if (type.IsCOMObject)
+                {
+                    type.InvokeMember(
+                        propertyName,
+                        BindingFlags.SetProperty | BindingFlags.IgnoreCase,
+                        null,
+                        instance,
+                        new [] {realValue},
+                        CultureInfo.CurrentCulture);
+                }
+                else
+                {
+                    var flags = BindingFlags.Public | BindingFlags.SetProperty | BindingFlags.IgnoreCase;
+                    flags |= isStatic ? BindingFlags.Static : BindingFlags.Instance;
+                    var property = type.GetProperty(propertyName, flags);
+                    if (property == null || property.GetIndexParameters().Length > 0)
+                        throw new MissingMemberException(type.FullName, propertyName);
+                    property.SetValue(instance, realValue);
+                }
             }
             catch (TargetInvocationException ex)
             {
@@ -384,14 +411,27 @@ namespace BikeInterop
                 var instance = UnboxObject(target);
                 var type = instance.GetType();
                 var realArgs = UnboxArgs(args, nArgs);
-                const BindingFlags flags = BindingFlags.Public |
-                                           BindingFlags.GetProperty |
-                                           BindingFlags.IgnoreCase |
-                                           BindingFlags.Instance;
-                var indexer = type.GetProperties(flags).FirstOrDefault(x => x.GetIndexParameters().Length > 0);
-                if (indexer == null)
-                    throw new MissingMemberException($"Indexer not found on {type.FullName}");
-                invocationResult = indexer.GetValue(instance, realArgs);
+                if (type.IsCOMObject)
+                {
+                    invocationResult = type.InvokeMember(
+                        string.Empty,
+                        BindingFlags.GetProperty,
+                        null,
+                        instance,
+                        realArgs,
+                        CultureInfo.CurrentCulture);
+                }
+                else
+                {
+                    const BindingFlags flags = BindingFlags.Public |
+                                               BindingFlags.GetProperty |
+                                               BindingFlags.IgnoreCase |
+                                               BindingFlags.Instance;
+                    var indexer = type.GetProperties(flags).FirstOrDefault(x => x.GetIndexParameters().Length > 0);
+                    if (indexer == null)
+                        throw new MissingMemberException($"Indexer not found on {type.FullName}");
+                    invocationResult = indexer.GetValue(instance, realArgs);
+                }
             }
             catch (TargetInvocationException ex)
             {
@@ -436,16 +476,32 @@ namespace BikeInterop
             {
                 var instance = UnboxObject(target);
                 var type = instance.GetType();
-                var realArgs = UnboxArgs(args, nArgs);
-                var realValue = UnboxObject(value);
-                const BindingFlags flags = BindingFlags.Public |
-                                           BindingFlags.GetProperty |
-                                           BindingFlags.IgnoreCase |
-                                           BindingFlags.Instance;
-                var indexer = type.GetProperties(flags).FirstOrDefault(x => x.GetIndexParameters().Length > 0);
-                if (indexer == null)
-                    throw new MissingMemberException($"Indexer not found on {type.FullName}");
-                indexer.SetValue(instance, realValue, realArgs);
+                if (type.IsCOMObject)
+                {
+                    var realArgs = new object[nArgs + 1];
+                    realArgs[0] = UnboxObject(value);
+                    UnboxArgsInto(realArgs, 1, args, nArgs);
+                    type.InvokeMember(
+                        string.Empty,
+                        BindingFlags.SetProperty,
+                        null,
+                        instance,
+                        realArgs,
+                        CultureInfo.CurrentCulture);
+                }
+                else
+                {
+                    var realArgs = UnboxArgs(args, nArgs);
+                    var realValue = UnboxObject(value);
+                    const BindingFlags flags = BindingFlags.Public |
+                                               BindingFlags.GetProperty |
+                                               BindingFlags.IgnoreCase |
+                                               BindingFlags.Instance;
+                    var indexer = type.GetProperties(flags).FirstOrDefault(x => x.GetIndexParameters().Length > 0);
+                    if (indexer == null)
+                        throw new MissingMemberException($"Indexer not found on {type.FullName}");
+                    indexer.SetValue(instance, realValue, realArgs);
+                }
             }
             catch (TargetInvocationException ex)
             {
@@ -996,6 +1052,98 @@ namespace BikeInterop
             return UnboxObject(value) is LispObject;
         }
 
+        public static void PinObject(
+            IntPtr obj,
+            out IntPtr pointer,
+            out IntPtr handle,
+            out IntPtr exception)
+        {
+            pointer = IntPtr.Zero;
+            handle = IntPtr.Zero;
+            exception = IntPtr.Zero;
+            Exception e = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realObject = UnboxObject(obj);
+                var gcHandle = GCHandle.Alloc(realObject, GCHandleType.Pinned);
+                pointer = gcHandle.AddrOfPinnedObject();
+                handle = GCHandle.ToIntPtr(gcHandle);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            exception = BoxObject(e);
+        }
+
+        public static void MakeArrayOf(
+            IntPtr type,
+            IntPtr args,
+            int nArgs,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            result = IntPtr.Zero;
+            typeCode = (int)TypeCode.Empty;
+            exception = IntPtr.Zero;
+            Exception e = null;
+            object invocationResult = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realType = (Type)UnboxObject(type);
+                var indices = UnboxIndexArgs(args, nArgs);
+                invocationResult = Array.CreateInstance(realType, indices);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            typeCode = invocationResult.GetFullTypeCode();
+            result = BoxObject(invocationResult);
+            exception = BoxObject(e);
+        }
+
         public static void MakeVectorOf(
             IntPtr type,
             int length,
@@ -1084,6 +1232,97 @@ namespace BikeInterop
 
             typeCode = (int)TypeCode.Int64;
             result = value;
+            exception = BoxObject(e);
+        }
+
+        public static void ArrayGet(
+           IntPtr array,
+           IntPtr args,
+           int nArgs,
+           out IntPtr result,
+           out int typeCode,
+           out IntPtr exception)
+        {
+            result = IntPtr.Zero;
+            typeCode = (int)TypeCode.Empty;
+            exception = IntPtr.Zero;
+            Exception e = null;
+            object invocationResult = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realArray = (Array)UnboxObject(array);
+                var indices = UnboxIndexArgs(args, nArgs);
+                invocationResult = realArray.GetValue(indices);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
+            result = BoxObject(invocationResult);
+            typeCode = invocationResult.GetFullTypeCode();
+            exception = BoxObject(e);
+        }
+
+        public static void ArraySet(
+            IntPtr array,
+            IntPtr args,
+            int nArgs,
+            IntPtr value,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            Exception e = null;
+
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var realArray = (Array)UnboxObject(array);
+                var realValue = UnboxObject(value);
+                var indices = UnboxIndexArgs(args, nArgs);
+                realArray.SetValue(realValue, indices);
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+
             exception = BoxObject(e);
         }
 
@@ -1260,6 +1499,17 @@ namespace BikeInterop
             return realArgs;
         }
 
+        private static unsafe void UnboxArgsInto(object[] result, int startIndex, IntPtr args, int nArgs)
+        {
+            var argsPointer = (IntPtr*) args;
+            if (argsPointer == null)
+                return;
+            for (var i = 0; i < nArgs; ++i)
+            {
+                result[i + startIndex] = UnboxObject(argsPointer[i]);
+            }
+        }
+
         private static unsafe Type[] UnboxTypeArgs(IntPtr args, int nArgs)
         {
             var types = new Type[nArgs];
@@ -1272,6 +1522,20 @@ namespace BikeInterop
             }
 
             return types;
+        }
+
+        private static unsafe long[] UnboxIndexArgs(IntPtr args, int nArgs)
+        {
+            var indices = new long[nArgs];
+            var argsPointer = (long*) args;
+            if(argsPointer == null)
+                throw new ArgumentNullException(nameof(args));
+            for (var i = 0; i < nArgs; ++i)
+            {
+                indices[i] = argsPointer[i];
+            }
+
+            return indices;
         }
     }
 }

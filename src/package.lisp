@@ -151,6 +151,9 @@
    #:ref
    #:box
    #:unbox
+   #:with-fixed
+   #:with-fixeds
+   #:with-fixeds*
    #:with-disposable
    #:with-disposables
    #:with-disposables*
@@ -161,6 +164,7 @@
    ;; arrays
    #:do-bike-vector
    #:dnvref
+   #:dnaref
    #:list-to-bike-vector
    #:bike-vector-to-list))
 

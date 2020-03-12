@@ -380,6 +380,102 @@
   "Accesses a .Net VECTOR (an array of rank 1) at INDEX"
   (funcall #'(setf %net-vref) new-value vector index))
 
+(defun dnaref (array &rest indices)
+  (declare (type dotnet-object array)
+           (dynamic-extent indices))
+  "Accesses a .Net ARRAY at INDICES"
+  (let ((nargs (length indices)))
+    (with-foreign-objects ((args :int64 nargs)
+                           (rv :pointer)
+                           (code :pointer)
+                           (ex :pointer))
+      (loop :for idx :of-type (signed-byte 64) :in indices
+            :for i :from 0
+            :do (setf (mem-aref args :int64 i) idx))
+      (hostcall array-get
+                :pointer (%dotnet-object-handle array)
+                :pointer args
+                :int nargs
+                :pointer rv
+                :pointer code
+                :pointer ex
+                :void)
+      (%transform-rv rv code ex))))
+
+(defun (setf dnaref) (new-value array &rest indices)
+  (declare (type dotnet-object array)
+           (dynamic-extent indices))
+  "Accesses a .Net ARRAY at INDICES"
+  (let ((nargs (length indices)))
+    (multiple-value-bind (boxed cleanup) (%box new-value)
+      (with-foreign-objects ((args :int64 nargs)
+                             (ex :pointer))
+        (loop :for idx :of-type (signed-byte 64) :in indices
+              :for i :from 0
+              :do (setf (mem-aref args :int64 i) idx))
+        (hostcall array-set
+                  :pointer (%dotnet-object-handle array)
+                  :pointer args
+                  :int nargs
+                  :pointer boxed
+                  :pointer ex
+                  :void)
+        (when cleanup (%free-handle boxed))
+        (let ((ex (mem-ref ex :pointer)))
+          (%transform-exception ex)
+          new-value)))))
+
+(declaim (inline %pin-object))
+(defun %pin-object (obj)
+  (declare (type dotnet-object obj))
+  (with-foreign-objects ((ptr :pointer)
+                         (handle :pointer)
+                         (ex :pointer))
+    (hostcall pin-object
+              :pointer (%dotnet-object-handle obj)
+              :pointer ptr
+              :pointer handle
+              :pointer ex)
+    (let ((ex (mem-ref ex :pointer)))
+      (%transform-exception ex)
+      (values (mem-ref ptr :pointer)
+              (mem-ref handle :pointer)))))
+
+(defmacro with-fixed ((pointer-var object) &body body)
+  (declare (type symbol pointer-var))
+  "Executes BODY forms in a dynamic environment where
+ POINTER-VAR is bound to the pinned data of an OBJECT."
+  (with-gensyms (handle)
+    `(multiple-value-bind (,pointer-var ,handle)
+         (%pin-object ,object)
+       (declare (type foreign-pointer ,pointer-var))
+       (unwind-protect (locally ,@body)
+         (%free-handle ,handle)))))
+
+(defmacro with-fixeds ((&rest bindings) &body body)
+  "Executes BODY forms in a dynamic environment where
+ BINDINGS are bound to the pinned data of corresponding objects."
+  (labels ((rec (bindings new-bindings)
+             (if (endp bindings)
+               `(let ,new-bindings
+                  (declare (type foreign-pointer ,@(mapcar #'car new-bindings)))
+                  ,@body)
+               (destructuring-bind (pointer-var obj)
+                   (first bindings)
+                 (with-gensyms (pointer)
+                   `(with-fixed (,pointer ,obj)
+                      ,(rec (rest bindings)
+                            (cons (list pointer-var pointer) new-bindings))))))))
+    (rec bindings '())))
+
+(defmacro with-fixeds* ((&rest bindings) &body body)
+  "Executes BODY forms in a dynamic environment where
+ BINDINGS are bound to the pinned data of corresponding objects."
+  (if (endp bindings)
+    `(locally ,@body)
+    `(with-fixed ,(first bindings)
+       (with-fixeds* ,(rest bindings) ,@body))))
+
 (defun %get-delegate-trampoline (method-info type-args)
   (declare (type dotnet-object method-info)
            (type list type-args))

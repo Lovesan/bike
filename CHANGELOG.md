@@ -1,3 +1,8 @@
+# 0.10.0 Object pinning, n-ary array access, COM access fixes
+  * ```REFLECTION-PROPERTY``` and ```REFLECTION-REF``` now work for COM objects
+  * Added ```DNAREF``` function and its ```(SETF DNAREF)``` counterpart for convenient multidimensional array access
+  * Added ```WITH-FIXED``` macro, which behaves exactly like C# ```fixed``` operator, i.e. pins an object and retrieves pointer to object's data. May be useful for array etc.
+
 # 0.9.1 Invocation cache-related bugfix
   * Fixed a small bug with wrong keyword arguments
 

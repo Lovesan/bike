@@ -60,6 +60,28 @@
       (incf (dnvref vector i)))
     (is (= 65 (reduce #'+ (bike-vector-to-list vector))))))
 
+(test test-multidimensional-array-access
+  (let ((arr (new '(array :int 2) 0 2 0 4)))
+    (is (= 0 (invoke arr 'GetLowerBound 0)))
+    (is (= 0 (invoke arr 'GetLowerBound 1)))
+    (is (= 1 (invoke arr 'GetUpperBound 0)))
+    (is (= 3 (invoke arr 'GetUpperBound 1)))
+    (dotimes (i 2)
+      (dotimes (j 4)
+        (setf (dnaref arr i j) (+ i j))))
+    (loop :with acc = 0
+          :for i :below 2 :do
+            (loop :for j :below 4
+                  :do (incf acc (dnaref arr i j)))
+          :finally (is (= acc 16)))))
+
+(test test-fixed-vector
+  (let ((vector (new '(array :int) 10)))
+    (with-fixed (ptr vector)
+      (dotimes (i 10)
+        (setf (cffi:mem-aref ptr :int i) (1+ i))))
+    (is (= 55 (reduce #'+ (bike-vector-to-list vector))))))
+
 (test test-exception
   (let ((ex nil))
     (handler-case
