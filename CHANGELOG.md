@@ -1,3 +1,7 @@
+# 0.11.0 Convenient reader macros
+  * Implemented several reader macros for convenience
+    * Take a look at ```examples/syntax.lisp```
+
 # 0.10.0 Object pinning, n-ary array access, COM access fixes
   * ```REFLECTION-PROPERTY``` and ```REFLECTION-REF``` now work for COM objects
   * Added ```DNAREF``` function and its ```(SETF DNAREF)``` counterpart for convenient multidimensional array access

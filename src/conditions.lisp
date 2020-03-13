@@ -213,4 +213,11 @@
             :initarg :object))
   (:documentation "Represents a .Net Exception"))
 
+(define-condition bike-reader-error (bike-error)
+  ((%datum :initarg :message
+           :reader bike-reader-error-message))
+  (:report (lambda (c s)
+             (format s "Reader error: ~a"
+                     (bike-reader-error-message c)))))
+
 ;;; vim: ft=lisp et

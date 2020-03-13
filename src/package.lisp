@@ -25,7 +25,7 @@
 (in-package #:cl-user)
 
 (uiop:define-package #:bike
-  (:use #:cl #:cffi #:bike-internals)
+  (:use #:cl #:cffi #:bike-internals #:named-readtables)
   (:import-from #:alexandria
                 #:with-gensyms
                 #:symbolicate
@@ -130,6 +130,8 @@
    #:accessor-resolution-error-member-kind
    #:accessor-resolution-error-member
    #:enum-resolution-error
+   #:bike-reader-error
+   #:bike-reader-error-message
 
    ;; reflection api
    #:reflection-invoke
@@ -166,6 +168,9 @@
    #:dnvref
    #:dnaref
    #:list-to-bike-vector
-   #:bike-vector-to-list))
+   #:bike-vector-to-list
+
+   ;; syntax
+   #:bike-syntax))
 
 ;;; vim: ft=lisp et

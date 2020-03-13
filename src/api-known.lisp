@@ -165,7 +165,7 @@
 (defknown make-ref-type (System.Type :method MakeByRefType)
     "Creates a ref type from a TYPE")
 
-(defknown make-generic-type (System.Type :method MakeGenericType System.Type[])
+(defknown make-generic-type (System.Type :method MakeGenericType "System.Type[]")
     "Creates a generic type from a type definition")
 
 (declaim (ftype (function (dotnet-type dotnet-type) boolean) bike-subclass-p))

@@ -22,21 +22,24 @@ This library implements cross-platform Common Lisp interface to .Net Core platfo
 ````lisp
 (use-package :bike)
 
+(named-readtables:in-readtable bike-syntax)
+
 (import-assembly 'System.Runtime.InteropServices.RuntimeInformation)
 
+(use-namespace 'System)
 (use-namespace 'System.Runtime.InteropServices)
 
 (defun hello ()
-  (let* ((os (property 'RuntimeInformation 'OSDescription))
-         (delegate (new '(System.Action :string)
+  (let* ((os [:RuntimeInformation %OSDescription])
+         (delegate (new '(Action :string)
                         (lambda (who)
                           (format t "Hello ~a!~%You are running .Net Core~% inside ~a ~a~% on ~a"
                                   who
                                   (lisp-implementation-type)
                                   (lisp-implementation-version)
                                   os))))
-         (user (property 'System.Environment 'UserName)))
-    (invoke delegate 'invoke user)))
+         (user [:Environment %UserName]))
+    [delegate Invoke user]))
 
 (hello)
 
@@ -137,8 +140,6 @@ Testers are welcome.
 * Fancy async/await syntax
 
 * MacOS X testing
-
-* Fancy reader syntax like the one RDNZL had
 
 * Implement some cache for parsed type definitions
 

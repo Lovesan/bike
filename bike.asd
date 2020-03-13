@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike
-  :version "0.10.0"
+  :version "0.11.0"
   :description "Common Lisp .Net Core Interop"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
@@ -37,7 +37,8 @@
                #:trivial-features
                #:trivial-garbage
                #:bordeaux-threads
-               #:bike-internals)
+               #:bike-internals
+               #:named-readtables)
   :serial t
   :components ((:module "src"
                 :serial t
@@ -63,6 +64,7 @@
                              (:file "invocation-cache")
                              (:file "members")
                              (:file "api")
+                             (:file "syntax")
                              (:file "shutdown"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))
 
