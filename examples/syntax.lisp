@@ -35,7 +35,7 @@
   ;; The ':' right after square bracket implies that the
   ;;   first argument is not evaluated and the whole expression
   ;;   should be treated as static member(method in this case) access
-  [:Console WriteLine "Hello, World!~%"]
+  [:Console WriteLine "Hello, World!"]
   ;; Generic methods are invoked as in bike:invoke, i.e. you use tree of linked lists
   ;;  instead of string designator to specify a method.
   (let ((tuple [:Tuple (Create :string :string) "Hello" "World"]))
