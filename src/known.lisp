@@ -231,7 +231,7 @@
 
 (defun %compile-known-method (info name doc decls)
   (declare (type dotnet-object info)
-           (type (or symbol (cons (eql setf) (cons symbol nil))) name)
+           (type (or symbol cons) name)
            (type (or null string) doc)
            (type list decls))
   (let* ((staticp (%get-property info nil "IsStatic"))
@@ -328,7 +328,7 @@
              (reader (car accessors))
              (writer (cdr accessors)))
         (when reader (setf reader (%compile-known-method reader name doc decls)))
-        (when writer (setf writer (%compile-known-method writer `(setf ,name) doc decls)))
+        (when writer (setf writer (%compile-known-method writer (list 'setf name) doc decls)))
         (%register-known name type-name member-name '()
                          :property (cons reader writer) arg-types)))))
 
