@@ -35,6 +35,10 @@
            #:simple-callback
            #:enumerable-callbacks
            #:example-exception-case
-           #:example-exception-bind))
+           #:example-exception-bind
+           #+windows
+           #:hello-wpf
+           #+windows
+           #:hello-windows-forms))
 
 ;;; vim: ft=lisp et

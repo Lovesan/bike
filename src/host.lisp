@@ -163,8 +163,9 @@
   (declare (type string domain-name))
   (let* ((exe (get-exe-path))
          (tpa (convert-to-foreign (%get-tpa-string) 'lpastr))
-         (app-paths (convert-to-foreign (%get-app-paths) 'lpastr))
-         (app-ni-paths (convert-to-foreign (%get-app-paths) 'lpastr)))
+         (assembly-dirs (%get-app-paths))
+         (app-paths (convert-to-foreign assembly-dirs 'lpastr))
+         (app-ni-paths (convert-to-foreign assembly-dirs 'lpastr)))
     (unwind-protect
          (with-foreign-strings ((tpa-key "TRUSTED_PLATFORM_ASSEMBLIES"
                                          :encoding :ascii)

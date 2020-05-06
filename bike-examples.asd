@@ -23,7 +23,7 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (asdf:defsystem #:bike-examples
-  :version "0.11.0"
+  :version "0.12.0"
   :description "Common Lisp .Net Core Interop examples"
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
@@ -37,6 +37,10 @@
                              (:file "callbacks")
                              (:file "exceptions")
                              (:file "syntax")
-                             (:file "aspnet-mvc")))))
+                             (:file "aspnet-mvc")
+                             #+(or windows win32 mswindows)
+                             (:file "wpf")
+                             #+(or windows win32 mswindows)
+                             (:file "windows-forms")))))
 
 ;;; vim: ft=lisp et

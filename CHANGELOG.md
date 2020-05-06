@@ -1,3 +1,13 @@
+# 0.12.0 WPF & WinForms support, various fixes
+  * On Windows, bike defaults to desktop SDK, which allows for WPF and Windows Forms GUI frameworks.
+    * Tested on SBCL & CCL
+  * Fixed assembly search after image dump
+  * Fixed minor misprints in type declarations
+  * Fixed MacOS-related misprints
+  * Saner error messages for custom syntax
+  * Mentioned SBCL improvements in README
+  * Fixed .NET 6.0 trusted assembly loading
+
 # 0.11.0 Convenient reader macros
   * Implemented several reader macros for convenience
     * Take a look at ```examples/syntax.lisp```

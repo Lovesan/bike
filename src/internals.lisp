@@ -166,16 +166,16 @@
 
 
 (defun %find-interop ()
-  (or (and (directory-exists-p *interop-build-dir*)
-           (probe-file* (merge-pathnames* +interop-library-file+
-                                          *interop-build-dir*)))
-      (probe-file* (merge-pathnames* +interop-library-file+
-                                     (get-pathname-defaults)))
+  (or (probe-file* (merge-pathnames* +interop-library-file+
+                                     (pathname-parent-directory-pathname
+                                      (get-exe-path))))
       (probe-file* (merge-pathnames* +interop-library-file+
                                      (lisp-implementation-directory)))
       (probe-file* (merge-pathnames* +interop-library-file+
-                                     (pathname-parent-directory-pathname
-                                      (get-exe-path))))))
+                                     (uiop:get-pathname-defaults)))
+      (and (directory-exists-p *interop-build-dir*)
+           (probe-file* (merge-pathnames* +interop-library-file+
+                                          *interop-build-dir*)))))
 
 (defun find-interop (&optional build)
   (or (%find-interop)
@@ -185,12 +185,12 @@
 (defun find-coreclr ()
   "Returns full path to coreclr library or NIL if not found"
   (or (probe-file* (merge-pathnames* +coreclr-library-file+
-                                     (get-pathname-defaults)))
+                                     (pathname-parent-directory-pathname
+                                      (get-exe-path))))
       (probe-file* (merge-pathnames* +coreclr-library-file+
                                      (lisp-implementation-directory)))
       (probe-file* (merge-pathnames* +coreclr-library-file+
-                                     (pathname-parent-directory-pathname
-                                      (get-exe-path))))
+                                     (uiop:get-pathname-defaults)))
       (%find-by-command)))
 
 ;;; vim: ft=lisp et
