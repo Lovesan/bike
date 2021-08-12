@@ -104,7 +104,7 @@
     (buffer :pointer)
     (file-part :pointer)))
 
-#+corecl-macos
+#+coreclr-macos
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defcfun (ns-get-executable-path "_NSGetExecutablePath")
       :int
