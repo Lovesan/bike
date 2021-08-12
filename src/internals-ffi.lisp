@@ -132,8 +132,8 @@
       (unless (null-pointer-p buf)
         (foreign-free buf))))
   #+coreclr-macos
-  (let ((size 260)
-        (buf (foreign-alloc :char :count size)))
+  (let* ((size 260)
+         (buf (foreign-alloc :char :count size)))
     (unwind-protect
          (loop :for rv = (ns-get-executable-path buf size) :do
            (when (zerop rv)
