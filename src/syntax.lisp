@@ -36,6 +36,17 @@
          (prefix (maybe-read-char stream #\$ #\%))
          (member (read stream t nil t))
          (args (read-delimited-list #\] stream t)))
+    (when (and prefix args)
+      (error 'bike-reader-error
+             :message (format nil
+                              (uiop:strcat
+                               "~&Field and property forms must not have arguments.~%"
+                               "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
+                              staticp
+                              target
+                              prefix
+                              member
+                              args)))
     `(,(case prefix
          (#\% 'property)
          (#\$ 'field)
@@ -58,7 +69,7 @@
 
 (defun read-sharp-e (stream c n)
   (declare (ignore c n))
-  (let ((form (read stream t nil)))
+  (let ((form (read stream t nil t)))
     (unless (typep form '(cons string-designator cons))
       (error 'bike-reader-error
              :message (format nil "~a is not a list of form (EnumType EnumValue1 EnumValue2 ...)"
