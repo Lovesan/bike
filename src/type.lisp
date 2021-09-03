@@ -96,7 +96,7 @@
   (ref-entry nil :type (or null type-entry))
   (pointer-entry nil :type (or null type-entry))
   (enum-values nil :type (or null hash-table) :read-only t)
-  (array-entries nil :type (or null (simple-array type-entry (#.+max-array-rank+)))))
+  (array-entries nil :type (or null (simple-array (or null type-entry) (#.+max-array-rank+)))))
 
 #+sbcl
 (sb-ext:defglobal *type-table* nil)
