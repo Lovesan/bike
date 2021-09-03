@@ -96,15 +96,13 @@ SBCL is the main development and testing platform.
 
 The library seems to work well on SBCL/Windows, the runtimes and garbage collectors seem to coexist peacefully. SBCL callbacks can even be utilized by .Net [System.Threading.Tasks](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks?view=netcore-2.2)
 
-However, there is one important issue here. That is the NullReferenceException.
+There were some issues with exceptions in the past, but those were resolved.
 
-Although rare in production code, this would probably lead to SBCL runtime corruption and crash, should one occur on a lisp thread.
+The reason for those issues was described [in my (D.I.) SBCL patch that had been applied in 2019.](https://sourceforge.net/p/sbcl/mailman/sbcl-devel/thread/CAK3-8Ji8XrjZd8ttKa0XOFPTewbg%2Bf2t5U3ZCwWGdcv6S6W_mQ%40mail.gmail.com/#msg36687909)
 
-The reason for this is described [in my (D.I.) SBCL patch that had been applied recently.](https://sourceforge.net/p/sbcl/mailman/sbcl-devel/thread/CAK3-8Ji8XrjZd8ttKa0XOFPTewbg%2Bf2t5U3ZCwWGdcv6S6W_mQ%40mail.gmail.com/#msg36687909)
+Basically, on x86-64 Windows, SBCL uses VEH, and its handler had been catching all the exceptions before .Net Core handlers even had a chance to look at their ones. This, next, sometimes led to a situation where SBCL disallowed .Net runtime to enter into the correct state, which led to the corruption of both runtimes and process crashes.
 
-Basically, on x86-64 Windows, SBCL uses VEH, and its handler catches all the exceptions before .Net Core handlers even have a chance to look at their ones. This, next, leads to a situation where SBCL disallows .Net runtime to enter into correct state, which leads to the corruption of both runtimes and process crash.
-
-The above patch fixed the situation for usual exceptions (Exception, IndexOutOfBoundsExcepion, etc), but the EXCEPTION_ACCESS_VIOLATION(which .Net translates into NullReferenceException should the address be small enough) handler remains here. It is not clear what we should do with that situation. Maybe add another ````if```` statement, which would exclude low address space, but the best thing we can do is actually rewrite SBCL handlers on x64 Windows to use [RtlInstallFunctionTableCallback](https://docs.microsoft.com/en-us/windows/desktop/api/winnt/nf-winnt-rtlinstallfunctiontablecallback) instead of VEH.
+Seems like it has been resolved. [The latest patch from Luís Oliveira greatly enhanced SBCL exception handling.](https://github.com/sbcl/sbcl/commit/50085a82c7bd6dfb91599f236e3d002f49ebec72)
 
 #### Linux
 
