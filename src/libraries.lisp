@@ -67,7 +67,8 @@
   (loop :with tpa-dlls = (get-trusted-platform-assemblies)
         :for full-pathname :in tpa-dlls
         :for name = (pathname-name full-pathname)
-        :when (uiop:string-prefix-p "System." name)
+        :when (and (uiop:string-prefix-p "System." name)
+                   (not (uiop:string-suffix-p name ".Native")))
           :collect name))
 
 (defun %get-app-paths ()
