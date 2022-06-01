@@ -54,13 +54,20 @@
           :name ,name
           :message (or ,message "Slot is required.")))
 
-(defvar *interop-build-dir*
-  (native-path
-   (merge-pathnames*
-    (make-pathname*
-     :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
-    (pathname-directory-pathname #.(current-lisp-file-pathname)))))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *interop-build-dir*
+    (native-path
+     (merge-pathnames*
+      (make-pathname*
+       :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
+      (pathname-directory-pathname #.(current-lisp-file-pathname))))))
 
+;; Clear interop assembly on rebuild
+(eval-when (:compile-toplevel :execute)
+  (unless (find-package '#:bike)
+    (delete-directory-tree (parse-native-namestring *interop-build-dir*)
+                           :validate t
+                           :if-does-not-exist :ignore)))
 
 (defun %version-compare (left right)
   (labels ((parse (c)
