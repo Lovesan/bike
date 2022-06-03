@@ -194,10 +194,16 @@
                                              host
                                              domain-id)))
                  (declare (type (unsigned-byte 32) rv))
-                 #+(and sbcl coreclr-restore-signals)
-                 (foreign-funcall "restore_sbcl_signals")
-                 #+(and (not sbcl) coreclr-restore-signals)
-                 (restore-lisp-sigactions)
+                 #+coreclr-restore-signals
+                 (progn
+                   ;; save coreclr signals
+                   (dotimes (i +nsig+)
+                     ;; Some of them would of course be ours lisp signals reestablished earlier
+                     (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i)))
+                   #+sbcl
+                   (foreign-funcall "restore_sbcl_signals")
+                   #-sbcl
+                   (restore-lisp-sigactions))
                  (unless (zerop rv)
                    (error "Unable to initialize coreclr: HRESULT ~8,'0X" rv))))
              (coreclr-host (mem-ref host :pointer)
@@ -230,22 +236,61 @@
     "Initializes CoreFX sigactions, namely for SIGCHLD, SIGCONT, SIGINT, SIGQUIT.
  We utilize CoreFX handlers for some/all of this, but use lisp signal masks for others"
     ;; first, force initialization of corefx signal handlers
+    (init-native-aux-signals)
     (hostcall initialize-corefx-signals :void)
-    ;; save corefx signals
-    (dotimes (i +nsig+)
-      ;; Some of them would of course be ours lisp signals reestablished earlier
-      (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i)))
+
     (setf +new-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (dotimes (i +nsig+)
+      (sigaction i (null-pointer) (sigaction-address +new-sigactions+ i))
+      (unless (pointer-eq (foreign-slot-value (sigaction-address +new-sigactions+ i)
+                                              '(:struct sigaction)
+                                              'handler)
+                          (foreign-slot-value (sigaction-address +lisp-sigactions+ i)
+                                              '(:struct sigaction)
+                                              'handler))
+        (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i))))
     (foreign-funcall "memcpy" :pointer +new-sigactions+
                               :pointer +lisp-sigactions+
                               size-t (* +nsig+ (foreign-type-size '(:struct sigaction))))
 
+    (disable-all-posix-signal-handling)
+
+    (flet ((collect-signals (from)
+             (loop :for i :below +nsig+
+                   :for saddr = (sigaction-address from i)
+                   :for handler = (foreign-slot-value saddr '(:struct sigaction) 'handler)
+                   :unless (or (pointer-eq handler (make-pointer +sig-dfl+))
+                               (pointer-eq handler (make-pointer +sig-ign+)))
+                     :collect (cons i handler))))
+      (let* ((lisp-signals (collect-signals +lisp-sigactions+))
+             (dotnet-signals (collect-signals +dotnet-sigactions+))
+             (changed-dotnet-signals
+               (remove-if (lambda (sig)
+                            (not
+                             (let ((dsig (find (car sig) lisp-signals
+                                               :key #'car)))
+                               (and dsig
+                                    (not (pointer-eq (cdr sig)
+                                                     (cdr dsig)))))))
+                          dotnet-signals))
+             (new-dotnet-signals (remove-if (lambda (sig)
+                                              (find sig lisp-signals :key #'car))
+                                            dotnet-signals :key #'car)))
+        (declare (ignore changed-dotnet-signals))
+        (dolist (sig new-dotnet-signals)
+          (let ((sig (car sig)))
+            (foreign-funcall "memcpy" :pointer (sigaction-address +lisp-sigactions+ sig)
+                                      :pointer (sigaction-address +dotnet-sigactions+ sig)
+                                      size-t (foreign-type-size '(:struct sigaction)))))))
+
+
+
     ;; only use SIGCHLD for now, dotnet background thread perfectly handles it
     (dolist (sig (list +sigchld+))
-      (let* ((addr (sigaction-address +new-sigactions+ sig))
-             (dotnet-addr (sigaction-address +dotnet-sigactions+ sig)))
-        (setf (foreign-slot-value addr '(:struct sigaction) 'handler)
-              (foreign-slot-value dotnet-addr '(:struct sigaction) 'handler))))
+      (setf (foreign-slot-value (sigaction-address +new-sigactions+ sig)
+                                '(:struct sigaction) 'handler)
+            (foreign-slot-value (sigaction-address +dotnet-sigactions+ sig)
+                                '(:struct sigaction) 'handler)))
 
     ;; init signals from new sigactions
     (dotimes (i +nsig+)

@@ -59,20 +59,37 @@ namespace BikeInterop
 
         private static readonly Logger Log = Logger.Get(typeof(Externals));
 
+
         /// <summary>
         /// Linux(Unix?) specific
         /// </summary>
         public static void InitializeCoreFxSignals()
         {
-            var method = typeof(Process)
-                .GetMethod(
-                    "EnsureSigChildHandler",
-                    BindingFlags.Static | BindingFlags.NonPublic);
-            if (method != null)
-            {
-                method.Invoke(null, new object[0]);
-            }
+            var processType = Assembly.Load("System.Diagnostics.Process")
+                .GetType("System.Diagnostics.Process", false, true);
+            var processEnsureSigChildHandlerAction =
+                processType
+                    ?.GetMethod("EnsureSigChildHandler",
+                        BindingFlags.Static | BindingFlags.NonPublic)
+                    ?.CreateDelegate(typeof(Action)) as Action;
+
+            var processEnsureInitializedAction =
+                processType
+                    ?.GetMethod("EnsureInitialized",
+                        BindingFlags.Static | BindingFlags.NonPublic)
+                    ?.CreateDelegate(typeof(Action)) as Action;
+
+            var consolePal = Assembly.Load("System.Console")
+                .GetType("System.ConsolePal", false, true);
+            var ensureConsoleInitializedAction =
+                consolePal?.GetMethod("EnsureConsoleInitialized", BindingFlags.Static | BindingFlags.NonPublic)
+                    ?.CreateDelegate(typeof(Action)) as Action;
+
+            processEnsureSigChildHandlerAction?.Invoke();
+            processEnsureInitializedAction?.Invoke();
+            ensureConsoleInitializedAction?.Invoke();
         }
+
         public static void GetLoadedAssemblies(
             out IntPtr result,
             out int typeCode,
@@ -1537,5 +1554,69 @@ namespace BikeInterop
 
             return indices;
         }
+
+        #region Generated delegate types for possibility of hostfxr usage
+        // ReSharper disable all
+        public delegate void InitializeCoreFxSignals_Delegate();
+        public delegate void GetLoadedAssemblies_Delegate(out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void InstallCallbacks_Delegate(IntPtr freeLispHandleCallback, IntPtr applyCallback, out IntPtr exception);
+        public delegate void GetTypeByName_Delegate(String name, Boolean throwOnError, IntPtr assembly, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void Invoke_Delegate(IntPtr target, Boolean isStatic, String methodName, IntPtr typeArgs, Int32 nTypeArgs, IntPtr args, Int32 nArgs, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void GetProperty_Delegate(IntPtr target, Boolean isStatic, String propertyName, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void SetProperty_Delegate(IntPtr target, Boolean isStatic, String propertyName, IntPtr value, out IntPtr exception);
+        public delegate void GetIndex_Delegate(IntPtr target, IntPtr args, Int32 nArgs, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void SetIndex_Delegate(IntPtr target, IntPtr value, IntPtr args, Int32 nArgs, out IntPtr exception);
+        public delegate void GetField_Delegate(IntPtr target, Boolean isStatic, String fieldName, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void SetField_Delegate(IntPtr target, Boolean isStatic, String fieldName, IntPtr value, out IntPtr exception);
+        public delegate void InvokeConstructor_Delegate(IntPtr type, IntPtr args, Int32 nArgs, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void GetDelegateForLispFunction_Delegate(IntPtr function, IntPtr delegateType, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void GetDelegateTrampoline_Delegate(IntPtr methodInfo, IntPtr args, Int32 nArgs, out IntPtr functionPointer, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void GetAccessorTrampolines_Delegate(IntPtr memberInfo, Int32 accessorMemberType, out IntPtr reader, out IntPtr readerPointer, out IntPtr writer, out IntPtr writerPointer, out IntPtr exception);
+        public delegate void FreeHandle_Delegate(IntPtr pointer);
+        public delegate IntPtr BoxBoolean_Delegate(Boolean value);
+        public delegate IntPtr BoxChar_Delegate(Int32 value);
+        public delegate IntPtr BoxUInt8_Delegate(Byte value);
+        public delegate IntPtr BoxInt8_Delegate(SByte value);
+        public delegate IntPtr BoxInt16_Delegate(Int16 value);
+        public delegate IntPtr BoxUInt16_Delegate(UInt16 value);
+        public delegate IntPtr BoxInt32_Delegate(Int32 value);
+        public delegate IntPtr BoxUInt32_Delegate(Int32 value);
+        public delegate IntPtr BoxInt64_Delegate(Int64 value);
+        public delegate IntPtr BoxUInt64_Delegate(UInt64 value);
+        public delegate IntPtr BoxIntPtr_Delegate(IntPtr value);
+        public delegate IntPtr BoxSingle_Delegate(Single value);
+        public delegate IntPtr BoxDouble_Delegate(Double value);
+        public delegate IntPtr BoxString_Delegate(String value);
+        public delegate IntPtr BoxLispObject_Delegate(IntPtr handle);
+        public delegate Boolean UnboxBoolean_Delegate(IntPtr value);
+        public delegate Int32 UnboxChar_Delegate(IntPtr value);
+        public delegate SByte UnboxInt8_Delegate(IntPtr value);
+        public delegate Byte UnboxUInt8_Delegate(IntPtr value);
+        public delegate Int16 UnboxInt16_Delegate(IntPtr value);
+        public delegate UInt16 UnboxUInt16_Delegate(IntPtr value);
+        public delegate Int32 UnboxInt32_Delegate(IntPtr value);
+        public delegate UInt32 UnboxUInt32_Delegate(IntPtr value);
+        public delegate Int64 UnboxInt64_Delegate(IntPtr value);
+        public delegate UInt64 UnboxUInt64_Delegate(IntPtr value);
+        public delegate IntPtr UnboxIntPtr_Delegate(IntPtr value);
+        public delegate Single UnboxSingle_Delegate(IntPtr value);
+        public delegate Double UnboxDouble_Delegate(IntPtr value);
+        public delegate IntPtr UnboxLispObject_Delegate(IntPtr value);
+        public delegate Int32 GetStringLength_Delegate(IntPtr value);
+        public unsafe delegate void UnboxString_Delegate(IntPtr value, UInt16* buf, Int32 size);
+        public delegate Boolean IsLispObject_Delegate(IntPtr value);
+        public delegate void PinObject_Delegate(IntPtr obj, out IntPtr pointer, out IntPtr handle, out IntPtr exception);
+        public delegate void MakeArrayOf_Delegate(IntPtr type, IntPtr args, Int32 nArgs, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void MakeVectorOf_Delegate(IntPtr type, Int32 length, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void ArrayLength_Delegate(IntPtr array, out Int64 result, out Int32 typeCode, out IntPtr exception);
+        public delegate void ArrayGet_Delegate(IntPtr array, IntPtr args, Int32 nArgs, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void ArraySet_Delegate(IntPtr array, IntPtr args, Int32 nArgs, IntPtr value, out IntPtr exception);
+        public delegate void VectorGet_Delegate(IntPtr array, Int64 index, out IntPtr result, out Int32 typeCode, out IntPtr exception);
+        public delegate void VectorSet_Delegate(IntPtr array, Int64 index, IntPtr value, out IntPtr exception);
+        public delegate Int32 GetFullTypeCode_Delegate(IntPtr value);
+        public delegate IntPtr GetTypeOf_Delegate(IntPtr value);
+        public delegate IntPtr GetTypeFullName_Delegate(IntPtr type);
+        public delegate IntPtr EnumToObject_Delegate(IntPtr type, Int64 value, out IntPtr exception);
+        #endregion
     }
 }

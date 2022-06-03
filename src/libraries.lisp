@@ -95,6 +95,23 @@
           (use-foreign-library wpfgfx))))
     (uiop:register-image-restore-hook 'load-wpfgfx)))
 
+#-coreclr-windows
+(progn
+  (eval-when (:compile-toplevel :load-toplevel :execute)
+    (define-foreign-library libsystem-native
+      #+coreclr-macos
+      (t "libSystem.Native.dylib")
+      #-coreclr-macos
+      (t "libSystem.Native.so")))
+  (eval-when (:compile-toplevel :load-toplevel :execute)
+    (use-foreign-library libsystem-native))
+  (defun init-native-aux-signals ()
+    (let ((fp (foreign-symbol-pointer
+               "SystemNative_InitializeTerminalAndSignalHandling"
+               :library 'libsystem-native)))
+      (when fp
+        (foreign-funcall-pointer fp ())))))
+
 (defun %get-app-paths ()
   (let ((directories
           (delete-duplicates

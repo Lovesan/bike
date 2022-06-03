@@ -116,12 +116,25 @@
   (defconstant +sig-ign+ 1)
   (defconstant +sigint+ 2)
   (defconstant +sigquit+ 3)
+  (defconstant +sigill+ 4)
+  (defconstant +sigtrap+ 5)
+  (defconstant +sigabrt+ 6)
+  (defconstant +sigbus+ 7)
+  (defconstant +sigfpe+ 8)
+  (defconstant +sigkill+ 9)
+  (defconstant +sigsegv+ 11)
+  (defconstant +sigusr2+ 12)
+  (defconstant +sigalrm+ 14)
+  (defconstant +sigterm+ 15)
   (defconstant +sigchld+ 17)
-  (defconstant +sigcont+ 18)
+  (defconstant +sigurg+ 23)
+  (defconstant +sigwinch+ 28)
 
   (#+sbcl sb-ext:defglobal #-sbcl defvar +lisp-sigactions+ (null-pointer))
   (#+sbcl sb-ext:defglobal #-sbcl defvar +dotnet-sigactions+ (null-pointer))
   (#+sbcl sb-ext:defglobal #-sbcl defvar +new-sigactions+ (null-pointer))
+  (#+sbcl sb-ext:defglobal #-sbcl defvar +default-sigaction+ (null-pointer))
+  (#+sbcl sb-ext:defglobal #-sbcl defvar +ignore-sigaction+ (null-pointer))
 
   (declaim (inline sigaction-address))
   (defun sigaction-address (start n)
@@ -130,14 +143,26 @@
     (inc-pointer start (* n (foreign-type-size '(:struct sigaction)))))
 
   (defun save-lisp-sigactions ()
-    (setf +lisp-sigactions+ (foreign-alloc '(:struct sigaction)
-                                           :count +nsig+))
+    (setf +lisp-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
     (setf +dotnet-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (setf +default-sigaction+ (foreign-alloc '(:struct sigaction)))
+    (setf +ignore-sigaction+ (foreign-alloc '(:struct sigaction)))
+    (setf (foreign-slot-value +default-sigaction+ '(:struct sigaction) 'handler)
+          (make-pointer +sig-dfl+))
+    (setf (foreign-slot-value +ignore-sigaction+ '(:struct sigaction) 'handler)
+          (make-pointer +sig-ign+))
     (dotimes (i +nsig+)
       (sigaction i
                  (null-pointer)
                  (sigaction-address +lisp-sigactions+ i)))
     (values))
+
+  (defun disable-all-posix-signal-handling ()
+    (let ((fp (foreign-symbol-pointer "SystemNative_DisablePosixSignalHandling"
+                                      :library 'libsystem-native)))
+      (when fp
+        (loop :for i :from 1 :below +nsig+
+              :do (foreign-funcall-pointer fp () :int i)))))
 
   ;; not used for the moment
   (defcallback chained-sigaction
