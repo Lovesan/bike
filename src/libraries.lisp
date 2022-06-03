@@ -98,19 +98,34 @@
 #-coreclr-windows
 (progn
   (eval-when (:compile-toplevel :load-toplevel :execute)
+    (defvar *has-libsystem-native* nil)
     (define-foreign-library libsystem-native
       #+coreclr-macos
       (t "libSystem.Native.dylib")
       #-coreclr-macos
-      (t "libSystem.Native.so")))
+      (t "libSystem.Native.so"))
+    (defun initialize-libsystem-native-search ()
+      (let ((path (uiop:merge-pathnames*
+                   #+coreclr-macos
+                   "libSystem.Native.dylib"
+                   #-coreclr-macos
+                   "libSystem.Native.so"
+                   (uiop:pathname-directory-pathname *coreclr-location*))))
+        (when (uiop:probe-file* path)
+          (setf *has-libsystem-native* t))))
+    (uiop:register-image-restore-hook 'initialize-libsystem-native-search))
   (eval-when (:compile-toplevel :load-toplevel :execute)
-    (use-foreign-library libsystem-native))
+    (defun load-libsystem-native ()
+      (when *has-libsystem-native*
+        (use-foreign-library libsystem-native)))
+    (uiop:register-image-restore-hook 'load-libsystem-native))
   (defun init-native-aux-signals ()
-    (let ((fp (foreign-symbol-pointer
-               "SystemNative_InitializeTerminalAndSignalHandling"
-               :library 'libsystem-native)))
-      (when fp
-        (foreign-funcall-pointer fp ())))))
+    (when *has-libsystem-native*
+      (let ((fp (foreign-symbol-pointer
+                 "SystemNative_InitializeTerminalAndSignalHandling"
+                 :library 'libsystem-native)))
+        (when fp
+          (foreign-funcall-pointer fp ()))))))
 
 (defun %get-app-paths ()
   (let ((directories

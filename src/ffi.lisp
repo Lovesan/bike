@@ -158,11 +158,12 @@
     (values))
 
   (defun disable-all-posix-signal-handling ()
-    (let ((fp (foreign-symbol-pointer "SystemNative_DisablePosixSignalHandling"
-                                      :library 'libsystem-native)))
-      (when fp
-        (loop :for i :from 1 :below +nsig+
-              :do (foreign-funcall-pointer fp () :int i)))))
+    (when *has-libsystem-native*
+      (let ((fp (foreign-symbol-pointer "SystemNative_DisablePosixSignalHandling"
+                                        :library 'libsystem-native)))
+        (when fp
+          (loop :for i :from 1 :below +nsig+
+                :do (foreign-funcall-pointer fp () :int i))))))
 
   ;; not used for the moment
   (defcallback chained-sigaction
