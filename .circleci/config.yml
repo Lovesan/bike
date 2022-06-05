@@ -2,7 +2,7 @@ version: 2
 jobs:
   build_3_1_ccl_amd64:
     docker:
-      - image: "love5an/dotnet-core-sdk-common-lisp:3.1-ccl-latest-bionic"
+      - image: "love5an/dotnet-core-sdk-common-lisp:3.1-ccl-latest-focal"
     working_directory: ~/quicklisp/local-projects/bike
     steps:
       - checkout
@@ -12,7 +12,7 @@ jobs:
 
   build_3_1_sbcl_amd64:
     docker:
-      - image: "love5an/dotnet-core-sdk-common-lisp:3.1-sbcl-latest-bionic"
+      - image: "love5an/dotnet-core-sdk-common-lisp:3.1-sbcl-latest-focal"
     working_directory: ~/quicklisp/local-projects/bike
     steps:
       - checkout
