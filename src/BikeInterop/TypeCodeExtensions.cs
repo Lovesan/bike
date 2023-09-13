@@ -46,6 +46,8 @@ namespace BikeInterop
                 return ExtendedTypeCode.Delegate;
             if (obj is Exception)
                 return ExtendedTypeCode.Exception;
+            if (obj is IntPtr)
+                return ExtendedTypeCode.IntPtr;
             return ExtendedTypeCode.Normal;
         }
 

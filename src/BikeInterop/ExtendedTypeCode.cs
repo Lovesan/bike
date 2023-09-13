@@ -36,6 +36,7 @@ namespace BikeInterop
         Type = 0x0200,
         Delegate = 0x0300,
         Exception = 0x0400,
-        Enum = 0x0500
+        Enum = 0x0500,
+        IntPtr = 0x0600
     }
 }

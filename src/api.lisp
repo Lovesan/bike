@@ -145,8 +145,13 @@ In case of the TYPE being a delegate type, first,
                         (code (%get-full-type-code ptr)))
                    (%get-boxed-object ptr (ash code -8) nil)))))
     (if typep
-      (invoke 'BikeInterop.TypeCaster (list 'Cast type) object)
+      (%cast boxed (resolve-type type))
       boxed)))
+
+(defun bike-type-p (object type)
+  (declare (type (or null dotnet-type-designator) type))
+  "Tests whether an OBJECT(or its boxed representation) belongs to a dotnet TYPE."
+  (invoke 'BikeInterop.TypeCaster (list 'Is type) object))
 
 (defmacro with-disposable ((var object) &body body)
   "Binds VAR to an IDisposable OBJECT during the execution of BODY forms.
@@ -202,15 +207,20 @@ In case of the TYPE being a delegate type, first,
  Binds VAR to each element of an ENUMERABLE and executes BODY forms
   on each iteration.
  Returns a result of an execution of RESULT form."
-  (with-gensyms (e start)
-    `(prog ((,e (%get-enumerator ,enumerable))
+  (with-gensyms (e d start)
+    `(let* ((,e (%get-enumerator ,enumerable))
+            (,d (bike-type-p ,e 'System.IDisposable))
             ,var)
-        ,start
-        (unless (%enumerator-move-next ,e) (return ,result))
-        (setf ,var (%enumerator-current ,e))
-        (let ((,var ,var))
-          ,@body)
-        (go ,start))))
+       (unwind-protect
+            (prog ()
+               ,start
+               (unless (%enumerator-move-next ,e) (return ,result))
+               (setf ,var (%enumerator-current ,e))
+               (let ((,var ,var))
+                 ,@body)
+               (go ,start))
+         (when ,d
+           (%dispose ,e))))))
 
 (defmacro exception-bind ((&rest bindings) &body body)
   "(EXCEPTION-BIND ( {(exception-type handler)}* ) body)

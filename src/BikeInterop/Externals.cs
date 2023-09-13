@@ -204,6 +204,55 @@ namespace BikeInterop
             exception = BoxObject(e);
         }
 
+        public static void Cast(
+            IntPtr target,
+            IntPtr type,
+            out IntPtr result,
+            out int typeCode,
+            out IntPtr exception)
+        {
+            exception = IntPtr.Zero;
+            result = IntPtr.Zero;
+            object e = null;
+            object invocationResult = null;
+            typeCode = (int)TypeCode.Empty;
+#if ENABLE_TASK_HACK
+            var task = Task.Factory.StartNew(() =>
+            {
+#endif
+            try
+            {
+                var instance = UnboxObject(target);
+                var realType = (Type)UnboxObject(type);
+                // ReSharper disable once PossibleNullReferenceException
+                var method = typeof(TypeCaster).GetMethod(nameof(TypeCaster.Cast)).MakeGenericMethod(realType);
+                invocationResult = method.Invoke(null, new object[] { instance });
+            }
+            catch (TargetInvocationException ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex.InnerException;
+            }
+            catch (Exception ex)
+            {
+#if DEBUG
+                Log.Exception(ex);
+#endif
+                e = ex;
+            }
+#if ENABLE_TASK_HACK
+            });
+            Task.WaitAny(task);
+#endif
+            result = BoxObject(invocationResult);
+            typeCode = invocationResult.GetFullTypeCode();
+            if (e is LispException lispException)
+                e = lispException.Value;
+            exception = BoxObject(e);
+        }
+
         public static void Invoke(
             IntPtr target,
             bool isStatic,
@@ -1440,9 +1489,11 @@ namespace BikeInterop
             return BoxObject(UnboxObject(value)?.GetType() ?? typeof(object));
         }
 
-        public static IntPtr GetTypeFullName(IntPtr type)
+        public static IntPtr GetTypeFullName(IntPtr typeHandle)
         {
-            return BoxObject(((Type) UnboxObject(type)).FullName);
+            var type = (Type)UnboxObject(typeHandle);
+            var fullName = type.FullName ?? type.ToString();
+            return BoxObject(fullName);
         }
 
         public static IntPtr EnumToObject(

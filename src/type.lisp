@@ -32,16 +32,6 @@
 (deftype dotnet-method-designator ()
   '(or string-designator (cons string-designator (cons dotnet-type-designator list))))
 
-(declaim (inline dotnet-name))
-(defun dotnet-name (designator)
-  (declare (type string-designator designator))
-  (coerce (string designator) 'dotnet-name))
-
-(declaim (inline %mknetsym))
-(defun %mknetsym (what)
-  (declare (type string-designator what))
-  (string-upcase (dotnet-name what)))
-
 (defstruct (type-table (:constructor %type-table ())
                        (:predicate type-table-p)
                        (:conc-name %type-table-))
@@ -96,13 +86,72 @@
   (ref-entry nil :type (or null type-entry))
   (pointer-entry nil :type (or null type-entry))
   (enum-values nil :type (or null hash-table) :read-only t)
-  (array-entries nil :type (or null (simple-array (or null type-entry) (#.+max-array-rank+)))))
+  (array-entries nil :type (or null (simple-array (or null type-entry) (#.+max-array-rank+))))
+  (mz-vector-entry nil :type (or null type-entry)))
 
 #+sbcl
 (sb-ext:defglobal *type-table* nil)
 
 #-sbcl
 (defvar *type-table* nil)
+
+(declaim (inline %base-string-to-string))
+(defun %base-string-to-string (string &optional upcase)
+  (declare (type simple-base-string string))
+  (let* ((length (length string))
+         (result (make-string length)))
+    (if upcase
+      (dotimes (i length)
+        (setf (schar result i) (char-upcase (schar string i))))
+      (dotimes (i length)
+        (setf (schar result i) (schar string i))))
+    result))
+
+(declaim (inline %maybe-string-upcase))
+(defun %maybe-string-upcase (string)
+  (declare (type dotnet-name string))
+  (let ((len (length string)))
+    (if (dotimes (i len t)
+          (when (lower-case-p (schar string i))
+            (return nil)))
+      string
+      (let ((result (copy-seq string)))
+        (nstring-upcase result)
+        result))))
+
+(defun dotnet-name (designator)
+  (declare (type string-designator designator))
+  (locally (declare (optimize (speed 3) (safety 0) (debug 0)))
+    (flet ((from-base-string (s) (%base-string-to-string s)))
+      (etypecase designator
+        (dotnet-name designator)
+        (symbol (let ((name (symbol-name designator)))
+                  (if (typep name 'dotnet-name)
+                    name
+                    (from-base-string name))))
+        (simple-base-string (from-base-string designator))
+        (character
+         (make-array 1 :element-type 'character
+                       :initial-element designator))))))
+
+(defun %mknetsym (what)
+  (declare (type string-designator what))
+  (locally (declare (optimize (speed 3) (safety 0) (debug 0)))
+    (flet ((maybe-upcase (s) (%maybe-string-upcase s))
+           (from-base-string (s) (%base-string-to-string s t)))
+      (etypecase what
+        (dotnet-name (maybe-upcase what))
+        (symbol (let ((name (symbol-name what)))
+                  (if (typep name 'dotnet-name)
+                    (maybe-upcase name)
+                    (from-base-string name))))
+        (simple-base-string (from-base-string what))
+        (base-char
+         (make-array 1 :element-type 'character
+                       :initial-element (char-upcase what)))
+        (character
+         (make-array 1 :element-type 'character
+                       :initial-element (char-upcase what)))))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %collect-accessors (conc-name slots)
@@ -183,6 +232,19 @@
   (with-type-table (namespaces lock)
     (with-write-lock (lock)
       (setf namespaces '()))))
+
+(defun namespace-used-p (namespace)
+  (let ((prefix (%make-namespace-prefix namespace)))
+    (with-type-table (namespaces lock)
+      (with-read-lock (lock)
+        (member prefix namespaces :test #'string=)))))
+
+(defun get-used-namespaces ()
+  (with-type-table (namespaces lock)
+    (with-read-lock (lock)
+      (loop :for p :of-type string :in namespaces
+            :for plen = (length p)
+            :collect (subseq p 0 (1- plen))))))
 
 (defun use-type-alias (alias type)
   (declare (type string-designator alias)

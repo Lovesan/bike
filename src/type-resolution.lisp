@@ -154,41 +154,47 @@
   (let ((base-type (element-type-of type)))
     (%ensure-ref-type-entry-by-element-type base-type)))
 
-(defun %ensure-array-type-entry-by-element-type (type rank)
+(defun %ensure-array-type-entry-by-element-type (type rank mz-array-p)
   (declare (type (or dotnet-type type-entry) type)
            (type (integer 1 32) rank))
   "Ensures array type entry for element type"
   (let ((entry (%ensure-type-entry type)))
-    (with-type-entry (array-entries type) entry
+    (with-type-entry (array-entries mz-vector-entry type) entry
       (flet ((lookup ()
-               (and array-entries (svref array-entries (1- rank)))))
+               (or (and mz-array-p mz-vector-entry)
+                   (and array-entries (svref array-entries (1- rank))))))
         (or (lookup)
             (with-type-table-lock (:write)
               (or (lookup)
-                  (let ((entries array-entries)
-                        (array-type (if (= rank 1)
-                                      (make-array-type type)
-                                      (make-array-type* type rank))))
-                    (unless entries
-                      (setf entries (make-array +max-array-rank+ :initial-element nil)
-                            array-entries entries))
-                    (setf (svref entries (1- rank))
-                          (%make-type-entry array-type
-                                            :element-entry entry
-                                            :rank rank))))))))))
+                  (let* ((entries array-entries)
+                         (array-type (if (and (not mz-array-p) (= rank 1))
+                                       (make-array-type type)
+                                       (make-array-type* type rank)))
+                         (array-entry (%make-type-entry array-type
+                                                        :element-entry entry
+                                                        :rank rank)))
+                    (cond (mz-array-p (setf mz-vector-entry array-entry))
+                          (t
+                           (unless entries
+                             (setf entries (make-array +max-array-rank+
+                                                       :initial-element nil)
+                                   array-entries entries))
+                           (setf (svref entries (1- rank))
+                                 array-entry)))))))))))
 
 (defun %ensure-array-type-entry (type)
   (declare (type dotnet-type type))
   "Ensures array type entry"
   (let ((base-type (element-type-of type))
-        (rank (array-type-rank type)))
-    (%ensure-array-type-entry-by-element-type base-type rank)))
+        (rank (array-type-rank type))
+        (sz-p (array-type-sz-p type)))
+    (%ensure-array-type-entry-by-element-type base-type rank (not sz-p))))
 
 (defun %ensure-simple-type-entry (type)
   (declare (type dotnet-type type))
   "Ensures simple, non-generic type entry"
-  (let ((name (%mknetsym (%get-type-full-name type))))
-    (or (%type-entry name)
+  (let ((name (%mknetsym (type-full-name type))))
+    (or (with-type-table-lock (:read) (%type-entry name))
         (with-type-table-lock (:write)
           (or (%type-entry name)
               (setf (%type-entry name)
@@ -252,10 +258,14 @@
                    (error 'inner-ref-type-error :datum *intern-typespec-toplevel*))
             (%ensure-ref-type-entry-by-element-type
              (%intern-type-ast (second ast) (1+ level) assembly)))
-           (:array (let ((element-type
-                           (%intern-type-ast (second ast) (1+ level) assembly))
-                         (rank (third ast)))
-                     (%ensure-array-type-entry-by-element-type element-type rank)))
+           (:array (let* ((element-type
+                            (%intern-type-ast (second ast) (1+ level) assembly))
+                          (rank (third ast))
+                          (mz-vector-p (eq rank '*)))
+                     (%ensure-array-type-entry-by-element-type
+                      element-type
+                      (if mz-vector-p 1 rank)
+                      mz-vector-p)))
            (:qualified (%intern-type-ast (second ast) level (third ast)))
            ;; generic type
            (t (let ((definition (%intern-type-ast (car ast) (1+ level) assembly))
@@ -278,11 +288,10 @@
         ((consp type)
          (destructuring-bind (head &rest rest) type
            (declare (type string-designator head))
-           (let* ((head-string (dotnet-name head))
-                  (name (string-upcase head-string)))
+           (let* ((name (%mknetsym head)))
              (cond ((string= name "ARRAY")
                     (destructuring-bind (element-type &optional (rank 1)) rest
-                      (declare (type (integer 1 32) rank))
+                      (declare (type (or (integer 1 32) (eql *)) rank))
                       (list :array (%parse-typespec element-type) rank)))
                    ((string= name "REF")
                     (destructuring-bind (inner-type) rest
@@ -292,7 +301,7 @@
                       (list '* (%parse-typespec inner-type))))
                    (t (destructuring-bind (arg &rest args) rest
                         (let* ((args (cons arg args))
-                               (def (format nil "~a`~d" head-string (length args))))
+                               (def (format nil "~a`~d" head (length args))))
                           (cons (%parse-typespec def)
                                 (mapcar #'%parse-typespec args)))))))))
         (t (error 'invalid-type-designator type))))

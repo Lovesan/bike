@@ -25,9 +25,9 @@
 (in-package #:bike)
 
 (defun maybe-read-char (stream &rest characters)
-  (let ((peek (peek-char t stream)))
+  (let ((peek (peek-char t stream t nil t)))
     (when (member peek characters)
-      (read-char stream))))
+      (read-char stream t nil t))))
 
 (defun read-open-bracket (stream c)
   (declare (ignore c))
@@ -37,16 +37,17 @@
          (member (read stream t nil t))
          (args (read-delimited-list #\] stream t)))
     (when (and prefix args)
-      (error 'bike-reader-error
-             :message (format nil
-                              (uiop:strcat
-                               "~&Field and property forms must not have arguments.~%"
-                               "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
-                              staticp
-                              target
-                              prefix
-                              member
-                              args)))
+      (bike-reader-error
+       stream
+       (format nil
+               (uiop:strcat
+                "~&Field and property forms must not have arguments.~%"
+                "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
+               staticp
+               target
+               prefix
+               member
+               args)))
     `(,(case prefix
          (#\% 'property)
          (#\$ 'field)
@@ -56,9 +57,8 @@
       ,@args)))
 
 (defun read-close-bracket (stream c)
-  (declare (ignore stream c))
-  (error 'bike-reader-error
-         :message "Unexpected close bracket: ]"))
+  (declare (ignore c))
+  (bike-reader-error stream "Unexpected close bracket: ]"))
 
 (defun read-sharp-open-bracket (stream c n)
   (declare (ignore c n))
@@ -69,12 +69,14 @@
 
 (defun read-sharp-e (stream c n)
   (declare (ignore c n))
-  (let ((form (read stream t nil t)))
-    (unless (typep form '(cons string-designator cons))
-      (error 'bike-reader-error
-             :message (format nil "~a is not a list of form (EnumType EnumValue1 EnumValue2 ...)"
-                              form)))
-    `(enum ',(first form) ,@(mapcar (lambda (x) `(quote ,x)) (rest form)))))
+  (let ((c (peek-char t stream t nil t)))
+    (unless (eql c #\()
+      (bike-reader-error
+       stream
+       (format nil "Expected '(' after '#e'. Got: ~:[end of file~;~:*'~a'~]" c)))
+    (read-char stream t nil t)
+    (let ((form (read-delimited-list #\) stream t)))
+      `(enum ',(first form) ,@(mapcar (lambda (x) `(quote ,x)) (rest form))))))
 
 (defreadtable bike-syntax
   (:merge :standard)
@@ -82,5 +84,8 @@
   (:macro-char #\] 'read-close-bracket nil)
   (:dispatch-macro-char #\# #\[ 'read-sharp-open-bracket)
   (:dispatch-macro-char #\# #\e 'read-sharp-e))
+
+(defun bike-syntax-enabled-p ()
+  (eq (find-readtable 'bike-syntax) *readtable*))
 
 ;;; vim: ft=lisp et

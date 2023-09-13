@@ -314,10 +314,7 @@
                             :arg-type-count arg-type-count
                             :arg-types arg-types)))
     (unless entry
-      (let* ((applicable (list-to-bike-vector
-                          (bike-vector-to-list
-                           (type-constructors type))
-                          :element-type 'System.Reflection.MethodBase))
+      (let* ((applicable (type-constructors type))
              (args* (list-to-bike-vector args))
              (info (unless (zerop (%array-length applicable))
                      (bind-to-method (default-binder)

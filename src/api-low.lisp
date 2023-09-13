@@ -86,6 +86,25 @@
               :void)
     (%transform-rv rv code ex)))
 
+(defun %cast (object type)
+  (declare (type dotnet-object object)
+           (type dotnet-type type))
+  (with-foreign-objects ((rv :pointer)
+                         (code :int)
+                         (ex :pointer))
+    (hostcall cast
+              :pointer (%dotnet-object-handle object)
+              :pointer (%dotnet-object-handle type)
+              :pointer rv
+              :pointer code
+              :pointer ex)
+    (let* ((rv (mem-ref rv :pointer))
+           (code (mem-ref code :int))
+           (ex (mem-ref ex :pointer))
+           (result (%get-boxed-object rv (ash code -8) nil)))
+      (%transform-exception ex)
+      (values result))))
+
 (defun %get-loaded-assemblies ()
   (with-foreign-objects ((rv :pointer)
                          (code :int)
@@ -551,10 +570,10 @@
   (declare (type dotnet-type type))
   (let* ((rv (hostcall get-type-full-name
                        :pointer (%dotnet-type-handle type)
-                       :pointer))
-         (name (%unbox-string rv)))
-    (%free-handle rv)
-    name))
+                       :pointer)))
+    (unless (pointer-eq rv (null-pointer))
+      (prog1 (%unbox-string rv)
+        (%free-handle rv)))))
 
 (declaim (inline %%enum-to-object))
 (defun %%enum-to-object (type value)

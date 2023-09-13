@@ -38,6 +38,10 @@
            (next () (when (< i end) (incf i)))
            (eofp () (null c))
            (spacep () (case c ((#\space #\tab #\return #\newline) t)))
+           ;; .Net identifiers acutally allow '=' sign. But we utilize it
+           ;;   for assembly property parsing.
+           ;; Same goes for backquote - TODO: rework generic type parsing
+           ;;   to allow backquotes inside names.
            (specialp () (case c ((#\, #\+ #\[ #\] #\* #\& #\. #\= #\`) t)))
            (digitp () (and c (digit-char-p c 10)))
            (start-here () (setf start i)))
@@ -97,25 +101,28 @@
 
 qualifiedTypeDefinition -> maybeSpace typeDefinition maybeSpace maybeAssemblyDefinition EOF
 
-typeDefinition -> IDENTIFIER namespaces typeDefinitionRest
+typeDefinition -> name namespaces typeDefinitionRest
 
-namespaces -> DOT IDENTIFIER namespaces / <empty>
+namespaces -> DOT name namespaces / <empty>
 
 typeDefinitionRest ->  BACKQUOTE INTEGER genericDefinitionRest
-                     / NEST IDENTIFIER typeDefinitionRest
+                     / NEST name typeDefinitionRest
                      / maybeHairyType
 
-genericDefinitionRest -> NEST IDENTIFIER genericDefinitionCont
+genericDefinitionRest -> NEST name genericDefinitionCont
                         / genericDefinitionEnd
 
 genericDefinitionCont -> BACKQUOTE INTEGER genericDefinitionRest
-                        / NEST IDENTIFIER genericDefinitionCont
+                        / NEST name genericDefinitionCont
                         / genericDefinitionEnd
 
-genericDefinitionEnd ->  OPEN maybeSpace typeArgs maybeSpace CLOSE maybeHairyType
-                        / POINTER maybeHairyType
-                        / REF maybeHairyType
-                        / <empty>
+genericDefinitionEnd ->  OPEN maybeSpace genericDefinitionEndArgs maybeSpace maybeHairyType
+                         / maybeHairyType
+
+genericDefinitionEndArgs -> STAR maybeSpace arrayDimensionsRest CLOSE
+                            / COMMA maybeSpace arrayDimensionsRest CLOSE
+                            / CLOSE
+                            / typeArgs maybeSpace CLOSE
 
 typeArgs -> typeArg typeArgsRest
 
@@ -125,28 +132,42 @@ typeArgsRest -> COMMA maybeSpace typeArg typeArgsRest
 typeArg -> OPEN qualifiedTypeDefinition CLOSE
           / typeDefinition
 
-maybeHairtyType -> POINTER maybeHairyType
+maybeHairyType -> POINTER maybeHairyType
                   / REF
-                  / OPEN arrayDimensions CLOSE maybeHairyType
+                  / OPEN maybeSpace arrayDimensions CLOSE maybeHairyType
                   / <empty>
 
-;; give up on ellipsis dimensions, since Type.GetType() doesn't accept it anyway
+;; 1) give up on ellipsis dimensions, since Type.GetType() doesn't accept it anyway
+;; 2) .Net has this weird feature of arrays with variable lower bounds, which has its roots in
+;;       backward compatibility with pre .NET Visual Basic COM types.
+;;     Well, .NET actually has two types of arrays internally,
+;;      the first one is SZArray and the other is MZArray.
+;;     SZ arrays are roughly equivalent to one-dimensional simple-arrays from CL.
+;;     MZ arrays, on the other hand, are 'hairy' and can be multi-dimensional
+;;       and moreover, can have lower bounds different from 0.
+;;     E.g. System.Int32[1...] is an array whose starting index is 1 instead of 0.
+;;     The '*' as an array dimension, when printed by reflection API,
+;;       designates that this particular one-dimensional array is an MZ array and
+;;       therefore can have a lower bound greater than 0.
+;;     Apparently, you can not 'syntactically' create an instance of an array
+;;       that has bounds different from 0 either in C# or VB.NET
+;;       apart from using reflection or one of the System.Array methods.
+;;     Should we even consider this thing?
 
-arrayDimensions -> maybeSpace arrayDimension maybeSpace arrayDimensionsRest
+arrayDimensions -> STAR maybeSpace arrayDimensionsRest
+                   / arrayDimensionsRest
 
-arrayDimensionsRest -> COMMA arrayDimension maybeSpace arrayDimensionsRest
-                     / <empty>
-
-arrayDimension -> STAR / <empty>
+arrayDimensionsRest -> COMMA maybeSpace arrayDimensions
+                       / <empty>
 
 maybeSpace -> SPACE / <empty>
 
 maybeAssemblyDefinition -> COMMA maybeSpace assemblyName maybeSpace assemblyProps
                            / <empty>
 
-assemblyName -> IDENTIFIER assemblyNameRest
+assemblyName -> name assemblyNameRest
 
-assemblyNameRest -> DOT IDENTIFIER assemblyNameRest / <empty>
+assemblyNameRest -> DOT name assemblyNameRest / <empty>
 
 assemblyProps -> COMMA maybeSpace assemblyProp assemblyProps
                  / <empty>
@@ -161,6 +182,14 @@ version -> INTEGER DOT INTEGER DOT INTEGER DOT INTEGER / <empty>
 
 maybeIdentifier -> IDENTIFIER / <empty>
 
+name -> IDENTIFIER nameRest
+        / EQ nameRest
+        / INTEGER nameRest
+
+nameRest -> IDENTIFIER nameRest
+            / EQ nameRest
+            / INTEGER nameRest
+            / <empty>
 |#
 
 (defun parse-type-name (name)
@@ -173,7 +202,7 @@ maybeIdentifier -> IDENTIFIER / <empty>
     (labels ((err () (error 'type-name-unexpected-token-error
                             :datum name
                             :token token
-                            :value (subseq name start end)
+                            :value (unless (eq token :eof) (subseq name start end))
                             :position start))
              (peek ()
                (unless nextp
@@ -183,6 +212,20 @@ maybeIdentifier -> IDENTIFIER / <empty>
              (expect (what) (unless (eq what token) (err)))
              (value= (what) (string-equal what name :start2 start :end2 end))
              (consume (what) (expect what) (next))
+             (name-rest (name-start)
+               (peek)
+               (case token
+                 ((:identifier :eq :integer)
+                  (next)
+                  (name-rest name-start))))
+             (name (&aux (name-start 0))
+               (peek)
+               (setf name-start start)
+               (case token
+                 ((:identifier :eq :integer)
+                  (next)
+                  (name-rest name-start))
+                 (t (err))))
              (maybe-identifier ()
                (peek)
                (case token
@@ -251,11 +294,11 @@ maybeIdentifier -> IDENTIFIER / <empty>
                (peek)
                (when (eq token :dot)
                  (next)
-                 (consume :identifier)
+                 (name)
                  (assembly-name-rest)))
              (assembly-name ()
                (peek)
-               (consume :identifier)
+               (name)
                (assembly-name-rest))
              (maybe-assembly-definition (&aux (s 0) (e 0))
                (peek)
@@ -268,33 +311,34 @@ maybeIdentifier -> IDENTIFIER / <empty>
                  (assembly-props)
                  (setf e start)
                  (subseq name s e)))
-             (array-dim ()
-               (peek)
-               (when (eq token :star)
-                 (next)))
              (array-dim-rest ()
                (peek)
                (cond ((eq token :comma)
                       (next)
-                      (array-dim)
                       (maybe-space)
-                      (1+ (array-dim-rest)))
-                     (t 0)))
+                      (array-dims))
+                     (t (values 0 nil))))
              (array-dims ()
-               (maybe-space)
-               (array-dim)
-               (maybe-space)
-               (1+ (array-dim-rest)))
-             (maybe-hairy-type (type &aux rank)
+               (peek)
+               (cond ((eq token :star)
+                      (next)
+                      (maybe-space)
+                      (values (1+ (array-dim-rest)) t))
+                     (t (multiple-value-bind (n starp) (array-dim-rest)
+                          (values (1+ n) starp)))))
+             (maybe-hairy-type (type &aux rank starp)
                (peek)
                (case token
                  (:star (next) (maybe-hairy-type (list '* type)))
                  (:ref (next) (list :ref type))
                  (:open
                   (next)
-                  (setf rank (array-dims))
+                  (maybe-space)
+                  (setf (values rank starp) (array-dims))
                   (consume :close)
-                  (maybe-hairy-type (list :array type rank)))
+                  (maybe-hairy-type (list :array type (if (and starp (= rank 1))
+                                                        '*
+                                                        rank))))
                  (t type)))
              (type-arg ()
                (peek)
@@ -311,33 +355,50 @@ maybeIdentifier -> IDENTIFIER / <empty>
                  (cons (type-arg) (type-args-rest))))
              (type-args ()
                (cons (type-arg) (type-args-rest)))
-             (gen-def-end (def-start n &aux (e 0) args)
+             (gen-def-end-args (def-start def-end argc
+                                &aux (rank 0)
+                                     (args '())
+                                     (type (subseq name def-start def-end)))
                (peek)
                (case token
-                 (:open
-                  (setf e start)
+                 (:star
                   (next)
                   (maybe-space)
+                  (setf rank (1+ (array-dim-rest)))
+                  (consume :close)
+                  (list :array type (if (= rank 1) '* rank)))
+                 (:comma
+                  (next)
+                  (maybe-space)
+                  (setf rank (+ 2 (array-dim-rest)))
+                  (consume :close)
+                  (list :array type rank))
+                 (:close
+                  (next)
+                  (list :array type 1))
+                 (t
                   (setf args (type-args))
                   (maybe-space)
                   (consume :close)
-                  (unless (= n (length args))
+                  (unless (= argc (length args))
                     (error 'generic-argument-count-mismatch
-                           :token (subseq name def-start e)
-                           :value (subseq name e start)
-                           :position e
+                           :token type
+                           :value (subseq name def-end start)
+                           :position def-end
                            :datum name))
-                  (maybe-hairy-type (cons (subseq name def-start e) args)))
-                 (:pointer
-                  (setf e start)
+                  (cons type args))))
+             (gen-def-end (def-start argc &aux type (def-end 0))
+               (peek)
+               (setf def-end start)
+               (case token
+                 (:open
                   (next)
-                  (maybe-hairy-type (list '* (subseq name def-start e))))
-                 (:ref
-                  (setf e start)
-                  (next)
-                  (maybe-hairy-type (list :ref (subseq name def-start e))))
-                 (t (subseq name def-start start))))
-             (gen-def-cont (def-start n &aux (s 0) (e 0))
+                  (maybe-space)
+                  (setf type (gen-def-end-args def-start def-end argc))
+                  (maybe-space)
+                  (maybe-hairy-type type))
+                 (t (maybe-hairy-type (subseq name def-start def-end)))))
+             (gen-def-cont (def-start argc &aux (s 0) (e 0))
                (peek)
                (case token
                  (:backquote
@@ -345,20 +406,20 @@ maybeIdentifier -> IDENTIFIER / <empty>
                   (setf s start)
                   (consume :integer)
                   (setf e start)
-                  (gen-def-rest def-start (+ n (parse-integer name :start s :end e))))
+                  (gen-def-rest def-start (+ argc (parse-integer name :start s :end e))))
                  (:nest
                   (next)
-                  (consume :identifier)
-                  (gen-def-cont def-start n))
-                 (t (gen-def-end def-start n))))
-             (gen-def-rest (def-start n)
+                  (name)
+                  (gen-def-cont def-start argc))
+                 (t (gen-def-end def-start argc))))
+             (gen-def-rest (def-start argc)
                (peek)
                (case token
                  (:nest
                   (next)
-                  (consume :identifier)
-                  (gen-def-cont def-start n))
-                 (t (gen-def-end def-start n))))
+                  (name)
+                  (gen-def-cont def-start argc))
+                 (t (gen-def-end def-start argc))))
              (type-def-rest (def-start &aux (s 0) (e 0))
                (peek)
                (case token
@@ -370,19 +431,19 @@ maybeIdentifier -> IDENTIFIER / <empty>
                   (gen-def-rest def-start (parse-integer name :start s :end e)))
                  (:nest
                   (next)
-                  (consume :identifier)
+                  (name)
                   (type-def-rest def-start))
                  (t (maybe-hairy-type (subseq name def-start start)))))
              (namespaces ()
                (peek)
                (when (eq token :dot)
                  (next)
-                 (consume :identifier)
+                 (name)
                  (namespaces)))
              (type-def ()
                (peek)
                (let ((def-start start))
-                 (consume :identifier)
+                 (name)
                  (namespaces)
                  (type-def-rest def-start)))
              (qualified-type-def ()

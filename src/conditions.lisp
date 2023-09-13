@@ -98,11 +98,13 @@
   (:report
    (lambda (c s &aux (token (type-name-parser-error-token c))
                      (value (type-name-parser-error-value c))
-                     (unnamed (member token '(:identifier :integer))))
-     (format s "~&Unexpected ~:[~(~a~)~;~s~] ~:[~;~:*~s ~]~% at position ~d in type name ~s"
-             (not unnamed)
-             (if unnamed token value)
-             (when unnamed value)
+                     (literal (find token '((:identifier . "identifier")
+                                            (:integer . "integer")
+                                            (:eof . "end of string"))
+                                    :key #'car)))
+     (format s "~&Unexpected ~:[~;~:*~a ~]~:[~;~:*~s~]~_ at position ~d in type name ~s"
+             (cdr literal)
+             value
              (1+ (type-name-parser-error-position c))
              (type-name-parser-error-string c)))))
 
@@ -213,11 +215,14 @@
             :initarg :object))
   (:documentation "Represents a .Net Exception"))
 
-(define-condition bike-reader-error (bike-error)
+(define-condition bike-reader-error (bike-error reader-error)
   ((%datum :initarg :message
            :reader bike-reader-error-message))
   (:report (lambda (c s)
              (format s "Reader error: ~a"
                      (bike-reader-error-message c)))))
+
+(defun bike-reader-error (stream message)
+  (error 'bike-reader-error :message message :stream stream))
 
 ;;; vim: ft=lisp et

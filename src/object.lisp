@@ -48,6 +48,7 @@
 (defconstant +ext-type-code-delegate+ 3)
 (defconstant +ext-type-code-exception+ 4)
 (defconstant +ext-type-code-enum+ 5)
+(defconstant +ext-type-code-intptr+ 6)
 
 (declaim (inline %free-handle))
 (defun %free-handle (handle)
@@ -134,6 +135,11 @@
   (frob double :double (the double-float))
   (frob intptr :pointer (the foreign-pointer)))
 
+(declaim (inline dotnet-object-handle-id))
+(defun dotnet-object-handle-id (object)
+  (declare (type dotnet-object object))
+  (pointer-address (%dotnet-object-handle object)))
+
 (declaim (inline %get-string-length))
 (defun %get-string-length (value)
   (declare (type foreign-pointer value))
@@ -198,6 +204,11 @@
          (values (%dotnet-delegate ptr) nil))
         ((= ext-code +ext-type-code-exception+)
          (values (%dotnet-exception ptr) nil))
+        ((= ext-code +ext-type-code-intptr+)
+         (values (if unbox-lisp
+                   (%unbox-intptr ptr)
+                   (%dotnet-object ptr))
+                 unbox-lisp))
         (t (values (%dotnet-object ptr) nil))))
 
 (declaim (inline %unbox-integer))

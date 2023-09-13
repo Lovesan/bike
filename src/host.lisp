@@ -101,6 +101,7 @@
   (free-handle "FreeHandle")
   (get-type-of "GetTypeOf")
   (get-type-by-name "GetTypeByName")
+  (cast "Cast")
   (get-type-full-name "GetTypeFullName")
   (get-full-type-code "GetFullTypeCode")
   (box-boolean "BoxBoolean")

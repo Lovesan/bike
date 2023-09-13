@@ -24,6 +24,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 using System;
+using System.Net;
 
 namespace BikeInterop
 {
@@ -56,6 +57,17 @@ namespace BikeInterop
             where T : class
         {
             return instance as T;
+        }
+
+        /// <summary>
+        /// Checks whether an object belongs to a type
+        /// </summary>
+        /// <typeparam name="T">Type</typeparam>
+        /// <param name="instance">object</param>
+        /// <returns>True if object belongs to the type</returns>
+        public static bool Is<T>(object instance)
+        {
+            return instance is T;
         }
     }
 }

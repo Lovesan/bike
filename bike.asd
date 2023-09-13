@@ -54,7 +54,6 @@
                              (:file "trampolines")
                              (:file "known")
                              (:file "api-known")
-                             (:file "print")
                              (:file "type")
                              (:file "type-name-parser")
                              (:file "type-resolution")
@@ -65,6 +64,7 @@
                              (:file "members")
                              (:file "api")
                              (:file "syntax")
+                             (:file "print")
                              (:file "shutdown"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))
 

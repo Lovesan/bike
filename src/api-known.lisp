@@ -31,6 +31,7 @@
 (defknown %get-hash-code (System.Object :method GetHashCode)
     "Retrieves hash code of an object")
 
+(declaim (ftype (function (dotnet-object) string) %to-string))
 (defknown %to-string (System.Object :method ToString)
     "Converts an object to a string")
 
@@ -74,7 +75,6 @@
   "Loads an assembly designated by assembly string"
   (%load-assembly-from (native-path (uiop:truename* path))))
 
-
 (declaim (ftype (function (dotnet-object) dotnet-object) %assembly-exported-types))
 (defknown %assembly-exported-types (System.Reflection.Assembly :method GetExportedTypes))
 
@@ -83,8 +83,26 @@
   "Returns a list of types exported from ASSEMBLY"
   (bike-vector-to-list (%assembly-exported-types assembly)))
 
-(defknown type-full-name (System.Type :property FullName)
+(declaim (ftype (function (dotnet-type) (or null string)) %type-full-name))
+(defknown %type-full-name (System.Type :property FullName)
     "Retrieves full name of a type")
+
+;; While we have already defined %get-type-full name,
+;;   that function does not handle exceptions and would lead to
+;;   a probable runtime crash should an object handle represent something other
+;;   than a System.Type object.
+(defun type-full-name (type)
+  (declare (type dotnet-type type))
+  "Retrieves full name of a type"
+  (or (%type-full-name type)
+      ;; FullName property may be null on some types
+      (%to-string type)))
+
+(defknown type-name (System.Type :property Name)
+    "Retrieves name of a type")
+
+(defknown type-primitive-p (System.Type :property IsPrimitive)
+    "Determines whether a type is a primitive type")
 
 (defknown type-assembly-qualified-name (System.Type :property AssemblyQualifiedName)
     "Retrieves assembly qualified name of a type")
@@ -97,6 +115,10 @@
 
 (defknown generic-type-definition-of (System.Type :method GetGenericTypeDefinition)
     "Returns a generic type definition for a generic TYPE")
+
+(defknown type-generic-parameter-p (System.Type :property IsGenericParameter)
+    "Determines whether type represents a generic parameter in generic
+type or method definition.")
 
 (declaim (ftype (function (dotnet-type) dotnet-object) %type-generic-arguments))
 (defknown %type-generic-arguments (System.Type :method GetGenericArguments))
@@ -112,6 +134,10 @@
     (System.Attribute :method GetCustomAttribute System.Reflection.MemberInfo System.Type)
     "Retrieves custom attribute of a member info")
 
+(defknown member-all-custom-attributes
+    (System.Reflection.Memberinfo :method GetCustomAttributes System.Boolean)
+    "Retrieves custom attributes for a MemberInfo")
+
 (defun compiler-generated-member-p (info)
   (declare (type dotnet-object info))
   "Returns T in case of the MemberInfo designated by INFO
@@ -121,6 +147,9 @@
 
 (defknown array-type-rank (System.Type :method GetArrayRank)
     "Gets a number of dimensions of an array type")
+
+(defknown array-type-sz-p (System.Type :property IsSZArray)
+    "Returns T when an array type is a SZArray type")
 
 (declaim (ftype (function (dotnet-object) boolean) dynamic-assembly-p))
 (defknown dynamic-assembly-p (System.Reflection.Assembly :property IsDynamic)
@@ -210,7 +239,53 @@
     table))
 
 (defknown member-info-name (System.Reflection.MemberInfo :property Name)
-    "MemberInfo name")
+    "Returns member name")
+
+(defknown member-info-member-type (System.Reflection.MemberInfo :property MemberType)
+    "Returns kind of a member that member info represents")
+
+(declaim (ftype (function (dotnet-object) (or null dotnet-object))
+                member-info-declaring-type))
+(defknown member-info-declaring-type (System.Reflection.MemberInfo :property DeclaringType)
+    "Returns declaring type of a member info")
+
+(defknown method-public-p (System.Reflection.MethodBase :property IsPublic)
+    "Returns whether method is public")
+
+(defknown method-private-p (System.Reflection.MethodBase :property IsPrivate)
+    "Returns whether method is private")
+
+(defknown method-protected-p (System.Reflection.MethodBase :property IsFamily)
+    "Returns whether method is protected")
+
+(defknown method-internal-p (System.Reflection.MethodBase :property IsAssembly)
+    "Returns whether method is internal")
+
+(defknown method-protected-or-internal-p
+    (System.Reflection.MethodBase :property IsFamilyOrAssembly)
+    "Returns whether method is protected internal")
+
+(declaim (ftype (function (dotnet-object) (or null dotnet-object))
+                method-base-definition))
+(defknown method-base-definition (System.Reflection.MethodInfo :method GetBaseDefinition)
+    "Returns base definition of a method")
+
+(defknown method-attributes (System.Reflection.MethodBase :property Attributes)
+    "Retrieves method attributes")
+
+(defknown method-virtual-p (System.Reflection.MethodBase :property IsVirtual)
+    "Designates whether a method is virtual")
+
+(defknown method-abstract-p (System.Reflection.MethodBase :property IsAbstract)
+    "Designates whether a method is abstract")
+
+(defknown method-sealed-p (System.Reflection.MethodBase :property IsFinal)
+    "Designates whether a method is sealed")
+
+(defun method-overriden-p (method-info)
+  (declare (type dotnet-object method-info))
+  (not (bike-equals (member-info-declaring-type (method-base-definition method-info))
+                    (member-info-declaring-type method-info))))
 
 (declaim (ftype (function (dotnet-object) boolean) method-static-p))
 (defknown method-static-p (System.Reflection.MethodInfo :property IsStatic)
@@ -219,8 +294,37 @@
 (defknown field-static-p (System.Reflection.FieldInfo :property IsStatic)
     "Designates whether a field is a static one")
 
+(defknown field-public-p (System.Reflection.FieldInfo :property IsPublic)
+    "Designates whether a field is public")
+
+(defknown field-private-p (System.Reflection.FieldInfo :property IsPrivate)
+    "Designates whether a field is private")
+
+(defknown field-protected-p (System.Reflection.FieldInfo :property IsFamily)
+    "Designates whether a field is protected")
+
+(defknown field-internal-p (System.Reflection.FieldInfo :property IsAssembly)
+    "Designates whether a field is internal")
+
+(defknown field-protected-or-internal-p
+    (System.Reflection.FieldInfo :property IsFamilyOrAssembly)
+    "Designates whether a field is protected internal")
+
+(defknown field-readonly-p (System.Reflection.FieldInfo :property IsInitOnly)
+    "Designates whether a field is a readonly one")
+
 (defknown field-type (System.Reflection.FieldInfo :property FieldType)
     "Retrieves field type")
+
+(defknown field-raw-constant-value
+    (System.Reflection.FieldInfo :method GetRawConstantValue)
+    "Gets constant field value")
+
+(defknown field-attributes (System.Reflection.FieldInfo :property Attributes)
+    "Retrieves field attributes")
+
+(defknown field-const-p (System.Reflection.FieldInfo :property IsLiteral)
+    "Whether field is a compile-time constant")
 
 (defknown property-type (System.Reflection.PropertyInfo :property PropertyType)
     "Retrieves property type")
@@ -232,11 +336,20 @@
   (declare (type dotnet-object info))
   "Returns non-NIL if a property is static"
   (let ((accessors (%property-accessors info)))
-    (method-static-p (%net-vref accessors 0))))
+    (do-bike-vector (mi accessors)
+      (when (method-static-p mi)
+        (return t)))))
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %property-index-parameters))
 (defknown %property-index-parameters
     (System.Reflection.PropertyInfo :method GetIndexParameters))
+
+(defknown property-attributes (System.Reflection.PropertyInfo :property Attributes)
+    "Retrieves property attributes")
+
+(defun property-indexer-p (property-info)
+  (declare (type dotnet-object property-info))
+  (plusp (%array-length (%property-index-parameters property-info))))
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %type-fields))
 (defknown %type-fields (System.Type :method GetFields))
@@ -246,6 +359,9 @@
   "Retrieves fields from a TYPE"
   (bike-vector-to-list (%type-fields type)))
 
+(defknown %get-type-fields
+    (System.Type :method GetFields "System.Reflection.BindingFlags"))
+
 (declaim (ftype (function (dotnet-object) dotnet-object) %type-properties))
 (defknown %type-properties (System.Type :method GetProperties))
 
@@ -253,6 +369,9 @@
   (declare (type dotnet-type type))
   "Retrieves properties from a TYPE"
   (bike-vector-to-list (%type-properties type)))
+
+(defknown %get-type-properties
+    (System.Type :method GetProperties "System.Reflection.BindingFlags"))
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %type-methods))
 (defknown %type-methods (System.Type :method GetMethods))
@@ -272,6 +391,9 @@
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %method-parameters))
 (defknown %method-parameters (System.Reflection.MethodBase :method GetParameters))
+
+(defknown method-return-parameter (System.Reflection.MethodInfo :property ReturnParameter)
+    "Retrieves return parameter")
 
 (defknown parameter-name (System.Reflection.ParameterInfo :property Name)
     "Retrieves parameter name")
@@ -294,7 +416,19 @@
   (sort (bike-vector-to-list (%property-index-parameters info)) #'< :key #'parameter-position))
 
 (defknown parameter-out-p (System.Reflection.ParameterInfo :property IsOut)
-    "Returns non-Nil in case of parameter being out parameter")
+    "Returns non-NIL in case of parameter being out parameter")
+
+(defknown parameter-in-p (System.Reflection.ParameterInfo :property IsIn)
+    "Returns non-NIL in case of parameter being in parameter")
+
+(defknown parameter-optional-p (System.Reflection.ParameterInfo :property IsOptional)
+    "Returns non-NIL in case of parameter being optional")
+
+(defknown parameter-default-value (System.Reflection.ParameterInfo :property DefaultValue)
+    "Returns default value of a parameter")
+
+(defknown parameter-default-value-p (System.Reflection.ParameterInfo :property HasDefaultValue)
+    "Returns whether a parameter has default value")
 
 (declaim (ftype (function (dotnet-object dotnet-type) (or null dotnet-object))
                 parameter-custom-attrubute))
@@ -349,6 +483,12 @@
 (defknown property-set-method (System.Reflection.PropertyInfo :property SetMethod)
     "Returns setter accessor for property")
 
+(defknown property-readable-p (System.Reflection.PropertyInfo :property CanRead)
+    "Returns T when property has a getter")
+
+(defknown property-writable-p (System.Reflection.PropertyInfo :property CanWrite)
+    "Returns T when property has a setter")
+
 (defknown method-return-type (System.Reflection.MethodInfo :property ReturnType)
     "Gets return type of a method")
 
@@ -391,6 +531,9 @@
 (defknown type-interfaces (System.Type :method GetInterfaces)
     "Returns a .Net array of interfaces implemented by a type")
 
+(defknown type-namespace (System.Type :property Namespace)
+    "Returns namespace of a type")
+
 (defknown %to-disposable (BikeInterop.TypeCaster :method (Cast System.IDisposable)
                                                  System.Object)
     "Casts an object to IDisposable")
@@ -415,5 +558,11 @@
 
 (defknown gc-wait-for-pending-finalizers (System.GC :method WaitForPendingFinalizers)
     "Waits for pending finalizers")
+
+(defknown intptr->int64 (System.IntPtr :method ToInt64)
+    "Converts IntPtr to 64-bit integer")
+
+(defknown intptr->pointer (System.IntPtr :method ToPointer)
+    "Converts IntPtr to pointer")
 
 ;;; vim: ft=lisp et

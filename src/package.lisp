@@ -28,6 +28,7 @@
   (:use #:cl #:cffi #:bike-internals #:named-readtables)
   (:import-from #:alexandria
                 #:with-gensyms
+                #:once-only
                 #:symbolicate
                 #:string-designator
                 #:removef
@@ -36,7 +37,9 @@
                 #:non-negative-fixnum
                 #:positive-fixnum
                 #:parse-body
-                #:ensure-list)
+                #:ensure-list
+                #:when-let
+                #:when-let*)
   (:export
    ;; some internals reexports
    #:native-path
@@ -56,6 +59,9 @@
    #:use-namespace
    #:unuse-namespace
    #:unuse-all-namespaces
+   #:namespace-used-p
+   #:get-used-namespaces
+   #:normalized-type-name
 
    ;; type aliases
    #:use-type-alias
@@ -153,6 +159,7 @@
    #:ref
    #:box
    #:unbox
+   #:bike-type-p
    #:with-fixed
    #:with-fixeds
    #:with-fixeds*
@@ -171,6 +178,19 @@
    #:bike-vector-to-list
 
    ;; syntax
-   #:bike-syntax))
+   #:bike-syntax
+
+   ;;printer
+   #:*print-dotnet-object*
+   #:*print-enumerable*
+   #:*print-dotnet-type-namespaces*
+   #:*print-dotnet-type-parameters*
+   #:*print-dotnet-type-qualified*
+   #:*print-dotnet-type-pointer*
+   #:*print-dotnet-type-ref*
+   #:pprint-dotnet-object
+   #:write-type-name
+   #:set-dotnet-object-printer
+   #:define-dotnet-object-printer))
 
 ;;; vim: ft=lisp et
