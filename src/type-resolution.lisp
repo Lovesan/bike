@@ -194,7 +194,7 @@
   (declare (type dotnet-type type))
   "Ensures simple, non-generic type entry"
   (let ((name (%mknetsym (type-full-name type))))
-    (or (with-type-table-lock (:read) (%type-entry name))
+    (or (%type-entry name)
         (with-type-table-lock (:write)
           (or (%type-entry name)
               (setf (%type-entry name)
