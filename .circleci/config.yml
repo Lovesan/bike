@@ -1,25 +1,5 @@
 version: 2
 jobs:
-  build_3_1_ccl_amd64:
-    docker:
-      - image: "love5an/dotnet-core-sdk-common-lisp:3.1-ccl-latest-focal"
-    working_directory: ~/quicklisp/local-projects/bike
-    steps:
-      - checkout
-      - run:
-          name: Run tests
-          command: cat tests.lisp | ccl64 -Q -b
-
-  build_3_1_sbcl_amd64:
-    docker:
-      - image: "love5an/dotnet-core-sdk-common-lisp:3.1-sbcl-latest-focal"
-    working_directory: ~/quicklisp/local-projects/bike
-    steps:
-      - checkout
-      - run:
-          name: Run tests
-          command: cat tests.lisp | sbcl --disable-debugger --noprint
-
   build_5_0_ccl_amd64:
     docker:
       - image: "love5an/dotnet-core-sdk-common-lisp:5.0-ccl-latest-focal"
@@ -45,7 +25,5 @@ workflows:
 
   tests:
     jobs:
-      - build_3_1_ccl_amd64
-      - build_3_1_sbcl_amd64
       - build_5_0_ccl_amd64
       - build_5_0_sbcl_amd64
