@@ -138,10 +138,11 @@
          (merge-pathnames* +coreclr-library-file+ latest-dir))))))
 
 (defun %get-flexi-stream (in)
-  #+coreclr-windows
-  (make-flexi-stream
-   in :external-format (make-external-format :code-page :id (get-oemcp)))
-  #-coreclr-windows
+  ;;; Recent .Net versions seem to use UTF-8 as a default encoding
+  ;; #+coreclr-windows
+  ;; (make-flexi-stream
+  ;;  in :external-format (make-external-format :code-page :id (get-oemcp))
+  ;; #-coreclr-windows
   (make-flexi-stream
    in :external-format (make-external-format :utf8)))
 
