@@ -109,7 +109,8 @@
  which gives us all the required AspNet assemblies"
   (let* ((process (new 'Process))
          (start-info (property process 'StartInfo))
-         (args (property start-info 'ArgumentList)))
+         (args (property start-info 'ArgumentList))
+         (encoding (property 'System.Text.Encoding 'UTF8)))
     (dolist (arg (list "publish"
                        "-c" "Release"
                        "-o" *deps-directory*
@@ -120,6 +121,8 @@
           (property start-info 'WorkingDirectory) *deps-directory*
           (property start-info 'RedirectStandardOutput) T
           (property start-info 'RedirectStandardError) T
+          (property start-info 'StandardOutputEncoding) encoding
+          (property start-info 'StandardErrorEncoding) encoding
           (property process 'EnableRaisingEvents) T)
     (invoke process "add_Exited"
             (new 'EventHandler

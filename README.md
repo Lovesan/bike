@@ -13,6 +13,20 @@
 
 Now you have the batteries included! Which are of the size of Battersea Power Station.
 
+# Library status
+
+|          | Windows | Linux | macOS  |
+|:--------:|:-------:|:-----:|:------:|
+| **SBCL** | ![OK](https://placehold.co/80x30/239922/FFF?text=OK) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
+| **CCL**  | ![OK](https://placehold.co/80x30/239922/FFF?text=OK) | [![Crash](https://placehold.co/80x30/A00/DD2?text=Crash)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
+| Other    | ![?](https://placehold.co/80x30/999/FFF?text=%3F) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
+
+The above only applies to X86-64.
+
+See below for [known issues](#known-issues).
+
+#### CircleCI status (.NET 5, SBCL and CCL on ubuntu-focal)
+
 [![CircleCI](https://circleci.com/gh/Lovesan/bike/tree/master.svg?style=svg)](https://circleci.com/gh/Lovesan/bike/tree/master)
 
 ## TL;DR
@@ -59,7 +73,7 @@ The most basic way to install the library at this moment would be to use [quickl
 (ql:quickload :bike)
 ````
 
-Alternatively, you can drop the contents of the repository into ````~/quicklisp/local-projects/bike```` directory.
+To get the latest version you can also clone the repo into ````~/quicklisp/local-projects/bike```` directory.
 
 The library, once loaded, searches for .Net Core runtime and for ````BikeInterop.dll```` library in several places, like in the executable directory.
 
@@ -84,27 +98,68 @@ Given this, you can deploy dumped images to other machines.
 
 ## Known Issues
 
+SBCL is the main development and testing platform. CCL is also used for testing.
+
 ### Task.Result and other things which block .Net code
 
-Do not use this if you pass Lisp callbacks to .Net code - this may cause deadlocks.
+Avoid using this if you pass Lisp callbacks to .Net code - this may cause deadlocks. You've been warned.
 
-### SBCL
+### Windows
 
-SBCL is the main development and testing platform.
+The library works well on SBCL/Windows, runtimes and garbage collectors seem to coexist peacefully.
+SBCL callbacks can even be utilized by .Net [System.Threading.Tasks](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks?view=netcore-2.2)
 
-#### Windows
+The same applies to CCL.
 
-The library seems to work well on SBCL/Windows, the runtimes and garbage collectors seem to coexist peacefully. SBCL callbacks can even be utilized by .Net [System.Threading.Tasks](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks?view=netcore-2.2)
+#### CoreCLR location
 
-There were some issues with exceptions in the past, but those were resolved.
+On `load-foreign-library` CFFI first tries to load the library directly.
+
+Therefore, `coreclr.dll`(and `wpfgfx_cor3.dll` etc.) which CFFI loads, may originate from some directory
+listed in `PATH`, which differs from the .NET runtime library directory.
+
+That's not a problem in case you are deploying your application in the same directory that contains full .NET runtime,
+or in case you have the latest PowerShell installed and listed in PATH and you are targeting the latest .NET.
+
+But sometimes this behavior may cause weird things to happen.
+
+#### Older Windows issues
+
+There were some issues with SBCL and exceptions in the past, but those were resolved.
 
 The reason for those issues was described [in my (D.I.) SBCL patch that had been applied in 2019.](https://sourceforge.net/p/sbcl/mailman/sbcl-devel/thread/CAK3-8Ji8XrjZd8ttKa0XOFPTewbg%2Bf2t5U3ZCwWGdcv6S6W_mQ%40mail.gmail.com/#msg36687909)
 
 Basically, on x86-64 Windows, SBCL uses VEH, and its handler had been catching all the exceptions before .Net Core handlers even had a chance to look at their ones. This, next, sometimes led to a situation where SBCL disallowed .Net runtime to enter into the correct state, which led to the corruption of both runtimes and process crashes.
 
-Seems like it has been resolved. [The latest patch from Luís Oliveira greatly enhanced SBCL exception handling.](https://github.com/sbcl/sbcl/commit/50085a82c7bd6dfb91599f236e3d002f49ebec72)
+Seems like it has been resolved. [This particular patch from Luís Oliveira greatly enhanced SBCL exception handling.](https://github.com/sbcl/sbcl/commit/50085a82c7bd6dfb91599f236e3d002f49ebec72)
 
-#### Linux
+### Linux
+
+#### .NET 6+ runtime loading crashes SBCL or CCL on Linux due to floating point exception
+
+https://github.com/Lovesan/bike/issues/10
+
+This is a major/blocking issue that the library author needs help with.
+
+Apparently, .NET 6 changed something in its floating point exception handling on Linux, and since then, Lisp runtimes crash with `SIGFPE` on CoreCLR initialization.
+
+An example of such crash:
+````
+CORRUPTION WARNING in SBCL pid 151 tid 163:
+Received signal 8 @ 7f00cbeb2c3b in non-lisp tid 163, resignaling to a lisp thread.
+The integrity of this image is possibly compromised.
+Continuing with fingers crossed.
+Floating point exception (core dumped)
+````
+
+There's a workaround for SBCL, mentioned in the issue comments. Before loading the library, execute the following:
+````lisp
+(sb-vm::set-floating-point-modes :traps nil)
+````
+
+This would disable all floating point exception handling on SBCL, so for ex. `(/ 1.0 0.0)` would lead to a result of `#.SINGLE-FLOAT-POSITIVE-INFINITY` instead of a condition of type `DIVISION-BY-ZERO`.
+
+#### Older linux issues
 
 Early SBCL versions(namely [pre 1.5.4.13-b656602a3](https://sourceforge.net/p/sbcl/sbcl/ci/b656602a309fc9647dd01255154c1068305f12f7/tree/)) were frequently crashing into LDB with a cryptic message of ```blockables unblocked``` if .Net Core runtime was present in a lisp process.
 
@@ -121,9 +176,13 @@ On overall, this need to be debugged out further. Maybe we would ask for help so
 **UPD** **2019-07-13:**  CoreFX(the .Net Core stdlib) also establishes signals for handling System.Diagnostics.Process classes and Console Ctrl handlers. We let it handle processes, because it can handle that perfectly(that means, including processes started by lisp, e.g. using ```uiop:run-program```), but revert the SIGINT handler for lisp one.
 
 
-#### MacOS X
+### MacOS X
 
 Testers are welcome.
+
+### ARM
+
+Here be dragons
 
 ## TODO
 
@@ -143,7 +202,7 @@ Testers are welcome.
 
 * Expose DEFKNOW-alike API to the user
 
-* Investigate CoreCLR interop on Linux. Fix SBCL crashes on Windows with NullReferenceException.
+* Investigate CoreCLR interop on Linux.
 
 * Optimize invocation cache (maybe write some hash functions instead of using ```sxhash``` etc)
 

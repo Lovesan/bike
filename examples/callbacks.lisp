@@ -54,7 +54,8 @@
                          :defaults *examples-project-dir*)))
          (process (new 'Process))
          (start-info (property process 'StartInfo))
-         (args (property start-info 'ArgumentList)))
+         (args (property start-info 'ArgumentList))
+         (encoding (property 'System.Text.Encoding 'UTF8)))
     (dolist (arg (list "build" "-c" "Release" project-file))
       (invoke args 'Add arg))
     (setf (property start-info 'FileName) "dotnet"
@@ -62,6 +63,8 @@
           (property start-info 'WorkingDirectory) *examples-project-dir*
           (property start-info 'RedirectStandardOutput) T
           (property start-info 'RedirectStandardError) T
+          (property start-info 'StandardOutputEncoding) encoding
+          (property start-info 'StandardErrorEncoding) encoding
           (property process 'EnableRaisingEvents) T)
     (invoke process "add_OutputDataReceived"
             (make-process-output-handler *standard-output*))

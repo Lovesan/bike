@@ -1,3 +1,16 @@
+# 0.13.0 Printer facility, various improvements
+  * Added extensible printer facility
+  * Improved type name parser(MZ vectors, arrays of generic type definitions, identifier handling)
+  * Added handling of MZ arrays
+  * Minor improvements in custom syntax parsing
+  * `do-enumerable` now properly disposes enumerators
+  * Added `bike-type-p` predicate for .NET type checking
+  * Fixed boxing of primitive values
+  * Handled unboxing of IntPtr values
+  * `dotnet` command output now uses UTF-8 by default on Windows
+  * Moved CircleCI jobs to .NET 5
+  * Interop assembly now rebuilds on library build
+
 # 0.12.0 WPF & WinForms support, various fixes
   * On Windows, bike defaults to desktop SDK, which allows for WPF and Windows Forms GUI frameworks.
     * Tested on SBCL & CCL
