@@ -22,6 +22,12 @@
 ;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 ;;; DEALINGS IN THE SOFTWARE.
 
+#+sbcl
+(sb-vm::set-floating-point-modes :traps (remove :invalid (getf (sb-vm::get-floating-point-modes) :traps)))
+
+#+ccl
+(ccl:set-fpu-mode :invalid nil)
+
 (ql:quickload '#:bike-internals)
 (ql:quickload '#:bike)
 (ql:quickload '#:bike-tests)
