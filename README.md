@@ -18,8 +18,10 @@ Now you have the batteries included! Which are of the size of Battersea Power St
 |          | Windows | Linux | macOS  |
 |:--------:|:-------:|:-----:|:------:|
 | **SBCL** | ![OK](https://placehold.co/80x30/239922/FFF?text=OK) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
-| **CCL**  | ![OK](https://placehold.co/80x30/239922/FFF?text=OK) | [![Crash](https://placehold.co/80x30/A00/DD2?text=Crash)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
+| **CCL**  | ![OK*](https://placehold.co/80x30/239922/FFF?text=OK%2A) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception)  | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
 | Other    | ![?](https://placehold.co/80x30/999/FFF?text=%3F) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
+
+\* With some exceptions
 
 The above only applies to X86-64.
 
@@ -104,12 +106,20 @@ SBCL is the main development and testing platform. CCL is also used for testing.
 
 Avoid using this if you pass Lisp callbacks to .Net code - this may cause deadlocks. You've been warned.
 
+### Foreign thread callbacks
+
+.Net is known for extensive use of thread pools and such.
+
+A CL implementation without proper support of foreign thread callbacks probably crashes should you pass a callback to some .NET code which would execute it on a different .Net thread.
+
+SBCL has full support for foreign thread callbacks. Unlike CCL, for example.
+
 ### Windows
 
 The library works well on SBCL/Windows, runtimes and garbage collectors seem to coexist peacefully.
 SBCL callbacks can even be utilized by .Net [System.Threading.Tasks](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks?view=netcore-2.2)
 
-The same applies to CCL.
+CCL/Windows does not handle foreign thread callbacks properly but otherwise, the library works fine on this implementation.
 
 #### CoreCLR location
 
@@ -152,12 +162,31 @@ Continuing with fingers crossed.
 Floating point exception (core dumped)
 ````
 
+The source of this FP exception seems to be some operation involving NaN, on some .Net background thread.
+
 There's a workaround for SBCL, mentioned in the issue comments. Before loading the library, execute the following:
+````lisp
+(sb-vm::set-floating-point-modes :traps (remove :invalid (getf (sb-vm::get-floating-point-modes) :traps)))
+````
+
+This would disable NaN-related exceptions for SBCL.
+
+You can also disable all FP exceptions, if you like:
 ````lisp
 (sb-vm::set-floating-point-modes :traps nil)
 ````
 
-This would disable all floating point exception handling on SBCL, so for ex. `(/ 1.0 0.0)` would lead to a result of `#.SINGLE-FLOAT-POSITIVE-INFINITY` instead of a condition of type `DIVISION-BY-ZERO`.
+However, the side effect is that you would get no floating-point-related errors whatsoever\
+  so that for ex. `(/ 1.0 0.0)` would lead to a result of `#.SINGLE-FLOAT-POSITIVE-INFINITY` instead of a condition of type `DIVISION-BY-ZERO`.
+
+For CCL:
+````lisp
+(ccl:set-fpu-mode :invalid nil)
+````
+
+Also, take a look at https://github.com/Shinmera/float-features library.
+
+You may want to wrap your application entry point function in `float-features:with-float-traps-masked` macro on application deployment.
 
 #### Older linux issues
 
