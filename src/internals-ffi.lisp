@@ -199,16 +199,16 @@
                  :else :return (read-lpwstr buf))
         (foreign-free buf))))
 
-  ;; Most lisp implementations do not handle extended-type Windows paths well
+  ;; Most lisp implementations do not handle UNC-like Windows paths well
   (defun strip-dos-path-prefix (path)
     (declare (type string path))
     (dolist (prefix +dos-path-prefixes+ path)
       (when (eql 0 (search prefix path :test #'char=))
         (let* ((prefix-len (length prefix))
                (unc-suffix "UNC\\")
-               (unc (search unc-suffix path :start2 prefix-len :test #'char-equal)))
+               (unc-pos (search unc-suffix path :start2 prefix-len :test #'char-equal)))
           (return
-            (if unc
+            (if (eql prefix-len unc-pos)
               (uiop:strcat "\\\\" (subseq path (+ prefix-len (length unc-suffix))))
               (subseq path prefix-len)))))))
 
