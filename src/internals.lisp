@@ -139,12 +139,7 @@
 
 (defun %get-flexi-stream (in)
   ;;; Recent .Net versions seem to use UTF-8 as a default encoding
-  ;; #+coreclr-windows
-  ;; (make-flexi-stream
-  ;;  in :external-format (make-external-format :code-page :id (get-oemcp))
-  ;; #-coreclr-windows
-  (make-flexi-stream
-   in :external-format (make-external-format :utf8)))
+  (make-flexi-stream in :external-format (make-external-format :utf8)))
 
 (defun build-interop (&key rebuild
                            (enable-task-hack #+coreclr-sbcl-task-hack t
@@ -175,12 +170,12 @@
 
 (defun %find-interop ()
   (or (probe-file* (merge-pathnames* +interop-library-file+
-                                     (pathname-parent-directory-pathname
+                                     (pathname-directory-pathname
                                       (get-exe-path))))
       (probe-file* (merge-pathnames* +interop-library-file+
                                      (lisp-implementation-directory)))
       (probe-file* (merge-pathnames* +interop-library-file+
-                                     (uiop:get-pathname-defaults)))
+                                     (get-pathname-defaults)))
       (and (directory-exists-p *interop-build-dir*)
            (probe-file* (merge-pathnames* +interop-library-file+
                                           *interop-build-dir*)))))
@@ -193,12 +188,12 @@
 (defun find-coreclr ()
   "Returns full path to coreclr library or NIL if not found"
   (or (probe-file* (merge-pathnames* +coreclr-library-file+
-                                     (pathname-parent-directory-pathname
+                                     (pathname-directory-pathname
                                       (get-exe-path))))
       (probe-file* (merge-pathnames* +coreclr-library-file+
                                      (lisp-implementation-directory)))
       (probe-file* (merge-pathnames* +coreclr-library-file+
-                                     (uiop:get-pathname-defaults)))
+                                     (get-pathname-defaults)))
       (%find-by-command)))
 
 ;;; vim: ft=lisp et

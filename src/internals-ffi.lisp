@@ -57,22 +57,56 @@
 
 #+coreclr-windows
 (eval-when (:compile-toplevel :load-toplevel :execute)
+  (define-constant +invalid-handle-value+ (make-pointer (ldb (byte 64 0) -1))
+    :test #'pointer-eq)
+  (defconstant +generic-read+ #x80000000)
+  (defconstant +file-share-read+ #x00000001)
+  (defconstant +file-share-write+ #x00000002)
+  (defconstant +file-share-delete+ #x00000004)
+  (defconstant +open-existing+ 3)
+  (defconstant +file-attributes-normal #x00000080)
+  (defconstant +max-path+ 260)
+  (define-constant +dos-path-prefixes+ '("\\\\?\\" "\\\\.\\")
+    :test #'equal)
+
   (define-foreign-library kernel32
     (t "kernel32.dll"))
   (use-foreign-library kernel32)
+  (defcfun (create-file "CreateFileW" :convention :stdcall
+                                      :library kernel32)
+      :pointer
+    (file-name lpwstr)
+    (access :uint32)
+    (share-mode :uint32)
+    (security-attributes :pointer)
+    (create-disposition :uint32)
+    (flags :uint32)
+    (template :pointer))
+  (defcfun (close-handle "CloseHandle" :convention :stdcall
+                                       :library kernel32)
+      :boolean
+    (handle :pointer))
   (defcfun (get-oemcp "GetOEMCP" :convention :stdcall
                                  :library kernel32)
       :uint)
   (defcfun (get-last-error "GetLastError" :convention :stdcall
                                           :library kernel32)
       :uint32)
-  (defcfun (get-module-file-name
+  (defcfun (%get-module-file-name
             "GetModuleFileNameW" :convention :stdcall
             :library kernel32)
       :uint32
     (module :pointer)
     (buffer :pointer)
     (size :uint32))
+  (defcfun (%get-final-path-name-by-handle "GetFinalPathNameByHandleW"
+                                           :convention :stdcall
+                                           :library kernel32)
+      :uint32
+    (handle :pointer)
+    (buffer :pointer)
+    (len :uint32)
+    (flags :uint32))
   (defcfun (multi-byte-to-wide-char
             "MultiByteToWideChar" :convention :stdcall
             :library kernel32)
@@ -111,26 +145,96 @@
     (buf :pointer)
     (bufsize :uint32)))
 
+#+coreclr-windows
+(progn
+  (declaim (inline alloc-lpwstr))
+  (defun alloc-lpwstr (length)
+    (declare (type (unsigned-byte 32) length))
+    "Allocates null-terminated LPWSTR which can hold LENGTH characters."
+    (let ((ptr (foreign-alloc :uint16 :count (1+ length))))
+      (when (null-pointer-p ptr)
+        (error "Unable to allocate null-terminated LPWSTR of length ~a"
+               length))
+      (setf (mem-aref ptr :uint16 (1- length)) 0)
+      ptr))
+
+  (declaim (inline read-lpwstr))
+  (defun read-lpwstr (pointer)
+    (declare (type foreign-pointer pointer))
+    (values (foreign-string-to-lisp pointer :encoding :utf-16/le)))
+
+  (defun signal-last-error (prefix)
+    (declare (type string prefix))
+    (error (strcat prefix " Error: #x~8,'0X")
+           (get-last-error)))
+
+  (defun get-module-file-name (&optional module)
+    (declare (type (or null foreign-pointer) module))
+    (let* ((module (or module (null-pointer)))
+           (size +max-path+)
+           (buf (alloc-lpwstr size)))
+      (unwind-protect
+           (loop :for rv = (%get-module-file-name module buf size)
+                 :for last-error = (get-last-error)
+                 :unless (= last-error 122)
+                   :return (read-lpwstr buf)
+                 :else :do
+                   (foreign-free buf)
+                   (setf size (* size 2)
+                         buf (alloc-lpwstr size)))
+        (foreign-free buf))))
+
+  (defun get-final-path-name-by-handle (handle)
+    (declare (type foreign-pointer handle))
+    (let* ((size +max-path+)
+           (buf (alloc-lpwstr size)))
+      (unwind-protect
+           (loop :for rv = (%get-final-path-name-by-handle handle buf (1+ size) 0)
+                 :when (zerop rv)
+                   :do (signal-last-error "Unable to get final path name.")
+                 :when (> rv size)
+                   :do (foreign-free buf)
+                       (setf size (* size 2)
+                             buf (alloc-lpwstr size))
+                 :else :return (read-lpwstr buf))
+        (foreign-free buf))))
+
+  ;; Most lisp implementations do not handle extended-type Windows paths well
+  (defun strip-dos-path-prefix (path)
+    (declare (type string path))
+    (dolist (prefix +dos-path-prefixes+ path)
+      (when (eql 0 (search prefix path :test #'char=))
+        (let* ((prefix-len (length prefix))
+               (unc-suffix "UNC\\")
+               (unc (search unc-suffix path :start2 prefix-len :test #'char-equal)))
+          (return
+            (if unc
+              (uiop:strcat "\\\\" (subseq path (+ prefix-len (length unc-suffix))))
+              (subseq path prefix-len)))))))
+
+  (defun get-final-path-name (filename)
+    (declare (type string filename))
+    (let ((handle (create-file filename
+                               +generic-read+
+                               (logior +file-share-read+
+                                       +file-share-write+
+                                       +file-share-delete+)
+                               (null-pointer)
+                               +open-existing+
+                               0
+                               (null-pointer))))
+      (when (pointer-eq handle +invalid-handle-value+)
+        (signal-last-error (format nil "Unable to open file ~s." filename)))
+      (unwind-protect
+           (get-final-path-name-by-handle handle)
+        (close-handle handle)))))
+
 (defun get-exe-path ()
   "Retrieves the path to current executable file"
   #+coreclr-windows
-  (let* ((size 260) ;; MAX_PATH
-         (buf (foreign-alloc :char :count size)))
-    (unwind-protect
-         (loop :for rv = (get-module-file-name (null-pointer)
-                                               buf
-                                               size)
-               :for last-error = (get-last-error) :do
-                 (unless (= last-error 122)
-                   (return (values (foreign-string-to-lisp
-                                    buf :encoding :utf-16/le))))
-                 (foreign-free buf)
-                 (setf size (* size 2)
-                       buf (foreign-alloc :char :count size))
-                 (when (null-pointer-p buf)
-                   (error "Unable to allocate buffer")))
-      (unless (null-pointer-p buf)
-        (foreign-free buf))))
+  (strip-dos-path-prefix
+   (get-final-path-name
+    (get-module-file-name)))
   #+coreclr-macos
   (let* ((size 260)
          (buf (foreign-alloc :char :count size)))
@@ -148,24 +252,24 @@
   #+coreclr-linux
   (native-namestring (truename* "/proc/self/exe"))
   #-(or coreclr-windows coreclr-macos coreclr-linux)
-  (let ((argv0 (first (raw-command-line-arguments))))
+  (let ((argv0 (argv0)))
     (unless argv0
       (error "Unable to get executable name"))
     argv0))
 
 (defun native-path (path)
-  "Retrieves real path of the file or directory"
+  "Retrieves native namestring for the file or directory"
   (declare (type (or pathname string) path))
   #+coreclr-windows
   (let* ((path (uiop:native-namestring path))
          (count (get-full-path-name path 0 (null-pointer) (null-pointer))))
     (with-foreign-object (ptr :uint16 count)
       (let ((rv (get-full-path-name path count ptr (null-pointer))))
-        (when (zerop rv) (error "Unable to get native path"))
-        (values (foreign-string-to-lisp ptr :encoding :utf-16/le)))))
+        (when (zerop rv)
+          (error "Unable to get native path. Error: #x~8.'0X" (get-last-error)))
+        (read-lpwstr ptr))))
   #-coreclr-windows
   (uiop:native-namestring path))
-
 
 ;; i hope that no one who is in his mind
 ;;   uses anything else for paths on Linux/Unix systems
