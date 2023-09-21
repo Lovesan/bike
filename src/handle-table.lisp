@@ -33,7 +33,9 @@
                     :initial-element nil)
    :type (simple-array t (*)))
   (length 1 :type fixnum)
-  (lock (make-rwlock) :type rwlock :read-only t))
+  (lock (make-rwlock :name "Handle table lock")
+   :type rwlock
+   :read-only t))
 
 #+sbcl
 (sb-ext:defglobal *handle-table* nil)

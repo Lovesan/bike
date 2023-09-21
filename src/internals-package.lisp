@@ -47,11 +47,13 @@
            #:rwlock
            #:rwlockp
            #:make-rwlock
+           #:rwlock-name
            #:with-read-lock
            #:with-write-lock)
   (:import-from #:alexandria
                 #:define-constant
                 #:non-negative-fixnum
-                #:with-gensyms))
+                #:with-gensyms
+                #:once-only))
 
 ;;; vim: ft=lisp et

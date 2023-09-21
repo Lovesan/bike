@@ -67,7 +67,7 @@
           [window %Content] control)))
 
 (defun bike-examples:hello-wpf ()
-  (bt:make-thread
+  (bt2:make-thread
    (lambda ()
      ;; Now, this is the VERY important thing. WPF stuff
      ;;   must run inside single-threaded COM apartment.

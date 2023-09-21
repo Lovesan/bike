@@ -42,11 +42,10 @@
                      assembly-designator
                      (load-assembly assembly-designator)))
          (types (assembly-exported-types assembly)))
-    (with-type-table (data ns lock)
-      (with-write-lock (lock)
-        (dolist (type types)
-          (unless (compiler-generated-member-p type)
-            (%ensure-type-entry type)))))
+    (with-type-table-lock (:write)
+      (dolist (type types)
+        (unless (compiler-generated-member-p type)
+          (%ensure-type-entry type))))
     assembly))
 
 (defun import-assembly-from (path)

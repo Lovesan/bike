@@ -58,7 +58,7 @@
                                                      "bike"]))]))
 
 (defun bike-examples:hello-windows-forms ()
-  (bt:make-thread
+  (bt2:make-thread
    (lambda ()
      ;; Now, this is the VERY important thing. WinForms stuff
      ;;   must run inside single-threaded COM apartment.

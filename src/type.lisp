@@ -41,8 +41,9 @@
   (namespaces '() :type list)
   (aliases (make-hash-table :test 'equal) :type hash-table
                                           :read-only t)
-  (lock (make-rwlock) :type rwlock
-                      :read-only t))
+  (lock (make-rwlock :name "Type table lock")
+   :type rwlock
+   :read-only t))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defconstant +max-array-rank+ 32))

@@ -67,7 +67,9 @@
                        :initial-element nil)
    :type simple-vector)
   (count 0 :type non-negative-fixnum)
-  (lock (make-rwlock) :type rwlock :read-only t))
+  (lock (make-rwlock :name "Invocation cache lock")
+   :type rwlock
+   :read-only t))
 
 (#+sbcl sb-ext:defglobal #-sbcl defvar +invocation-cache+ nil)
 
