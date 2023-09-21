@@ -155,7 +155,7 @@
       (when (null-pointer-p ptr)
         (error "Unable to allocate null-terminated LPWSTR of length ~a"
                length))
-      (setf (mem-aref ptr :uint16 (1- length)) 0)
+      (setf (mem-aref ptr :uint16 length) 0)
       ptr))
 
   (declaim (inline read-lpwstr))
