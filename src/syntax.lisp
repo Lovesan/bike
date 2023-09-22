@@ -33,28 +33,31 @@
   (declare (ignore c))
   (let* ((staticp (maybe-read-char stream #\:))
          (target (read stream t nil t))
-         (prefix (maybe-read-char stream #\$ #\%))
-         (member (read stream t nil t))
-         (args (read-delimited-list #\] stream t)))
-    (when (and prefix args)
-      (bike-reader-error
-       stream
-       (format nil
-               (uiop:strcat
-                "~&Field and property forms must not have arguments.~%"
-                "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
-               staticp
-               target
-               prefix
-               member
-               args)))
-    `(,(case prefix
-         (#\% 'property)
-         (#\$ 'field)
-         (t 'invoke))
-      ,(if staticp `(quote ,target) target)
-      (quote ,member)
-      ,@args)))
+         (endp (maybe-read-char stream #\])))
+    (if (and staticp endp)
+      `(resolve-type ',target)
+      (let* ((prefix (maybe-read-char stream #\$ #\%))
+             (member (read stream t nil t))
+             (args (read-delimited-list #\] stream t)))
+        (when (and prefix args)
+          (bike-reader-error
+           stream
+           (format nil
+                   (uiop:strcat
+                    "~&Field and property forms must not have arguments.~%"
+                    "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
+                   staticp
+                   target
+                   prefix
+                   member
+                   args)))
+        `(,(case prefix
+             (#\% 'property)
+             (#\$ 'field)
+             (t 'invoke))
+          ,(if staticp `(quote ,target) target)
+          (quote ,member)
+          ,@args)))))
 
 (defun read-close-bracket (stream c)
   (declare (ignore c))
