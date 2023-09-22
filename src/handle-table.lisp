@@ -37,23 +37,18 @@
    :type rwlock
    :read-only t))
 
-#+sbcl
-(sb-ext:defglobal *handle-table* nil)
+(define-global-var -handle-table- nil)
+(declaim (type (or null handle-table) -handle-table-))
 
-#-sbcl
-(defvar *handle-table* nil)
+(defun init-handle-table ()
+  (setf -handle-table- (%handle-table)))
 
-(declaim (type (or null handle-table) *handle-table*))
-
-(defun %init-handle-table ()
-  (setf *handle-table* (%handle-table)))
-
-(uiop:register-image-restore-hook #'%init-handle-table (null *handle-table*))
+(uiop:register-image-restore-hook #'init-handle-table (null -handle-table-))
 
 (defmacro with-handle-table ((data-var &optional (length-var (gensym)) (lock-type :write))
                              &body body)
   (with-gensyms (table lock)
-    `(let ((,table *handle-table*))
+    `(let ((,table -handle-table-))
        (declare (type handle-table ,table))
        (with-accessors ((,data-var %handle-table-data)
                         (,length-var %handle-table-length)

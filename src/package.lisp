@@ -25,7 +25,7 @@
 (in-package #:cl-user)
 
 (uiop:define-package #:bike
-  (:use #:cl #:cffi #:bike-internals #:named-readtables)
+  (:use #:cl #:global-vars #:cffi #:bike-internals #:named-readtables)
   (:import-from #:alexandria
                 #:with-gensyms
                 #:once-only

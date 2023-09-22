@@ -108,7 +108,7 @@
   (doc nil :type (or null string) :read-only t)
   (decls nil :type list :read-only t))
 
-(#+sbcl sb-ext:defglobal #-sbcl defvar +knowns+ nil)
+(define-global-var -knowns- nil)
 
 (declaim (type (or null hash-table) knowns))
 
@@ -163,7 +163,7 @@
            (type (or list dotnet-object) delegates)
            (type list arg-types type-args))
   (setf delegates (ensure-list delegates))
-  (setf (gethash name +knowns+)
+  (setf (gethash name -knowns-)
         (%make-known-entry :type-name type-name
                            :member-name member-name
                            :type-args type-args
@@ -373,8 +373,8 @@
          ',name))))
 
 (defun initialize-knowns ()
-  (let ((old +knowns+))
-    (setf +knowns+ (make-hash-table :test #'equal))
+  (let ((old -knowns-))
+    (setf -knowns- (make-hash-table :test #'equal))
     (when old
       (maphash (lambda (name entry)
                  (%ensure-known name
@@ -388,6 +388,6 @@
                old))
     (values)))
 
-(uiop:register-image-restore-hook #'initialize-knowns (null +knowns+))
+(uiop:register-image-restore-hook #'initialize-knowns (null -knowns-))
 
 ;;; vim: ft=lisp et

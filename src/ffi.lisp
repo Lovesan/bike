@@ -130,11 +130,11 @@
   (defconstant +sigurg+ 23)
   (defconstant +sigwinch+ 28)
 
-  (#+sbcl sb-ext:defglobal #-sbcl defvar +lisp-sigactions+ (null-pointer))
-  (#+sbcl sb-ext:defglobal #-sbcl defvar +dotnet-sigactions+ (null-pointer))
-  (#+sbcl sb-ext:defglobal #-sbcl defvar +new-sigactions+ (null-pointer))
-  (#+sbcl sb-ext:defglobal #-sbcl defvar +default-sigaction+ (null-pointer))
-  (#+sbcl sb-ext:defglobal #-sbcl defvar +ignore-sigaction+ (null-pointer))
+  (define-global-var -lisp-sigactions- (null-pointer))
+  (define-global-var -dotnet-sigactions- (null-pointer))
+  (define-global-var -new-sigactions- (null-pointer))
+  (define-global-var -default-sigaction- (null-pointer))
+  (define-global-var -ignore-sigaction- (null-pointer))
 
   (declaim (inline sigaction-address))
   (defun sigaction-address (start n)
@@ -143,22 +143,22 @@
     (inc-pointer start (* n (foreign-type-size '(:struct sigaction)))))
 
   (defun save-lisp-sigactions ()
-    (setf +lisp-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
-    (setf +dotnet-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
-    (setf +default-sigaction+ (foreign-alloc '(:struct sigaction)))
-    (setf +ignore-sigaction+ (foreign-alloc '(:struct sigaction)))
-    (setf (foreign-slot-value +default-sigaction+ '(:struct sigaction) 'handler)
+    (setf -lisp-sigactions- (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (setf -dotnet-sigactions- (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (setf -default-sigaction- (foreign-alloc '(:struct sigaction)))
+    (setf -ignore-sigaction- (foreign-alloc '(:struct sigaction)))
+    (setf (foreign-slot-value -default-sigaction- '(:struct sigaction) 'handler)
           (make-pointer +sig-dfl+))
-    (setf (foreign-slot-value +ignore-sigaction+ '(:struct sigaction) 'handler)
+    (setf (foreign-slot-value -ignore-sigaction- '(:struct sigaction) 'handler)
           (make-pointer +sig-ign+))
     (dotimes (i +nsig+)
       (sigaction i
                  (null-pointer)
-                 (sigaction-address +lisp-sigactions+ i)))
+                 (sigaction-address -lisp-sigactions- i)))
     (values))
 
   (defun disable-all-posix-signal-handling ()
-    (when *has-libsystem-native*
+    (when -has-libsystem-native-
       (let ((fp (foreign-symbol-pointer "SystemNative_DisablePosixSignalHandling"
                                         :library 'libsystem-native)))
         (when fp
@@ -169,11 +169,11 @@
   (defcallback chained-sigaction
       :void ((sig :int) (data :pointer) (ctx :pointer))
     (let ((lisp-handler (foreign-slot-value
-                         (sigaction-address +lisp-sigactions+ sig)
+                         (sigaction-address -lisp-sigactions- sig)
                          '(:struct sigaction)
                          'handler))
           (dotnet-handler (foreign-slot-value
-                           (sigaction-address +dotnet-sigactions+ sig)
+                           (sigaction-address -dotnet-sigactions- sig)
                            '(:struct sigaction)
                            'handler)))
       (format t "~X ~X~%" lisp-handler dotnet-handler)
@@ -191,10 +191,10 @@
   (defun restore-lisp-sigactions ()
     "Restores lisp signal actions"
     (dotimes (i +nsig+)
-      (let ((addr (sigaction-address +lisp-sigactions+ i)))
+      (let ((addr (sigaction-address -lisp-sigactions- i)))
         (sigaction i addr (null-pointer)))))
 
   (uiop:register-image-restore-hook #'save-lisp-sigactions
-                                    (null-pointer-p +lisp-sigactions+)))
+                                    (null-pointer-p -lisp-sigactions-)))
 
 ;;; vim: ft=lisp et

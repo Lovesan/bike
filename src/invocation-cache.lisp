@@ -71,14 +71,13 @@
    :type rwlock
    :read-only t))
 
-(#+sbcl sb-ext:defglobal #-sbcl defvar +invocation-cache+ nil)
-
-(declaim (type (or null invocation-cache) +invocation-cache+))
+(define-global-var -invocation-cache- nil)
+(declaim (type (or null invocation-cache) -invocation-cache-))
 
 (defmacro with-icache ((&rest slots)  &body body)
   (with-gensyms (cache)
     (let ((accessors (%collect-accessors 'icache- slots)))
-      `(let ((,cache +invocation-cache+))
+      `(let ((,cache -invocation-cache-))
          (declare (type invocation-cache ,cache))
          (with-accessors ,accessors ,cache ,@body)))))
 
@@ -282,11 +281,10 @@
               entry))))))
 
 (defun initialize-invocation-cache ()
-  (setf +invocation-cache+ (make-icache))
+  (setf -invocation-cache- (make-icache))
   (values))
 
-
 (uiop:register-image-restore-hook #'initialize-invocation-cache
-                                  (null +invocation-cache+))
+                                  (null -invocation-cache-))
 
 ;;; vim: ft=lisp et

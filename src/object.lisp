@@ -78,14 +78,13 @@
                            nil
                            (let ((object (,%%ctr pointer)))
                              (tg:finalize object (lambda ()
-                                                   (when +coreclr-host+
+                                                   (when -coreclr-host-
                                                      (%free-handle pointer))))
                              object)))))))
   (frob object nil)
   (frob type)
   (frob delegate)
   (frob exception))
-
 
 (macrolet
     ((frob (name type)

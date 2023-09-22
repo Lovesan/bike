@@ -30,6 +30,7 @@
   :licence "MIT"
   :depends-on (#:uiop
                #:alexandria
+               #:global-vars
                #:cffi
                #:cl-ppcre
                #:split-sequence

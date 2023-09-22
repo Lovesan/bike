@@ -90,11 +90,7 @@
   (array-entries nil :type (or null (simple-array (or null type-entry) (#.+max-array-rank+))))
   (mz-vector-entry nil :type (or null type-entry)))
 
-#+sbcl
-(sb-ext:defglobal *type-table* nil)
-
-#-sbcl
-(defvar *type-table* nil)
+(define-global-var -type-table- nil)
 
 (declaim (inline %base-string-to-string))
 (defun %base-string-to-string (string &optional upcase)
@@ -174,14 +170,14 @@
 (defmacro with-type-table ((&rest slots) &body body)
   (with-gensyms (table)
     (let ((accessors (%collect-accessors '%type-table- slots)))
-      `(let ((,table *type-table*))
+      `(let ((,table -type-table-))
          (declare (type type-table ,table))
          (with-accessors ,accessors ,table ,@body)))))
 
 (defmacro with-type-table-lock ((&optional (type :read)) &body body)
   (declare (type (member :read :write) type))
   (with-gensyms (table lock)
-    `(let ((,table *type-table*))
+    `(let ((,table -type-table-))
        (declare (type type-table ,table))
        (with-accessors ((,lock %type-table-lock))
            ,table

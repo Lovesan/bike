@@ -25,7 +25,7 @@
 (in-package #:cl-user)
 
 (uiop:define-package #:bike-internals
-  (:use #:cl #:uiop #:cffi #:split-sequence #:flexi-streams #:cl-ppcre)
+  (:use #:cl #:global-vars #:uiop #:cffi #:split-sequence #:flexi-streams #:cl-ppcre)
   (:export #:find-coreclr
            #:find-interop
            #:build-interop

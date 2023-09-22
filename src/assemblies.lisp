@@ -61,8 +61,8 @@
       (import-assembly assembly)))
   (values))
 
-(defun %init-type-table (namespaces types aliases)
-  (setf *type-table* (%type-table))
+(defun init-type-table (namespaces types aliases)
+  (setf -type-table- (%type-table))
   ;; load default assemblies
   (dolist (assembly-string *default-assemblies*)
     (load-assembly assembly-string))
@@ -91,9 +91,9 @@
             :do (resolve-type qname))))
   (values))
 
-(defun %reload-type-table ()
+(defun reload-type-table ()
   (multiple-value-bind (namespaces types aliases)
-      (when *type-table*
+      (when -type-table-
         (with-type-table (data namespaces aliases)
           (values namespaces
                   (let ((types '()))
@@ -105,13 +105,13 @@
                              data)
                     (nreverse types))
                   (hash-table-alist aliases))))
-    (%init-type-table namespaces types aliases))
+    (init-type-table namespaces types aliases))
   (values))
 
 (defun clear-type-cache ()
   "Clears type and namespace cache and restores it to current defaults."
-  (%init-type-table '() '() '()))
+  (init-type-table '() '() '()))
 
-(uiop:register-image-restore-hook #'%reload-type-table (not *type-table*))
+(uiop:register-image-restore-hook #'reload-type-table (not -type-table-))
 
 ;;; vim: ft=lisp et

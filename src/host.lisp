@@ -39,14 +39,14 @@
 (defmacro define-coreclr-host
     (name (handle-slot domain-id-slot domain-name-slot vtable-slot)
      &body delegates)
-  (let* ((var-name (symbolicate '+ name '+))
-         (index-var-name (symbolicate '+ name '- 'indices '+))
+  (let* ((var-name (symbolicate '- name '-))
+         (index-var-name (symbolicate '- name '- 'indices '-))
          (predicate (symbolicate name '- 'p))
          (conc-name (symbolicate '% name '-))
          (constructor (symbolicate '% name))
          (delegate-count (length delegates))
          (vtable-accessor (symbolicate conc-name vtable-slot)))
-    `(progn (#+sbcl sb-ext:defglobal #-sbcl defvar ,var-name nil)
+    `(progn (define-global-var ,var-name nil)
             (defstruct (,name (:constructor ,constructor (,handle-slot
                                                           ,domain-id-slot
                                                           ,domain-name-slot))
@@ -65,7 +65,8 @@
                :read-only t))
             (declaim (type (or null ,name) ,var-name))
             (eval-when (:compile-toplevel :load-toplevel :execute)
-              (#+sbcl sb-ext:defglobal #-sbcl defvar ,index-var-name (make-hash-table :test #'eq))
+              (declaim (type hash-table ,index-var-name))
+              (define-global-var ,index-var-name (make-hash-table :test #'eq))
               (clrhash ,index-var-name)
               ,@(loop :for i :from 0
                       :for form :in delegates
@@ -200,7 +201,7 @@
                    ;; save coreclr signals
                    (dotimes (i +nsig+)
                      ;; Some of them would of course be ours lisp signals reestablished earlier
-                     (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i)))
+                     (sigaction i (null-pointer) (sigaction-address -dotnet-sigactions- i)))
                    #+sbcl
                    (foreign-funcall "restore_sbcl_signals")
                    #-sbcl
@@ -215,13 +216,13 @@
       (free-converted-object app-paths 'lpastr nil)
       (free-converted-object app-ni-paths 'lpastr nil))))
 
-(uiop:register-image-restore-hook #'initialize-coreclr (not +coreclr-host+))
+(uiop:register-image-restore-hook #'initialize-coreclr (not -coreclr-host-))
 
 (defun shutdown-coreclr ()
-  (let ((host +coreclr-host+))
+  (let ((host -coreclr-host-))
     (if host
       (with-foreign-object (pcode :int)
-        (setf +coreclr-host+ nil)
+        (setf -coreclr-host- nil)
         (let ((rv (coreclr-shutdown-2 (%coreclr-host-handle host)
                                       (%coreclr-host-domain-id host)
                                       pcode)))
@@ -240,18 +241,18 @@
     (init-native-aux-signals)
     (hostcall initialize-corefx-signals :void)
 
-    (setf +new-sigactions+ (foreign-alloc '(:struct sigaction) :count +nsig+))
+    (setf -new-sigactions- (foreign-alloc '(:struct sigaction) :count +nsig+))
     (dotimes (i +nsig+)
-      (sigaction i (null-pointer) (sigaction-address +new-sigactions+ i))
-      (unless (pointer-eq (foreign-slot-value (sigaction-address +new-sigactions+ i)
+      (sigaction i (null-pointer) (sigaction-address -new-sigactions- i))
+      (unless (pointer-eq (foreign-slot-value (sigaction-address -new-sigactions- i)
                                               '(:struct sigaction)
                                               'handler)
-                          (foreign-slot-value (sigaction-address +lisp-sigactions+ i)
+                          (foreign-slot-value (sigaction-address -lisp-sigactions- i)
                                               '(:struct sigaction)
                                               'handler))
-        (sigaction i (null-pointer) (sigaction-address +dotnet-sigactions+ i))))
-    (foreign-funcall "memcpy" :pointer +new-sigactions+
-                              :pointer +lisp-sigactions+
+        (sigaction i (null-pointer) (sigaction-address -dotnet-sigactions- i))))
+    (foreign-funcall "memcpy" :pointer -new-sigactions-
+                              :pointer -lisp-sigactions-
                               size-t (* +nsig+ (foreign-type-size '(:struct sigaction))))
 
     (disable-all-posix-signal-handling)
@@ -263,8 +264,8 @@
                    :unless (or (pointer-eq handler (make-pointer +sig-dfl+))
                                (pointer-eq handler (make-pointer +sig-ign+)))
                      :collect (cons i handler))))
-      (let* ((lisp-signals (collect-signals +lisp-sigactions+))
-             (dotnet-signals (collect-signals +dotnet-sigactions+))
+      (let* ((lisp-signals (collect-signals -lisp-sigactions-))
+             (dotnet-signals (collect-signals -dotnet-sigactions-))
              (changed-dotnet-signals
                (remove-if (lambda (sig)
                             (not
@@ -280,25 +281,25 @@
         (declare (ignore changed-dotnet-signals))
         (dolist (sig new-dotnet-signals)
           (let ((sig (car sig)))
-            (foreign-funcall "memcpy" :pointer (sigaction-address +lisp-sigactions+ sig)
-                                      :pointer (sigaction-address +dotnet-sigactions+ sig)
+            (foreign-funcall "memcpy" :pointer (sigaction-address -lisp-sigactions- sig)
+                                      :pointer (sigaction-address -dotnet-sigactions- sig)
                                       size-t (foreign-type-size '(:struct sigaction)))))))
 
 
 
     ;; only use SIGCHLD for now, dotnet background thread perfectly handles it
     (dolist (sig (list +sigchld+))
-      (setf (foreign-slot-value (sigaction-address +new-sigactions+ sig)
+      (setf (foreign-slot-value (sigaction-address -new-sigactions- sig)
                                 '(:struct sigaction) 'handler)
-            (foreign-slot-value (sigaction-address +dotnet-sigactions+ sig)
+            (foreign-slot-value (sigaction-address -dotnet-sigactions- sig)
                                 '(:struct sigaction) 'handler)))
 
     ;; init signals from new sigactions
     (dotimes (i +nsig+)
-      (let ((addr (sigaction-address +new-sigactions+ i)))
+      (let ((addr (sigaction-address -new-sigactions- i)))
         (sigaction i addr (null-pointer)))))
 
   (uiop:register-image-restore-hook #'initialize-dotnet-sigactions
-                                    (null-pointer-p +new-sigactions+)))
+                                    (null-pointer-p -new-sigactions-)))
 
 ;;; vim: ft=lisp et

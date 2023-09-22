@@ -25,19 +25,19 @@
 (in-package #:bike)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (defvar *coreclr-location*)
-  (defvar *interop-location*)
+  (define-global-var -coreclr-location- nil)
+  (define-global-var -interop-location- nil)
   (defun init-coreclr-search-location ()
     (let ((lib (find-coreclr)))
       (if lib
-        (progn (setf *coreclr-location* lib)
+        (progn (setf -coreclr-location- lib)
                (pushnew (uiop:pathname-directory-pathname lib)
                         *foreign-library-directories*
                         :test #'equalp))
         (error "Unable to find CoreCLR")))
     (let ((lib (find-interop t)))
       (if lib
-        (progn (setf *interop-location* lib)
+        (progn (setf -interop-location- lib)
                (pushnew (uiop:pathname-directory-pathname lib)
                         *foreign-library-directories*
                         :test #'equalp))
@@ -47,8 +47,9 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (define-foreign-library coreclr
-    (t #.+coreclr-library-file+))
+    (t #.+coreclr-library-file+)))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
   (unless (foreign-library-loaded-p 'coreclr)
     (use-foreign-library coreclr)))
 
@@ -56,23 +57,23 @@
   (defun %get-related-app-path (name)
     (cl-ppcre:regex-replace
      "(?i)Microsoft\\.NetCore\\.App"
-     (native-path (uiop:pathname-directory-pathname *coreclr-location*))
+     (native-path (uiop:pathname-directory-pathname -coreclr-location-))
      name)))
 
 #+coreclr-windows
 (progn
   (eval-when (:compile-toplevel :load-toplevel :execute)
-    (defvar *desktop-sdk-dir* nil)
+    (define-global-var -desktop-sdk-dir- nil)
     (defun initialize-wpfgfx-search-location ()
       (let* ((desktop-sdk-dir (pathname
                                (%get-related-app-path "Microsoft.WindowsDesktop.App"))))
         (if (uiop:probe-file*
              (uiop:make-pathname* :name "wpfgfx_cor3.dll"
                                   :defaults desktop-sdk-dir))
-          (pushnew (setf *desktop-sdk-dir* desktop-sdk-dir)
+          (pushnew (setf -desktop-sdk-dir- desktop-sdk-dir)
                    *foreign-library-directories*
                    :test #'equalp)
-          (setf *desktop-sdk-dir* nil))))
+          (setf -desktop-sdk-dir- nil))))
     (uiop:register-image-restore-hook 'initialize-wpfgfx-search-location))
 
   (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -86,7 +87,7 @@
     (define-foreign-library wpfgfx
       (t "wpfgfx_cor3.dll"))
     (defun load-wpfgfx ()
-      (when *desktop-sdk-dir*
+      (when -desktop-sdk-dir-
         (unless (foreign-library-loaded-p 'vcruntime)
           (use-foreign-library vcruntime))
         (unless (foreign-library-loaded-p 'd3dcompiler)
@@ -98,7 +99,7 @@
 #-coreclr-windows
 (progn
   (eval-when (:compile-toplevel :load-toplevel :execute)
-    (defvar *has-libsystem-native* nil)
+    (define-global-var -has-libsystem-native- nil)
     (define-foreign-library libsystem-native
       #+coreclr-macos
       (t "libSystem.Native.dylib")
@@ -110,17 +111,17 @@
                    "libSystem.Native.dylib"
                    #-coreclr-macos
                    "libSystem.Native.so"
-                   (uiop:pathname-directory-pathname *coreclr-location*))))
+                   (uiop:pathname-directory-pathname -coreclr-location-))))
         (when (uiop:probe-file* path)
-          (setf *has-libsystem-native* t))))
+          (setf -has-libsystem-native- t))))
     (uiop:register-image-restore-hook 'initialize-libsystem-native-search))
   (eval-when (:compile-toplevel :load-toplevel :execute)
     (defun load-libsystem-native ()
-      (when *has-libsystem-native*
+      (when -has-libsystem-native-
         (use-foreign-library libsystem-native)))
     (uiop:register-image-restore-hook 'load-libsystem-native))
   (defun init-native-aux-signals ()
-    (when *has-libsystem-native*
+    (when -has-libsystem-native-
       (let ((fp (foreign-symbol-pointer
                  "SystemNative_InitializeTerminalAndSignalHandling"
                  :library 'libsystem-native)))
@@ -133,10 +134,10 @@
            (mapcar #'native-path
                    (remove nil
                            (list
-                            (uiop:pathname-directory-pathname *coreclr-location*)
+                            (uiop:pathname-directory-pathname -coreclr-location-)
                             #+windows
-                            *desktop-sdk-dir*
-                            (uiop:pathname-directory-pathname *interop-location*)
+                            -desktop-sdk-dir-
+                            (uiop:pathname-directory-pathname -interop-location-)
                             (uiop:get-pathname-defaults)
                             (uiop:lisp-implementation-directory)
                             (uiop:pathname-directory-pathname (get-exe-path)))))
@@ -149,7 +150,7 @@
   (let ((defaults (uiop:directory* (uiop:make-pathname*
                                     :name uiop:*wild*
                                     :type "dll"
-                                    :defaults *coreclr-location*))))
+                                    :defaults -coreclr-location-))))
     ;; On Windows, we want to default to Desktop SDK, should
     ;;  it be installed, to be able to use WinForms/WPF.
     ;; How's the addition of the desktop SDK dir to APP/NI
@@ -162,12 +163,12 @@
     ;; It wont hurt apps that won't use WPF/WinForms, since Desktop SDK assemblies are
     ;;  simply extended ones of the defaults.
     #+coreclr-windows
-    (if *desktop-sdk-dir*
+    (if -desktop-sdk-dir-
       (loop :with desktop-asms = (uiop:directory*
                                   (uiop:make-pathname*
                                    :name uiop:*wild*
                                    :type "dll"
-                                   :defaults *desktop-sdk-dir*))
+                                   :defaults -desktop-sdk-dir-))
             :for asm :in defaults
             :for replacement = (find-if (lambda (name)
                                           (string-equal (pathname-name asm)
@@ -184,7 +185,7 @@
   (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}~a~a")
           (mapcar #'native-path (get-trusted-platform-assemblies))
           (uiop:inter-directory-separator)
-          (native-path *interop-location*)))
+          (native-path -interop-location-)))
 
 (defun %get-trusted-assembly-names ()
   (loop :with tpa-dlls = (get-trusted-platform-assemblies)

@@ -55,7 +55,7 @@
           :message (or ,message "Slot is required.")))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (defvar *interop-build-dir*
+  (define-global-var -interop-build-dir-
     (native-path
      (merge-pathnames*
       (make-pathname*
@@ -65,7 +65,7 @@
 ;; Clear interop assembly on rebuild
 (eval-when (:compile-toplevel :execute)
   (unless (find-package '#:bike)
-    (delete-directory-tree (parse-native-namestring *interop-build-dir*)
+    (delete-directory-tree (parse-native-namestring -interop-build-dir-)
                            :validate t
                            :if-does-not-exist :ignore)))
 
@@ -146,7 +146,7 @@
                                              #-coreclr-sbcl-task-hack nil))
   (let* ((dir (pathname-parent-directory-pathname
                (pathname-parent-directory-pathname
-                *interop-build-dir*)))
+                -interop-build-dir-)))
          (proj "BikeInterop.csproj"))
     (with-current-directory (dir)
       (unwind-protect
@@ -176,9 +176,9 @@
                                      (lisp-implementation-directory)))
       (probe-file* (merge-pathnames* +interop-library-file+
                                      (get-pathname-defaults)))
-      (and (directory-exists-p *interop-build-dir*)
+      (and (directory-exists-p -interop-build-dir-)
            (probe-file* (merge-pathnames* +interop-library-file+
-                                          *interop-build-dir*)))))
+                                          -interop-build-dir-)))))
 
 (defun find-interop (&optional build)
   (or (%find-interop)

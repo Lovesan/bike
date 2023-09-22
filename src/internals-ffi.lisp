@@ -72,6 +72,7 @@
   (define-foreign-library kernel32
     (t "kernel32.dll"))
   (use-foreign-library kernel32)
+
   (defcfun (create-file "CreateFileW" :convention :stdcall
                                       :library kernel32)
       :pointer

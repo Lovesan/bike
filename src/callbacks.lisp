@@ -57,7 +57,7 @@
             (make-pointer (%alloc-lisp-handle e)))
       (null-pointer))))
 
-(#+sbcl sb-ext:defglobal #-sbcl defvar +callbacks-initialized-p+ nil)
+(define-global-var -callbacks-initialized- nil)
 
 (defun initialize-callbacks ()
   (with-foreign-object (ex :pointer)
@@ -66,8 +66,8 @@
               :pointer (callback apply-callback)
               :pointer ex)
     (%transform-exception (mem-ref ex :pointer))
-    (setf +callbacks-initialized-p+ t)))
+    (setf -callbacks-initialized- t)))
 
-(uiop:register-image-restore-hook #'initialize-callbacks (not +callbacks-initialized-p+))
+(uiop:register-image-restore-hook #'initialize-callbacks (not -callbacks-initialized-))
 
 ;;; vim: ft=lisp et
