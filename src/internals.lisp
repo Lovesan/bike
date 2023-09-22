@@ -35,6 +35,14 @@
   "libcoreclr.so"
   :test #'equal)
 
+#-coreclr-windows
+(define-constant +system-native-library-file+
+  #+coreclr-macos
+  "libSystem.Native.dylib"
+  #-coreclr-macos
+  "libSystem.Native.so"
+  :test #'equal)
+
 (define-constant +interop-library-file+ "BikeInterop.dll"
   :test #'equal)
 
@@ -164,6 +172,7 @@
          (with-open-file (stream "build.log" :element-type '(unsigned-byte 8)
                                              :if-does-not-exist :create)
            (with-open-stream (in (%get-flexi-stream stream))
+             (fresh-line *error-output*)
              (loop :for line = (read-line in nil)
                    :while line :do (write-line line *error-output*)))))))))
 

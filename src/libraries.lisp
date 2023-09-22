@@ -45,13 +45,10 @@
     (values))
   (uiop:register-image-restore-hook 'init-coreclr-search-location))
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (define-foreign-library coreclr
-    (t #.+coreclr-library-file+)))
+(define-foreign-library-once coreclr
+  (t #.+coreclr-library-file+))
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (unless (foreign-library-loaded-p 'coreclr)
-    (use-foreign-library coreclr)))
+(use-foreign-library-once coreclr)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %get-related-app-path (name)
@@ -76,55 +73,46 @@
           (setf -desktop-sdk-dir- nil))))
     (uiop:register-image-restore-hook 'initialize-wpfgfx-search-location))
 
-  (eval-when (:compile-toplevel :load-toplevel :execute)
-    ;; These libs should be pre-loaded, otherwise WPF would be unable
-    ;;   to find them, for who knows what reasons
+  ;; These libs should be pre-loaded, otherwise WPF would be unable
+  ;;   to find them, for who knows what reasons
+  (define-foreign-library-once vcruntime
+    (t "vcruntime140_cor3.dll"))
+  (define-foreign-library-once d3dcompiler
+    (t "D3DCompiler_47_cor3.dll"))
+  (define-foreign-library-once wpfgfx
+    (t "wpfgfx_cor3.dll"))
 
-    (define-foreign-library vcruntime
-      (t "vcruntime140_cor3.dll"))
-    (define-foreign-library d3dcompiler
-      (t "D3DCompiler_47_cor3.dll"))
-    (define-foreign-library wpfgfx
-      (t "wpfgfx_cor3.dll"))
+  (eval-when (:compile-toplevel :load-toplevel :execute)
     (defun load-wpfgfx ()
       (when -desktop-sdk-dir-
-        (unless (foreign-library-loaded-p 'vcruntime)
-          (use-foreign-library vcruntime))
-        (unless (foreign-library-loaded-p 'd3dcompiler)
-          (use-foreign-library d3dcompiler))
-        (unless (foreign-library-loaded-p 'wpfgfx)
-          (use-foreign-library wpfgfx))))
+        (use-foreign-library-once vcruntime)
+        (use-foreign-library-once d3dcompiler)
+        (use-foreign-library-once wpfgfx)))
     (uiop:register-image-restore-hook 'load-wpfgfx)))
 
 #-coreclr-windows
 (progn
+  (define-foreign-library-once system-native
+    (t #.+system-native-library-file+))
   (eval-when (:compile-toplevel :load-toplevel :execute)
-    (define-global-var -has-libsystem-native- nil)
-    (define-foreign-library libsystem-native
-      #+coreclr-macos
-      (t "libSystem.Native.dylib")
-      #-coreclr-macos
-      (t "libSystem.Native.so"))
-    (defun initialize-libsystem-native-search ()
+    (define-global-var -has-system-native- nil)
+    (defun initialize-system-native-search ()
       (let ((path (uiop:merge-pathnames*
-                   #+coreclr-macos
-                   "libSystem.Native.dylib"
-                   #-coreclr-macos
-                   "libSystem.Native.so"
+                   +system-native-library-file+
                    (uiop:pathname-directory-pathname -coreclr-location-))))
         (when (uiop:probe-file* path)
-          (setf -has-libsystem-native- t))))
-    (uiop:register-image-restore-hook 'initialize-libsystem-native-search))
+          (setf -has-system-native- t))))
+    (uiop:register-image-restore-hook 'initialize-system-native-search))
   (eval-when (:compile-toplevel :load-toplevel :execute)
-    (defun load-libsystem-native ()
-      (when -has-libsystem-native-
-        (use-foreign-library libsystem-native)))
-    (uiop:register-image-restore-hook 'load-libsystem-native))
+    (defun load-system-native ()
+      (when -has-system-native-
+        (use-foreign-library-once system-native)))
+    (uiop:register-image-restore-hook 'load-system-native))
   (defun init-native-aux-signals ()
-    (when -has-libsystem-native-
+    (when -has-system-native-
       (let ((fp (foreign-symbol-pointer
                  "SystemNative_InitializeTerminalAndSignalHandling"
-                 :library 'libsystem-native)))
+                 :library 'system-native)))
         (when fp
           (foreign-funcall-pointer fp ()))))))
 

@@ -24,6 +24,37 @@
 
 (in-package #:bike-internals)
 
+;; LOAD-FOREIGN-LIBRARY actually closes the library before
+;;  reloading it again. That would lead to a crash in case of .NET runtime
+;;  being present in the process. .NET runtime, once loaded, can not be
+;;  unloaded without proper deinitialization. Moreover, it can not be
+;;  loaded again, once it has been shut down and/or the coreclr
+;;  library has been unloaded.
+;; Now, this could be mitigated by using the FOREIGN-LIBRARY-LOADED-P function
+;;  from CFFI except for the fact that CFFI redefines foreign libraries each time
+;;  DEFINE-FOREIGN-LIBRARY expansion is evaluated.
+;;  When it does this, it omits library load status
+;;  making the FOREIGN-LIBRARY-LOADED-P function effectively useless.
+(defmacro define-foreign-library-once (name-and-options &body pairs)
+  "Defines a foreign library NAME that can be posteriorly used with
+    the USE-FOREIGN-LIBRARY macro.
+Unlike the original CFFI macro, it does not redefine the library
+  in case it is already defined."
+  (let ((name-and-options (ensure-list name-and-options)))
+    (destructuring-bind (name &rest options)
+        name-and-options
+      `(eval-when (:compile-toplevel :load-toplevel :execute)
+         (unless (find ',name (list-foreign-libraries :loaded-only nil)
+                       :key #'foreign-library-name)
+           (define-foreign-library (,name ,@options)
+             ,@pairs))))))
+
+(defmacro use-foreign-library-once (name)
+  (declare (type (and symbol (not null)) name))
+  `(eval-when (:compile-toplevel :load-toplevel :execute)
+     (unless (foreign-library-loaded-p ',name)
+       (load-foreign-library ',name))))
+
 (define-constant +pointer-size+ (foreign-type-size :pointer))
 
 (define-constant +pointer-bits+ (* 8 +pointer-size+))
@@ -69,9 +100,9 @@
   (define-constant +dos-path-prefixes+ '("\\\\?\\" "\\\\.\\")
     :test #'equal)
 
-  (define-foreign-library kernel32
-    (t "kernel32.dll"))
-  (use-foreign-library kernel32)
+  (define-foreign-library-once kernel32
+      (t "kernel32.dll"))
+  (use-foreign-library-once kernel32)
 
   (defcfun (create-file "CreateFileW" :convention :stdcall
                                       :library kernel32)

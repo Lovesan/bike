@@ -26,30 +26,46 @@
 
 (uiop:define-package #:bike-internals
   (:use #:cl #:global-vars #:uiop #:cffi #:split-sequence #:flexi-streams #:cl-ppcre)
-  (:export #:find-coreclr
-           #:find-interop
-           #:build-interop
-           #:get-exe-path
-           #:+coreclr-library-file+
-           #:+interop-library-file+
-           #:+pointer-size+
-           #:+pointer-bits+
-           #:lpwstr
-           #:lpastr
-           #:dnchar
-           #:size-t
-           #:native-path
+  (:export
+   ;; .NET runtime location
+   #:find-coreclr
+   #:+coreclr-library-file+
+   #-windows
+   #:+system-native-library-file+
 
-           #:slot-initializer-missing
-           #:slot-initializer-missing-message
-           #:required-slot
+   ;; Interop library
+   #:find-interop
+   #:build-interop
+   #:+interop-library-file+
 
-           #:rwlock
-           #:rwlockp
-           #:make-rwlock
-           #:rwlock-name
-           #:with-read-lock
-           #:with-write-lock)
+   ;; FFI
+   #:+pointer-size+
+   #:+pointer-bits+
+   #:lpwstr
+   #:lpastr
+   #:dnchar
+   #:size-t
+   #:define-foreign-library-once
+   #:use-foreign-library-once
+   #+windows
+   #:kernel32
+
+   ;; Conditions
+   #:slot-initializer-missing
+   #:slot-initializer-missing-message
+   #:required-slot
+
+   ;; Read/Write lock
+   #:rwlock
+   #:rwlockp
+   #:make-rwlock
+   #:rwlock-name
+   #:with-read-lock
+   #:with-write-lock
+
+   ;; Pathnames
+   #:native-path
+   #:get-exe-path)
   (:import-from #:alexandria
                 #:define-constant
                 #:non-negative-fixnum
