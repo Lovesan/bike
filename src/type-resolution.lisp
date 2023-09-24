@@ -155,8 +155,9 @@
   (let ((entry (%ensure-type-entry type)))
     (with-type-entry (array-entries mz-vector-entry type) entry
       (flet ((lookup ()
-               (or (and mz-array-p mz-vector-entry)
-                   (and array-entries (svref array-entries (1- rank))))))
+               (if mz-array-p
+                 mz-vector-entry
+                 (and array-entries (svref array-entries (1- rank))))))
         (or (lookup)
             (let* ((entries (or array-entries
                                 (make-array +max-array-rank+ :initial-element nil)))
