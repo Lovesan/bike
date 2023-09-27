@@ -253,11 +253,16 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
          (str (%to-string object))
          (only-print-type (or (zerop (length str))
                               (string-equal str type-str))))
-    (pprint-dotnet-object (object stream :type t :identity identity
-                                         :prefix (unless only-print-type " ")
-                                         :suffix (when identity " "))
-      (unless only-print-type
-        (pprint-logical-block (stream nil)
+    (if *print-escape*
+      (pprint-dotnet-object (object stream :type t :identity identity
+                                           :prefix (unless only-print-type " ")
+                                           :suffix (when identity " "))
+        (unless only-print-type
+          (pprint-logical-block (stream nil)
+            (print-normalized-newlines str stream))))
+      (pprint-logical-block (stream nil)
+        (if only-print-type
+          (write-type-name type :stream stream)
           (print-normalized-newlines str stream))))))
 
 (defun %print-enumerable (object stream)
@@ -265,14 +270,21 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
            (type stream stream))
   (let* ((e (%get-enumerator object)))
     (unwind-protect
-         (pprint-dotnet-object (object stream :type t :prefix " (" :suffix ")")
-           (pprint-logical-block (stream nil)
-             (when (%enumerator-move-next e)
-               (loop (pprint-pop)
-                     (write (%enumerator-current e) :stream stream)
-                     (unless (%enumerator-move-next e) (return))
-                     (write-char #\Space stream)
-                     (pprint-newline :fill stream)))))
+         (flet ((body (stream)
+                  (pprint-logical-block (stream nil)
+                    (when (%enumerator-move-next e)
+                      (loop (pprint-pop)
+                            (write (%enumerator-current e) :stream stream)
+                            (unless (%enumerator-move-next e) (return))
+                            (write-char #\Space stream)
+                            (pprint-newline :fill stream))))))
+           (if *print-escape*
+             (pprint-dotnet-object (object stream :type t :prefix " (" :suffix ")")
+               (body stream))
+             (progn
+               (write-char #\( stream)
+               (body stream)
+               (write-char #\) stream))))
       (when (bike-type-p e 'System.IDisposable)
         (%dispose e)))))
 
@@ -361,7 +373,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
 (defun print-enum (object stream)
   (declare (type dotnet-object object)
            (type stream stream))
-  (if (bike-syntax-enabled-p)
+  (if (eq (get-dispatch-macro-character #\# #\e) 'read-sharp-e)
     (let* ((value (unbox object))
            (type (%bike-type-of object))
            (flags (member-custom-attrubute type (resolve-type 'System.FlagsAttribute))))
@@ -407,42 +419,65 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
 (defun print-string (object stream)
   (declare (type dotnet-object object)
            (type stream stream))
-  (pprint-dotnet-object (object stream :type t)
-    (write (unbox object) :stream stream)))
+  (let ((str (unbox object)))
+    (if *print-escape*
+      (pprint-dotnet-object (object stream :type t)
+        (write str :stream stream))
+      (write-string str stream))))
 
 (defun print-intptr (object stream)
   (declare (type dotnet-object object)
            (type stream stream))
-  (pprint-dotnet-object (object stream :type t)
-    (format stream "#x~8,'0X" (invoke object 'ToInt64))))
+  (flet ((body (stream)
+           (format stream "#x~8,'0X" [object ToInt64])))
+    (if *print-escape*
+      (pprint-dotnet-object (object stream :type t)
+        (body stream))
+      (body stream))))
 
 (defun print-runtime-method-handle (object stream)
   (declare (type dotnet-object object)
            (type stream stream))
-  (pprint-dotnet-object  (object stream :type t)
-    (format stream "#x~8,'0X" (pointer-address [object %Value]))))
+  (flet ((body (stream)
+           (format stream "#x~8,'0X" (pointer-address [object %Value]))))
+    (if *print-escape*
+      (pprint-dotnet-object (object stream :type t)
+        (body stream))
+      (pprint-logical-block (stream nil)
+        (body stream)))))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun make-printer-before/after-macrolet (name var-name)
+    (with-gensyms (body next-member)
+      `(,name (&body ,body)
+              `(setf ,',var-name
+                     (lambda (,',next-member)
+                       (flet ((next-member () (funcall ,',next-member)))
+                         ,@,body)))))))
 
 (defmacro define-dotnet-printer-for-names (name (object stream)
                                            (&rest member-names)
                                            &body body)
-  (with-gensyms (pop-callback before-callback after-callback callback-body)
+  (with-gensyms (pop-callback before-callback after-callback body-printer)
     `(defun ,name (,object ,stream)
        (declare (type dotnet-object ,object)
                 (type stream ,stream))
        (let (,before-callback ,after-callback)
          (declare (type (or null (function () (values)))
                         ,before-callback ,after-callback))
-         (macrolet ((before-members (&body ,callback-body)
-                      `(setf ,',before-callback (lambda () ,@,callback-body)))
-                    (after-members (&body ,callback-body)
-                      `(setf ,',after-callback (lambda () ,@,callback-body))))
-           (pprint-dotnet-object (,object ,stream :type t)
-             ,@body
-             (pprint-logical-block (,stream nil)
-               (flet ((,pop-callback () (pprint-pop)))
-                 (when ,before-callback (funcall ,before-callback))
-                 (print-members-by-name ,object ,stream ',member-names #',pop-callback)
-                 (when ,after-callback (funcall ,after-callback)))))
+         (macrolet (,(make-printer-before/after-macrolet 'before-members before-callback)
+                    ,(make-printer-before/after-macrolet 'after-members after-callback))
+           (flet ((,body-printer (,stream) ,@body))
+             (if (not *print-escape*)
+               (pprint-logical-block (,stream nil)
+                 (,body-printer ,stream))
+               (pprint-dotnet-object (,object ,stream :type t)
+                 (,body-printer ,stream)
+                 (pprint-logical-block (,stream nil)
+                   (flet ((,pop-callback () (pprint-pop)))
+                     (when ,before-callback (funcall ,before-callback #',pop-callback))
+                     (print-members-by-name ,object ,stream ',member-names #',pop-callback)
+                     (when ,after-callback (funcall ,after-callback #',pop-callback)))))))
            ,object)))))
 
 (define-dotnet-printer-for-names print-assembly (asm stream)
@@ -487,15 +522,17 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
     (when (field-readonly-p info)
       (write-string "readonly " stream))
     (write-type-name (field-type info) :stream stream)
-    (format stream " ~a~:[~; = ~w~];~_ "
+    (format stream " ~a~:[~; = ~w~];"
             (member-info-name info)
             constp
-            (and constp (field-raw-constant-value info))))
+            (and constp (field-raw-constant-value info)))
+    (when *print-escape*
+      (format stream "~_ ")))
   (after-members
    (write-member-attributes
     (enum 'System.Reflection.FieldAttributes
           (logandc2 (unbox (field-attributes info)) #x7))
-    stream (lambda () (pprint-pop)))
+    stream #'next-member)
    (write-custom-attributes info stream)))
 
 (defun %print-parameter-info (info stream)
@@ -510,6 +547,13 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
          (default-value (and has-default-value
                              (parameter-default-value info)))
          (genericp (type-generic-parameter-p type)))
+    (when (and name
+               (or (zerop (length name))
+                   (every (lambda (c)
+                            (case c
+                              ((#\Space #\Tab #\Return #\Newline #\Page) t)))
+                          name)))
+      (setf name nil))
     (write-string
      (cond (in "in")
            (out "out ")
@@ -621,17 +665,21 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
              (write-name)
              (write-string "{ set; }" stream))
             (t (write-string "{ }" stream)))
-      (format stream ";~_ ")))
+      (format stream ";")
+      (when *print-escape*
+        (format stream "~_ "))))
   (after-members
-   (write-member-attributes (property-attributes info) stream (lambda () (pprint-pop)))
+   (write-member-attributes (property-attributes info) stream #'next-member)
    (write-custom-attributes info stream)))
 
 (define-dotnet-printer-for-names print-parameter-info (info stream)
     (Position)
   (%print-parameter-info info stream)
-  (format stream ";~_ ")
+  (format stream ";")
+  (when *print-escape*
+    (format stream "~_ "))
   (after-members
-   (write-member-attributes [info %Attributes] stream (lambda () (pprint-pop)))
+   (write-member-attributes [info %Attributes] stream #'next-member)
    (write-custom-attributes info stream)))
 
 (define-dotnet-printer-for-names print-method-info (info stream)
@@ -641,12 +689,14 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
     (%print-parameter-info (method-return-parameter info) stream)
     (format stream " ~a(" (member-info-name info))
     (write-parameter-list params stream)
-    (format stream ");~_ ")
+    (format stream ");")
+    (when *print-escape*
+      (format stream "~_ "))
     (after-members
      (write-member-attributes
       (enum 'System.Reflection.MethodAttributes
             (logandc2 (unbox (method-attributes info)) #x7))
-      stream (lambda () (pprint-pop)))
+      stream #'next-member)
      (write-custom-attributes info stream))))
 
 (define-dotnet-printer-for-names print-constructor-info (info stream)
@@ -657,12 +707,14 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
     (write-type-name type :stream stream)
     (format stream "(")
     (write-parameter-list params stream)
-    (format stream ");~_ ")
+    (format stream ");")
+    (when *print-escape*
+      (format stream "~_ "))
     (after-members
      (write-member-attributes
       (enum 'System.Reflection.MethodAttributes
             (logandc2 (unbox (method-attributes info)) #x7))
-      stream (lambda () (pprint-pop)))
+      stream #'next-member)
      (write-custom-attributes info stream))))
 
 (defun dotnet-object-printer (type)
@@ -712,16 +764,21 @@ Function accepts two arguments - an OBJECT to print, and a STREAM to print to."
   (print-dotnet-object-simple delegate stream t))
 
 (defmethod print-object ((dotnet-type dotnet-type) stream)
-  (pprint-dotnet-object (dotnet-type stream :type t)
-    (handler-case
-        (write-type-name dotnet-type :stream stream)
-      (type-name-unexpected-token-error ()
-        ;; We currently do not handle backquotes inside
-        ;;  type name identifiers that do not designate
-        ;;  generic types and simply treat such names
-        ;;  as names of generic types.
-        ;;  Although rare, such type names are still possible.
-        (write-string (type-full-name dotnet-type) stream))))
+  (flet ((body (stream)
+           (handler-case
+               (write-type-name dotnet-type :stream stream)
+             (type-name-unexpected-token-error ()
+               ;; We currently do not handle backquotes inside
+               ;;  type name identifiers that do not designate
+               ;;  generic types and simply treat such names
+               ;;  as names of generic types.
+               ;;  Although rare, such type names are still possible.
+               (write-string (type-full-name dotnet-type) stream)))))
+    (if *print-escape*
+      (pprint-dotnet-object (dotnet-type stream :type t)
+        (body stream))
+      (pprint-logical-block (stream nil)
+        (body stream))))
   dotnet-type)
 
 (defmethod print-object ((object dotnet-object) stream)
