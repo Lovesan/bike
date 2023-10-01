@@ -242,7 +242,9 @@
 
 (defun %intern-type-ast (ast level assembly)
   "Interns parsed type designator AST"
-  (cond ((stringp ast)
+  (cond ((dotnet-type-p ast)
+         (%ensure-type-entry ast))
+        ((stringp ast)
          (%intern-string-ast ast level assembly))
         ((consp ast)
          (case (car ast)
@@ -274,9 +276,7 @@
 
 (defun %parse-typespec (type)
   "Parses external API type designator"
-  (cond ((dotnet-type-p type)
-         (parse-type-name (or (type-assembly-qualified-name type)
-                              (type-full-name type))))
+  (cond ((dotnet-type-p type) type)
         ((typep type 'string-designator)
          (parse-type-name (dotnet-name type)))
         ((consp type)

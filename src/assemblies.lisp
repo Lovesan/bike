@@ -82,6 +82,7 @@
   (use-type-alias :long "System.Int64")
   (use-type-alias :ulong "System.UInt64")
   (use-type-alias :decimal "System.Decimal")
+  (use-type-alias :type "System.Type")
   (with-type-table (data (ns namespaces) lock (new-aliases aliases))
     (with-write-lock (lock)
       (setf ns namespaces)
