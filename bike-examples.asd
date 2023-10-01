@@ -28,6 +28,7 @@
   :author "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :licence "MIT"
+  :defsystem-depends-on (#:trivial-features)
   :depends-on (#:bike)
   :serial t
   :components ((:module "examples"
@@ -38,9 +39,7 @@
                              (:file "exceptions")
                              (:file "syntax")
                              (:file "aspnet-mvc")
-                             #+(or windows win32 mswindows)
-                             (:file "wpf")
-                             #+(or windows win32 mswindows)
-                             (:file "windows-forms")))))
+                             (:file "windows-forms" :if-feature :windows)
+                             (:file "wpf" :if-feature :windows)))))
 
 ;;; vim: ft=lisp et
