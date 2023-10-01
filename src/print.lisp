@@ -189,12 +189,12 @@ Other values force the printing of type namespaces.")
                (setf seen-cr t))
               (#\newline
                (setf seen-cr nil)
-               (terpri stream))
+               (pprint-newline :mandatory stream ))
               (T
                (when seen-cr (terpri stream))
                (setf seen-cr nil)
                (write-char c stream)))
-        :finally (when seen-cr (terpri stream))))
+        :finally (when seen-cr (pprint-newline :mandatory stream))))
 
 (defmacro pprint-dotnet-object ((object stream &key type
                                                     identity
@@ -491,9 +491,13 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
 (defun write-custom-attributes (member-info stream)
   (declare (type dotnet-object member-info)
            (type stream stream))
-  (let ((attrs [member-info GetCustomAttributes t]))
-    (when (plusp (%array-length attrs))
-      (format stream " ~_CustomAttributes: ~w" attrs)))
+  (exception-case
+      (let ((attrs [member-info GetCustomAttributes t]))
+        (when (plusp (%array-length attrs))
+          (format stream " ~_CustomAttributes: ~w" attrs)))
+    (System.Exception (e)
+      (format stream " ~_CustomAttributes: #<!Caught ~a>"
+              (normalized-type-name (%bike-type-of e)))))
   member-info)
 
 (defun write-member-attributes (attrs stream pop-callback)
@@ -834,6 +838,10 @@ Function accepts two arguments - an OBJECT to print, and a STREAM to print to."
           System.Reflection.PropertyInfo print-property-info
           System.Reflection.ParameterInfo print-parameter-info
           System.Reflection.MethodInfo print-method-info
-          System.Reflection.ConstructorInfo print-constructor-info)))
+          System.Reflection.ConstructorInfo print-constructor-info
+          System.Reflection.Emit.ConstructorBuilder print-dotnet-object-simple
+          System.Reflection.Emit.MethodBuilder print-dotnet-object-simple
+          System.Reflection.Emit.FieldBuilder print-dotnet-object-simple
+          System.Reflection.Emit.PropertyBuilder print-dotnet-object-simple)))
 
 ;;; vim: ft=lisp et
