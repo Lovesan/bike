@@ -102,7 +102,9 @@ Other values force the printing of type namespaces.")
                                                        (progn
                                                          (write-string ast stream)
                                                          (return)))
-                                   :with ns-prefix = (%mknetsym (subseq ast 0 (1+ dot-pos)))
+                                   :with ns-prefix
+                                     = (simple-character-string-upcase
+                                        (subseq ast 0 (1+ dot-pos)))
                                    :for ns :in namespaces
                                    :when (string= ns ns-prefix)
                                      :do (write-string (subseq ast (1+ dot-pos)) stream)
@@ -335,7 +337,11 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
          (all-member-types #e(System.Reflection.MemberTypes Property Field))
          has-any)
     (loop :for name = (car member-names) :do
-      (when-let* ((members (type-get-members type (%mknetsym name) all-member-types bflags)))
+      (when-let* ((members (type-get-members
+                            type
+                            (simple-character-string-upcase name)
+                            all-member-types
+                            bflags)))
         (setf has-any t)
         (print-member-vector object stream members pop-callback))
       (setf member-names (rest member-names))

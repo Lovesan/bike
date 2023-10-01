@@ -388,6 +388,6 @@
                old))
     (values)))
 
-(uiop:register-image-restore-hook #'initialize-knowns (null -knowns-))
+(register-image-restore-hook 'initialize-knowns (null -knowns-))
 
 ;;; vim: ft=lisp et

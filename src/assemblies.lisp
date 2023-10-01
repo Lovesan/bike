@@ -114,6 +114,6 @@
   "Clears type and namespace cache and restores it to current defaults."
   (init-type-table '() '() '()))
 
-(uiop:register-image-restore-hook #'reload-type-table (not -type-table-))
+(register-image-restore-hook 'reload-type-table (not -type-table-))
 
 ;;; vim: ft=lisp et

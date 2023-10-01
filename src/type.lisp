@@ -24,8 +24,6 @@
 
 (in-package #:bike)
 
-(deftype dotnet-name () '(simple-array character (*)))
-
 (deftype dotnet-type-designator ()
   '(or dotnet-type string-designator (cons string-designator list)))
 
@@ -91,64 +89,6 @@
   (mz-vector-entry nil :type (or null type-entry)))
 
 (define-global-var -type-table- nil)
-
-(declaim (inline %base-string-to-string))
-(defun %base-string-to-string (string &optional upcase)
-  (declare (type simple-base-string string))
-  (let* ((length (length string))
-         (result (make-string length)))
-    (if upcase
-      (dotimes (i length)
-        (setf (schar result i) (char-upcase (schar string i))))
-      (dotimes (i length)
-        (setf (schar result i) (schar string i))))
-    result))
-
-(declaim (inline %maybe-string-upcase))
-(defun %maybe-string-upcase (string)
-  (declare (type dotnet-name string))
-  (let ((len (length string)))
-    (if (dotimes (i len t)
-          (when (lower-case-p (schar string i))
-            (return nil)))
-      string
-      (let ((result (copy-seq string)))
-        (nstring-upcase result)
-        result))))
-
-(defun dotnet-name (designator)
-  (declare (type string-designator designator))
-  (locally (declare (optimize (speed 3) (safety 0) (debug 0)))
-    (flet ((from-base-string (s) (%base-string-to-string s)))
-      (etypecase designator
-        (dotnet-name designator)
-        (symbol (let ((name (symbol-name designator)))
-                  (if (typep name 'dotnet-name)
-                    name
-                    (from-base-string name))))
-        (simple-base-string (from-base-string designator))
-        (character
-         (make-array 1 :element-type 'character
-                       :initial-element designator))))))
-
-(defun %mknetsym (what)
-  (declare (type string-designator what))
-  (locally (declare (optimize (speed 3) (safety 0) (debug 0)))
-    (flet ((maybe-upcase (s) (%maybe-string-upcase s))
-           (from-base-string (s) (%base-string-to-string s t)))
-      (etypecase what
-        (dotnet-name (maybe-upcase what))
-        (symbol (let ((name (symbol-name what)))
-                  (if (typep name 'dotnet-name)
-                    (maybe-upcase name)
-                    (from-base-string name))))
-        (simple-base-string (from-base-string what))
-        (base-char
-         (make-array 1 :element-type 'character
-                       :initial-element (char-upcase what)))
-        (character
-         (make-array 1 :element-type 'character
-                       :initial-element (char-upcase what)))))))
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %collect-accessors (conc-name slots)
@@ -251,7 +191,7 @@
  is to be restored."
   (with-type-table (lock aliases)
     (with-write-lock (lock)
-      (setf (gethash (%mknetsym alias) aliases) type)))
+      (setf (gethash (simple-character-string-upcase alias) aliases) type)))
   (values))
 
 (defun unuse-type-alias (alias)
@@ -259,7 +199,7 @@
   "Removes an alias from the current type cache."
   (with-type-table (lock aliases)
     (with-write-lock (lock)
-      (remhash (%mknetsym alias) aliases)))
+      (remhash (simple-character-string-upcase alias) aliases)))
   (values))
 
 (defun unuse-all-type-aliases ()

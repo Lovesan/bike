@@ -43,6 +43,7 @@
                 :serial t
                 :components ((:file "internals-package")
                              (:file "features")
+                             (:file "string-buffer")
                              (:file "internals-ffi")
                              (:file "rwlock")
                              (:file "internals")))))

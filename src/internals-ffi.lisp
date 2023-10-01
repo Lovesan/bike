@@ -241,7 +241,7 @@ Unlike the original CFFI macro, it does not redefine the library
                (unc-pos (search unc-suffix path :start2 prefix-len :test #'char-equal)))
           (return
             (if (eql prefix-len unc-pos)
-              (uiop:strcat "\\\\" (subseq path (+ prefix-len (length unc-suffix))))
+              (strcat "\\\\" (subseq path (+ prefix-len (length unc-suffix))))
               (subseq path prefix-len)))))))
 
   (defun get-final-path-name (filename)

@@ -24,7 +24,8 @@
 
 (in-package #:bike)
 
-(define-constant +empty-dotnet-name+ (%mknetsym "") :test #'equal)
+(define-constant +empty-dotnet-name+ (make-simple-character-string 0)
+  :test #'equal)
 
 (declaim (inline %call-ientry))
 (defun %call-ientry-accessor (entry instance readp new-value)
@@ -47,7 +48,7 @@
 (declaim (inline %ensure-ientry-accessor))
 (defun %ensure-ientry-accessor (type info member-type name kind instance)
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type (member :field :property) kind)
            (type (or null dotnet-object) instance))
   (multiple-value-bind (reader-delegate reader-ptr
@@ -105,7 +106,7 @@
 
 (defun %find-named-property (type name instancep &aux (empty-types (empty-types)))
   (declare (type dotnet-type type)
-           (type dotnet-name name))
+           (type simple-character-string name))
   (do-type-iterator (type type instancep)
     (let ((property (type-get-property type name
                                        (%get-binding-flags instancep)
@@ -144,7 +145,7 @@
 
 (defun %find-method (type name type-arg-count type-args args instancep)
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type non-negative-fixnum type-arg-count)
            (type list type-args)
            (type dotnet-object args))
@@ -171,7 +172,7 @@
 
 (defun %access-field (type name instance readp new-value)
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type (or null dotnet-object) instance))
   (let ((entry (get-ientry type name :field)))
     (unless entry
@@ -186,7 +187,7 @@
 
 (defun %access-property (type name instance readp new-value)
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type (or null dotnet-object) instance))
   (let ((entry (get-ientry type name :property)))
     (unless entry
@@ -269,7 +270,7 @@
 
 (defun %invoke-method (type name instance type-args &rest args)
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type (or null dotnet-object) instance)
            (type list type-args args))
   (let* ((arg-type-count (length args))

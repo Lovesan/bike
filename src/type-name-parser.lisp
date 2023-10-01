@@ -25,7 +25,7 @@
 (in-package #:bike)
 
 (defun make-type-name-tokenizer (name &key (start 0) end)
-  (declare (type dotnet-name name)
+  (declare (type simple-character-string name)
            (type non-negative-fixnum start))
   "Returns a lambda which tokenizes type name string"
   (let* ((end (or end (length name)))
@@ -193,7 +193,7 @@ nameRest -> IDENTIFIER nameRest
 |#
 
 (defun parse-type-name (name)
-  (declare (type dotnet-name name))
+  (declare (type simple-character-string name))
   (let ((tokenizer (make-type-name-tokenizer name))
         (nextp nil)
         (token :eof)

@@ -43,7 +43,7 @@
                         :test #'equalp))
         (error "Unable to find BikeInterop.dll")))
     (values))
-  (uiop:register-image-restore-hook 'init-coreclr-search-location))
+  (register-image-restore-hook 'init-coreclr-search-location))
 
 (define-foreign-library-once coreclr
   (t #.+coreclr-library-file+))
@@ -71,7 +71,7 @@
                    *foreign-library-directories*
                    :test #'equalp)
           (setf -desktop-sdk-dir- nil))))
-    (uiop:register-image-restore-hook 'initialize-wpfgfx-search-location))
+    (register-image-restore-hook 'initialize-wpfgfx-search-location))
 
   ;; These libs should be pre-loaded, otherwise WPF would be unable
   ;;   to find them, for who knows what reasons
@@ -88,7 +88,7 @@
         (use-foreign-library-once vcruntime)
         (use-foreign-library-once d3dcompiler)
         (use-foreign-library-once wpfgfx)))
-    (uiop:register-image-restore-hook 'load-wpfgfx)))
+    (register-image-restore-hook 'load-wpfgfx)))
 
 #-coreclr-windows
 (progn
@@ -102,12 +102,12 @@
                    (uiop:pathname-directory-pathname -coreclr-location-))))
         (when (uiop:probe-file* path)
           (setf -has-system-native- t))))
-    (uiop:register-image-restore-hook 'initialize-system-native-search))
+    (register-image-restore-hook 'initialize-system-native-search))
   (eval-when (:compile-toplevel :load-toplevel :execute)
     (defun load-system-native ()
       (when -has-system-native-
         (use-foreign-library-once system-native)))
-    (uiop:register-image-restore-hook 'load-system-native))
+    (register-image-restore-hook 'load-system-native))
   (defun init-native-aux-signals ()
     (when -has-system-native-
       (let ((fp (foreign-symbol-pointer
@@ -130,7 +130,7 @@
                             (uiop:lisp-implementation-directory)
                             (uiop:pathname-directory-pathname (get-exe-path)))))
            :test #'equalp)))
-    (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}")
+    (format nil (strcat "~{~a~^" (uiop:inter-directory-separator) "~}")
             (nreverse directories))))
 
 (defun get-trusted-platform-assemblies ()
@@ -170,7 +170,7 @@
     defaults))
 
 (defun %get-tpa-string ()
-  (format nil (uiop:strcat "~{~a~^" (uiop:inter-directory-separator) "~}~a~a")
+  (format nil (strcat "~{~a~^" (uiop:inter-directory-separator) "~}~a~a")
           (mapcar #'native-path (get-trusted-platform-assemblies))
           (uiop:inter-directory-separator)
           (native-path -interop-location-)))

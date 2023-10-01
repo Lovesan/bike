@@ -43,7 +43,7 @@
           (bike-reader-error
            stream
            (format nil
-                   (uiop:strcat
+                   (strcat
                     "~&Field and property forms must not have arguments.~%"
                     "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
                    staticp

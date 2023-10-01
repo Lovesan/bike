@@ -33,7 +33,7 @@
                              (:predicate invocation-entry-p)
                              (:conc-name ientry-))
   (type (required-slot) :type dotnet-type :read-only t)
-  (name (required-slot) :type dotnet-name :read-only t)
+  (name (required-slot) :type simple-character-string :read-only t)
   (kind (required-slot) :type member-kind :read-only t)
   (type-arg-count 0 :type non-negative-fixnum :read-only t)
   (type-args '() :type list :read-only t)
@@ -86,7 +86,7 @@
                                               (arg-type-count 0)
                                               (arg-types '()))
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type member-kind kind)
            (type non-negative-fixnum type-arg-count arg-type-count)
            (type list type-args arg-types))
@@ -115,7 +115,7 @@
                                                     ((:arg-types arg-types*) '()))
   (declare (type invocation-entry entry)
            (type dotnet-type type*)
-           (type dotnet-name name*)
+           (type simple-character-string name*)
            (type member-kind kind*)
            (type non-negative-fixnum arg-type-count* type-arg-count*)
            (type list arg-types* type-args*))
@@ -148,7 +148,7 @@
                                         (arg-type-count 0)
                                         (arg-types '()))
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type member-kind kind)
            (type non-negative-fixnum type-arg-count arg-type-count)
            (type list type-args arg-types))
@@ -175,7 +175,7 @@
                                        (arg-type-count 0)
                                        (arg-types '()))
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type member-kind kind)
            (type non-negative-fixnum type-arg-count arg-type-count)
            (type list type-args arg-types))
@@ -238,7 +238,7 @@
                                        (writer nil)
                                        (writer-delegate nil))
   (declare (type dotnet-type type)
-           (type dotnet-name name)
+           (type simple-character-string name)
            (type member-kind kind)
            (type non-negative-fixnum type-arg-count arg-type-count)
            (type list type-args arg-types)
@@ -284,7 +284,7 @@
   (setf -invocation-cache- (make-icache))
   (values))
 
-(uiop:register-image-restore-hook #'initialize-invocation-cache
-                                  (null -invocation-cache-))
+(register-image-restore-hook 'initialize-invocation-cache
+                             (null -invocation-cache-))
 
 ;;; vim: ft=lisp et

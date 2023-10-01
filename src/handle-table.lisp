@@ -43,7 +43,7 @@
 (defun init-handle-table ()
   (setf -handle-table- (%handle-table)))
 
-(uiop:register-image-restore-hook #'init-handle-table (null -handle-table-))
+(register-image-restore-hook 'init-handle-table (null -handle-table-))
 
 (defmacro with-handle-table ((data-var &optional (length-var (gensym)) (lock-type :write))
                              &body body)

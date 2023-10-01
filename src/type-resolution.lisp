@@ -30,21 +30,21 @@
 
 (declaim (inline %type-entry))
 (defun %type-entry (name)
-  (declare (type dotnet-name name))
+  (declare (type simple-character-string name))
   (with-type-table (data)
     (values (the (or null type-entry) (gethash name data)))))
 
 (declaim (inline (setf %type-entry)))
 (defun (setf %type-entry) (new-entry name)
   (declare (type type-entry new-entry)
-           (type dotnet-name name))
+           (type simple-character-string name))
   (with-type-table (data)
     (setf (gethash name data) new-entry))
   new-entry)
 
 (declaim (inline %get-aliased-type))
 (defun %get-aliased-type (name)
-  (declare (type dotnet-name name))
+  (declare (type simple-character-string name))
   (with-type-table (aliases)
     (values (gethash name aliases))))
 
@@ -57,7 +57,7 @@
 (defun %ensure-generic-type-definition-entry (type)
   (declare (type dotnet-type type))
   "Ensures generic type definition entry"
-  (let ((name (%mknetsym (type-full-name type))))
+  (let ((name (simple-character-string-upcase (type-full-name type))))
     (or (%type-entry name)
         (let* ((args (type-generic-arguments type))
                (qualified-name (%maybe-get-qualified-name type))
@@ -187,7 +187,7 @@
 (defun %ensure-simple-type-entry (type)
   (declare (type dotnet-type type))
   "Ensures simple, non-generic type entry"
-  (let ((name (%mknetsym (type-full-name type))))
+  (let ((name (simple-character-string-upcase (type-full-name type))))
     (or (%type-entry name)
         (let* ((qualified-name (%maybe-get-qualified-name type))
                (entry (%make-type-entry type
@@ -223,9 +223,9 @@
 (defvar *intern-typespec-toplevel* nil)
 
 (defun %intern-string-ast (ast level assembly)
-  (declare (type dotnet-name ast))
+  (declare (type simple-character-string ast))
   (with-type-table (data aliases namespaces)
-    (let* ((dotnet-name (%mknetsym ast))
+    (let* ((dotnet-name (simple-character-string-upcase ast))
            (aliased (gethash dotnet-name aliases)))
       (if aliased
         (%intern-type-ast (%parse-typespec aliased) level nil)
@@ -278,11 +278,11 @@
   "Parses external API type designator"
   (cond ((dotnet-type-p type) type)
         ((typep type 'string-designator)
-         (parse-type-name (dotnet-name type)))
+         (parse-type-name (simple-character-string type)))
         ((consp type)
          (destructuring-bind (head &rest rest) type
            (declare (type string-designator head))
-           (let* ((name (%mknetsym head)))
+           (let* ((name (simple-character-string-upcase head)))
              (cond ((string= name "ARRAY")
                     (destructuring-bind (element-type &optional (rank 1)) rest
                       (declare (type (or (integer 1 32) (eql *)) rank))

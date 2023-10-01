@@ -26,6 +26,10 @@
 
 (uiop:define-package #:bike
   (:use #:cl #:global-vars #:cffi #:bike-internals #:named-readtables)
+  (:import-from #:uiop
+                #:strcat
+                #:register-image-restore-hook
+                #:register-image-dump-hook)
   (:import-from #:alexandria
                 #:with-gensyms
                 #:once-only

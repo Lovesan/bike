@@ -68,6 +68,6 @@
     (%transform-exception (mem-ref ex :pointer))
     (setf -callbacks-initialized- t)))
 
-(uiop:register-image-restore-hook #'initialize-callbacks (not -callbacks-initialized-))
+(register-image-restore-hook 'initialize-callbacks (not -callbacks-initialized-))
 
 ;;; vim: ft=lisp et

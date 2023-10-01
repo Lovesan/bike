@@ -216,7 +216,7 @@
       (free-converted-object app-paths 'lpastr nil)
       (free-converted-object app-ni-paths 'lpastr nil))))
 
-(uiop:register-image-restore-hook #'initialize-coreclr (not -coreclr-host-))
+(register-image-restore-hook 'initialize-coreclr (not -coreclr-host-))
 
 (defun shutdown-coreclr ()
   (let ((host -coreclr-host-))
@@ -299,7 +299,7 @@
       (let ((addr (sigaction-address -new-sigactions- i)))
         (sigaction i addr (null-pointer)))))
 
-  (uiop:register-image-restore-hook #'initialize-dotnet-sigactions
-                                    (null-pointer-p -new-sigactions-)))
+  (register-image-restore-hook 'initialize-dotnet-sigactions
+                               (null-pointer-p -new-sigactions-)))
 
 ;;; vim: ft=lisp et

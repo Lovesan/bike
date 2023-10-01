@@ -44,6 +44,6 @@
     (sleep 5))
   (format *error-output* "~&[bike] Shutdown complete~%"))
 
-(uiop:register-image-dump-hook 'shutdown-bike)
+(register-image-dump-hook 'shutdown-bike)
 
 ;;; vim: ft=lisp et

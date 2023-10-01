@@ -26,6 +26,12 @@
 
 (uiop:define-package #:bike-internals
   (:use #:cl #:global-vars #:uiop #:cffi #:split-sequence #:flexi-streams #:cl-ppcre)
+  (:import-from #:alexandria
+                #:string-designator
+                #:define-constant
+                #:non-negative-fixnum
+                #:with-gensyms
+                #:once-only)
   (:export
    ;; .NET runtime location
    #:find-coreclr
@@ -63,13 +69,13 @@
    #:with-read-lock
    #:with-write-lock
 
+   ;; String utils
+   #:make-simple-character-string
+   #:simple-character-string
+   #:simple-character-string-upcase
+
    ;; Pathnames
    #:native-path
-   #:get-exe-path)
-  (:import-from #:alexandria
-                #:define-constant
-                #:non-negative-fixnum
-                #:with-gensyms
-                #:once-only))
+   #:get-exe-path))
 
 ;;; vim: ft=lisp et

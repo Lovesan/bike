@@ -27,7 +27,7 @@
 (defun %resolve-generic-types (spec)
   (declare (type (cons string-designator (cons dotnet-type-designator list)) spec))
   (destructuring-bind (name &rest types) spec
-    (let ((name (%mknetsym name))
+    (let ((name (simple-character-string-upcase name))
           (types (mapcar #'resolve-type types)))
       (values name types))))
 
@@ -42,7 +42,7 @@
   (multiple-value-bind (method-name type-args)
       (if (consp method)
         (%resolve-generic-types method)
-        (values (%mknetsym method) '()))
+        (values (simple-character-string-upcase method) '()))
     (if (dotnet-object-p target)
       (apply #'%invoke target nil type-args method-name args)
       (apply #'%invoke (resolve-type target) t type-args method-name args))))
@@ -54,9 +54,10 @@
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (if (dotnet-object-p target)
-    (%get-property target nil (%mknetsym name))
-    (%get-property (resolve-type target) t (%mknetsym name))))
+  (let ((name (simple-character-string-upcase name)))
+    (if (dotnet-object-p target)
+      (%get-property target nil name)
+      (%get-property (resolve-type target) t name))))
 
 (defun (setf reflection-property) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -65,9 +66,10 @@
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (if (dotnet-object-p target)
-    (%set-property target nil (%mknetsym name) new-value)
-    (%set-property (resolve-type target) t (%mknetsym name) new-value)))
+  (let ((name (simple-character-string-upcase name)))
+    (if (dotnet-object-p target)
+      (%set-property target nil name new-value)
+      (%set-property (resolve-type target) t name new-value))))
 
 (defun reflection-ref (target index &rest indices)
   (declare (type dotnet-object target)
@@ -90,9 +92,10 @@
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (if (dotnet-object-p target)
-    (%get-field target nil (%mknetsym name))
-    (%get-field (resolve-type target) t (%mknetsym name))))
+  (let ((name (simple-character-string-upcase name)))
+    (if (dotnet-object-p target)
+      (%get-field target nil name)
+      (%get-field (resolve-type target) t name))))
 
 (defun (setf reflection-field) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -101,9 +104,10 @@
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (if (dotnet-object-p target)
-    (%set-field target nil (%mknetsym name) new-value)
-    (%set-field (resolve-type target) t (%mknetsym name) new-value)))
+  (let ((name (simple-character-string-upcase name)))
+    (if (dotnet-object-p target)
+      (%set-field target nil name new-value)
+      (%set-field (resolve-type target) t name new-value))))
 
 (defun reflection-new (type &rest args)
   (declare (type dotnet-type-designator type)

@@ -37,16 +37,16 @@
                  (%bike-type-of target)
                  (resolve-type target)))
          (genericp (consp method))
-         (name (%mknetsym (if genericp (car method) method)))
+         (name (simple-character-string-upcase (if genericp (car method) method)))
          (type-args (when genericp
                       (unless (cdr method)
                         (error 'generic-argument-count-mismatch
                                :token name
-                               :value ""
+                               :value name
                                :position 0
                                :datum method))
                       (mapcar #'resolve-type (cdr method)))))
-    (apply #'%invoke-method type (%mknetsym name) (and instancep target) type-args args)))
+    (apply #'%invoke-method type name (and instancep target) type-args args)))
 
 (defun property (target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -59,7 +59,11 @@
          (type (if instancep
                  (%bike-type-of target)
                  (resolve-type target))))
-    (%access-property type (%mknetsym name) (and instancep target) t nil)))
+    (%access-property type
+                      (simple-character-string-upcase name)
+                      (and instancep target)
+                      t
+                      nil)))
 
 (defun (setf property) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -72,7 +76,11 @@
          (type (if instancep
                  (%bike-type-of target)
                  (resolve-type target))))
-    (%access-property type (%mknetsym name) (and instancep target) nil new-value)))
+    (%access-property type
+                      (simple-character-string-upcase name)
+                      (and instancep target)
+                      nil
+                      new-value)))
 
 (defun ref (target index &rest indices)
   (declare (type dotnet-object target)
@@ -99,7 +107,11 @@
          (type (if instancep
                  (%bike-type-of target)
                  (resolve-type target))))
-    (%access-field type (%mknetsym name) (and instancep target) t nil)))
+    (%access-field type
+                   (simple-character-string-upcase name)
+                   (and instancep target)
+                   t
+                   nil)))
 
 (defun (setf field) (new-value target name)
   (declare (type (or dotnet-object dotnet-type-designator) target)
@@ -112,7 +124,11 @@
          (type (if instancep
                  (%bike-type-of target)
                  (resolve-type target))))
-    (%access-field type (%mknetsym name) (and instancep target) nil new-value))
+    (%access-field type
+                   (simple-character-string-upcase name)
+                   (and instancep target)
+                   nil
+                   new-value))
   new-value)
 
 (defun new (type &rest args)

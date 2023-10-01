@@ -36,7 +36,7 @@
              unboxed)))
         ((typep designator '(signed-byte 64)) designator)
         ((typep designator 'string-designator)
-         (let* ((name (%mknetsym designator))
+         (let* ((name (simple-character-string-upcase designator))
                 (value (gethash name enum-values)))
            (unless value
              (error 'field-resolution-error

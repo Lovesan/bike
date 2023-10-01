@@ -194,7 +194,7 @@
       (let ((addr (sigaction-address -lisp-sigactions- i)))
         (sigaction i addr (null-pointer)))))
 
-  (uiop:register-image-restore-hook #'save-lisp-sigactions
-                                    (null-pointer-p -lisp-sigactions-)))
+  (register-image-restore-hook 'save-lisp-sigactions
+                               (null-pointer-p -lisp-sigactions-)))
 
 ;;; vim: ft=lisp et
