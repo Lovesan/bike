@@ -73,6 +73,8 @@
    #:make-simple-character-string
    #:simple-character-string
    #:simple-character-string-upcase
+   #:camel-case-string
+   #:whitespace-char-p
 
    ;; Pathnames
    #:native-path

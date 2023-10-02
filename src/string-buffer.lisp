@@ -95,4 +95,154 @@
          (make-array 1 :element-type 'character
                        :initial-element (char-upcase designator)))))))
 
+(defconstant +ascii-char-code-limit+ 128)
+
+(defun whitespace-char-p (c)
+  (declare (type character c))
+  "Returns Non-NIL value in case of character being a white space character."
+  (let ((code (char-code c)))
+    (if (< code +ascii-char-code-limit+) ;; short path
+      (or (= code #x0020)                 ;;  space
+          (and (>= code #x0009)           ;;   or
+               (<= code #x000D)))         ;;  \t..\r
+      ;; assume that CL implementation supports unicode
+      (case code
+        ((#x0085  ;; NEXT LINE
+          #x00A0  ;; NO-BREAK SPACE
+          #x1680  ;; OGHAM SPACE MARK
+          #x2000  ;; EN QUAD
+          #x2001  ;; EM QUAD
+          #x2002  ;; EN SPACE
+          #x2003  ;; EM SPACE
+          #x2004  ;; THREE-PER-EM SPACE
+          #x2005  ;; FOUR-PER-EM SPACE
+          #x2006  ;; SIX-PER-EM SPACE
+          #x2007  ;; FIGURE SPACE
+          #x2008  ;; PUNCTUATION SPACE
+          #x2009  ;; THIN SPACE
+          #x200A  ;; HAIR SPACE
+          #x2028  ;; LINE SEPARATOR
+          #x2029  ;; PARAGRAPH SEPARATOR
+          #x202F  ;; NARROW NO-BREAK SPACE
+          #x205F  ;; MEDIUM MATHEMATICAL SPACE
+          #x3000) ;; IDEOGRAPHIC SPACE
+         t)))))
+
+(defun camel-case-string (designator &key capitalize
+                                          (handle-underscores t)
+                                          (handle-dot t)
+                                          (handle-whitespace :strip)
+                                          prepend-underscore
+                                          (handle-percent :strip))
+  (declare (type string-designator designator))
+  "Converts a DESIGNATOR which must be a STRING-DESIGNATOR to a string
+   replacing Lisp-style `naming-convention' with `camelCase'.
+
+:CAPITALIZE - non-NIL value designates that the result should be capitalized
+              as in `PascalCase'.
+              In case of the value being equal to `:FORCE', this setting
+              overrides `:HANDLE-PERCENT' behavior described below.
+
+:HANDLE-UNDERSCORES - non-NIL value designates that `_' characters should be
+                      stripped and treated as word separators.
+
+:HANDLE-DOT - non-NIL value designates that `.' characters should be treated as
+              word separators.
+
+:HANDLE-WHITESPACE - non-NIL value designates that whitespace characters should be
+                     treated as word separators.
+                     Additionally, such characters will be stripped in case the value
+                     equals to `:STRIP' keyword.
+
+:PREPEND-UNDERSCORE - non-NIL value designates whether the result should include
+                      a prepended underscore character, as in `_camelCase'.
+
+:HANDLE-PERCENT - Value of `:STRIP' designates that starting `%' characters should
+                  be stripped.
+                  Other non-NIL value designates that starting `%' characters should
+                  be replaced with underscores. In this case, string capitalization
+                  is turned off unless the value of `:CAPITALIZE' equals to `:FORCE'.
+"
+  (let* ((str (simple-character-string designator))
+         (len (length str))
+         (res (make-simple-character-string (1+ len)))
+         (i 0)
+         (j 0)
+         (c nil)
+         (state :start))
+    (flet ((next (next-state)
+             (when (< i len) (incf i))
+             (setf state next-state))
+           (peek () (setf c (if (< i len) (schar str i) nil)))
+           (upcase () (when c (setf c (char-upcase c))))
+           (downcase () (when c (setf c (char-downcase c))))
+           (add (next-state)
+             (when c
+               (setf (schar res j) c)
+               (incf j)
+               (when (< i len) (incf i)))
+             (setf state next-state)))
+      (when prepend-underscore
+        (setf (schar res 0) #\_ j 1))
+      (case handle-percent
+        ((nil)) ;; do nothing
+        (:strip (loop :while (and (< i len)
+                                  (char= (schar str i) #\%))
+                      :do (incf i)))
+        (t (loop :while (and (< i len)
+                             (char= (schar str i) #\%))
+                 :do (setf (schar res i) #\_)
+                     (unless (eq capitalize :force)
+                       (setf capitalize nil))
+                     (incf j)
+                     (incf i))))
+      (loop
+        (case state
+          (:start
+           (peek)
+           (cond
+             ((null c) (return))
+             ((char= c #\-) (next :start))
+             ((char= c #\_)
+              (if handle-underscores (next :start) (add :cont)))
+             ((char= c #\.)
+              (add (if handle-dot :start :cont)))
+             ((and handle-whitespace (whitespace-char-p c))
+              (if (eq handle-whitespace :strip)
+                (next :start)
+                (add :start)))
+             (t (if capitalize (upcase) (downcase))
+                (add :cont))))
+          (:cont
+           (peek)
+           (cond
+             ((null c) (return))
+             ((char= c #\-) (next :break))
+             ((char= c #\_)
+              (if handle-underscores (next :break) (add :cont)))
+             ((char= c #\.)
+              (add (if handle-dot :break :cont)))
+             ((and handle-whitespace (whitespace-char-p c))
+              (setf capitalize t)
+              (if (eq handle-whitespace :strip)
+                (next :start)
+                (add :start)))
+             (t (downcase) (add :cont))))
+          (:break
+           (peek)
+           (cond
+             ((null c) (return))
+             ((char= c #\-) (next :break))
+             ((char= c #\_)
+              (if handle-underscores (next :break) (add :cont)))
+             ((char= c #\.)
+              (add (if handle-dot :break :cont)))
+             ((and handle-whitespace (whitespace-char-p c))
+              (setf capitalize t)
+              (if (eq handle-whitespace :strip)
+                (next :start)
+                (add :start)))
+             (t (upcase) (add :cont)))))))
+    (subseq res 0 j)))
+
 ;;; vim: ft=lisp et
