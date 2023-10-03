@@ -224,7 +224,12 @@
                              ((plusp self-uc) ;; Woken by accident?
                               (rwlock-wait rwlock :upgrade))
                              (t (rwlock-wait rwlock :write)))))
-                    (t (rwlock-wait rwlock :write)))))))
+                    (t (let* ((info (rwlock-thread-info rwlock self))
+                              (self-uc (or (and info (rwlti-upgrade-count info))
+                                           0)))
+                         (if (plusp self-uc)
+                           (rwlock-wait rwlock :upgrade)
+                           (rwlock-wait rwlock :write)))))))))
   (values))
 
 (defun rwlock-end-write (rwlock)
