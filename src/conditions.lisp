@@ -250,4 +250,19 @@
              (format s "~s is not a delegate type"
                      (delegate-type-expected-datum c)))))
 
+(define-condition interface-type-expected (bike-error)
+  ((datum :initarg :type
+          :initarg :datum
+          :reader interface-type-expected-datum))
+  (:report (lambda (c s)
+             (format s "~s is not an interface type"
+                     (interface-type-expected-datum c)))))
+
+(define-condition sealed-inheritance (bike-error)
+  ((type :initarg :type
+         :reader sealed-inheritance-type))
+  (:report (lambda (c s)
+             (format s "~s is sealed."
+                     (sealed-inheritance-type c)))))
+
 ;;; vim: ft=lisp et

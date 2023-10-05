@@ -24,24 +24,26 @@
 
 (in-package #:bike)
 
-(defclass dotnet-proxy-class (standard-class)
-  ((object-type :accessor dpc-object-type
-                :reader dotnet-proxy-class-object-type)))
+(in-readtable bike-syntax)
+
+(defclass dotnet-proxy-class (dotnet-proxy-object standard-class)
+  ((%value :accessor dpc-object-type
+           :reader dotnet-proxy-class-object-type)))
 
 (defclass dotnet-callable-class (dotnet-proxy-class)
-  ((object-type :accessor dcc-proxy-type
-                :reader dotnet-callable-class-proxy-type)
-   (base-type :initarg :base-type
-              :accessor dcc-base-type)
-   (interfaces :initarg :interfaces
-               :accessor dcc-interfaces)
+  ((%value :accessor dcc-proxy-type
+           :reader dotnet-callable-class-proxy-type)
+   (direct-base-type :initarg :base-type
+                     :accessor dcc-direct-base-type)
+   (direct-interfaces :initarg :interfaces
+                      :accessor dcc-direct-interfaces)
    (%name-cache :accessor dcc-name-cache
                 :type hash-table)
    (%name-cache-lock :accessor dcc-name-cache-lock
                      :type rwlock))
   (:documentation "Base metaclass for dotnet callable classes")
-  (:default-initargs :base-type :object
-                     :interfaces '()))
+  (:default-initargs :interfaces '()
+                     :base-type nil))
 
 (defclass dotnet-slot-definition (slot-definition)
   ((dotnet-name :initarg :dotnet-name
@@ -257,37 +259,71 @@
                          :class class
                          :value (slotd-dotnet-name slotd))))))
 
+(defun find-callable-class-base-type (class)
+  (declare (type dotnet-callable-class class))
+  (let ((direct-base-type (dcc-direct-base-type class)))
+    (if direct-base-type
+      (values (resolve-type direct-base-type) nil)
+      (let ((base-class (find-if (lambda (c)
+                                   (and (not (eq c class))
+                                        (typep c 'dotnet-callable-class)))
+                                 (class-precedence-list class))))
+        (if base-class
+          (progn (ensure-finalized base-class)
+                 (values (dcc-proxy-type base-class) t))
+          (values (resolve-type :object) nil))))))
+
+(defun find-base-type-constructors (base-type)
+  (declare (type dotnet-type base-type))
+  (let ((candidates (type-constructors* base-type #e(System.Reflection.BindingFlags
+                                                     Public
+                                                     NonPublic
+                                                     Instance)))
+        (result '()))
+    (do-bike-vector (ci candidates)
+      (unless (method-private-p ci)
+        (push ci result)))
+    result))
+
 (defgeneric initialize-class-proxy (class)
   (:documentation "Initializes class proxy"))
 
 (defmethod initialize-class-proxy ((class dotnet-callable-class))
-  (let* ((eslotds (class-slots class))
-         (base-type (resolve-type (dcc-base-type class)))
-         (interfaces (mapcar #'resolve-type (dcc-interfaces class)))
-         (class-name (class-name class))
-         (name (simple-character-string
-                (or (and class-name (symbol-full-name class-name))
-                    "DynamicType")))
-         (state (make-type-builder-state name base-type interfaces)))
-    (tbs-add-constructor state)
-    (dolist (slotd eslotds)
-      (typecase slotd
-        (effective-event-slot-definition
-         (tbs-add-event state
-                        (slotd-dotnet-name slotd)
-                        (resolve-type (slotd-handler-type slotd))
-                        (slotd-raise-method-dotnet-name slotd)))
-        (effective-property-slot-definition
-         (tbs-add-property state
-                           (slotd-dotnet-name slotd)
-                           (slotd-property-type slotd)
-                           (slotd-getter slotd)
-                           (slotd-setter slotd)))))
-    (setf (dcc-name-cache class) (make-hash-table :test #'equal)
-          (dcc-name-cache-lock class) (make-rwlock
-                                       :name (format nil "~s name cache lock"
-                                                     (class-name class)))
-          (dcc-proxy-type class) (tbs-create-type state))))
+  (multiple-value-bind (base-type callable-base-type-p)
+      (find-callable-class-base-type class)
+    (when (type-sealed-p base-type)
+      (error 'sealed-inheritance :type base-type))
+    (let ((base-constructors (find-base-type-constructors base-type)))
+      (unless base-constructors
+        (error 'constructor-resolution-error :type base-type
+                                             :args '(*)))
+      (let* ((eslotds (class-slots class))
+             (interfaces (mapcar #'resolve-type (dcc-direct-interfaces class)))
+             (class-name (class-name class))
+             (name (simple-character-string
+                    (or (and class-name (symbol-full-name class-name))
+                        "DynamicType")))
+             (state (make-type-builder-state name base-type interfaces)))
+        (dolist (c base-constructors)
+          (tbs-add-constructor state c callable-base-type-p))
+        (dolist (slotd eslotds)
+          (typecase slotd
+            (effective-event-slot-definition
+             (tbs-add-event state
+                            (slotd-dotnet-name slotd)
+                            (resolve-type (slotd-handler-type slotd))
+                            (slotd-raise-method-dotnet-name slotd)))
+            (effective-property-slot-definition
+             (tbs-add-property state
+                               (slotd-dotnet-name slotd)
+                               (slotd-property-type slotd)
+                               (slotd-getter slotd)
+                               (slotd-setter slotd)))))
+        (setf (dcc-name-cache class) (make-hash-table :test #'equal)
+              (dcc-name-cache-lock class) (make-rwlock
+                                           :name (format nil "~s name cache lock"
+                                                         (class-name class)))
+              (dcc-proxy-type class) (tbs-create-type state))))))
 
 (defgeneric fix-class-initargs (object &rest initargs &key &allow-other-keys)
   (:method ((class class) &rest initargs &key &allow-other-keys)
@@ -298,7 +334,23 @@
 (defmethod fix-class-initargs ((class dotnet-callable-class)
                                &rest initargs
                                &key ((:direct-superclasses dscs) '())
+                                    (base-type nil)
+                                    (interfaces '())
                                &allow-other-keys)
+  (when base-type
+    (remf initargs :base-type)
+    (let ((type (resolve-type base-type)))
+      (setf initargs (list* :base-type (qualified-type-name type) initargs))))
+  (when interfaces
+    (remf initargs :interfaces)
+    (let ((interfaces (mapcar (lambda (interface)
+                                (let ((type (resolve-type interface)))
+                                  (unless (interface-type-p type)
+                                    (error 'interface-type-expected
+                                           :datum type))
+                                  (qualified-type-name type)))
+                              interfaces)))
+      (setf initargs (list* :interfaces interfaces initargs))))
   (remf initargs :direct-superclasses)
   (let ((dotnet-callable-object (find-class 'dotnet-callable-object)))
     (unless (some (lambda (c) (subclassp c dotnet-callable-object))
@@ -323,12 +375,14 @@
 
 (defmethod finalize-inheritance :after ((class dotnet-callable-class))
   (initialize-class-proxy class)
-  (let* ((cache -dynamic-type-cache-)
-         (lock (dtc-lock cache)))
+  (with-accessors ((lock dtc-lock)
+                   (classes dtc-classes))
+      -dynamic-type-cache-
     (with-read-lock (lock)
-      (or (find class (dtc-classes cache) :key #'tg:weak-pointer-value)
+      (or (find class classes :key #'tg:weak-pointer-value)
           (with-write-lock (lock)
-            (push (tg:make-weak-pointer class) (dtc-classes cache)))))))
+            (or (find class classes :key #'tg:weak-pointer-value)
+                (push (tg:make-weak-pointer class) classes)))))))
 
 (defun get-slot-name-by-dotnet-name (class dotnet-name)
   (declare (type dotnet-callable-class class)
@@ -372,13 +426,14 @@
   (when-let* ((class (class-of object))
               (callable-class-p (typep class 'dotnet-callable-class))
               (type-proxy (dcc-proxy-type class))
+              ;; TODO: Handle constructors with parameters
               (proxy (reflection-new
                       type-proxy
+                      (box object)
                       (new '(System.Func :object :string :object)
                            #'get-dotnet-callable-object-slot-value)
                       (new '(System.Action :object :string :object)
-                           #'set-dotnet-callable-object-slot-value)
-                      (box object))))
+                           #'set-dotnet-callable-object-slot-value))))
     (setf (dco-proxy object) proxy)
     proxy))
 

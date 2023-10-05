@@ -54,6 +54,7 @@
                           #:compute-slots
                           #:class-direct-slots
                           #:class-finalized-p
+                          #:ensure-finalized
                           #:slot-value-using-class
                           #:slot-boundp-using-class
                           #:slot-makunbound-using-class
@@ -188,6 +189,10 @@
    #:duplicate-dotnet-name-class
    #:delegate-type-expected
    #:delegate-type-expected-datum
+   #:interface-type-expected
+   #:interface-type-expected-datum
+   #:sealed-inheritance
+   #:sealed-inheritance-type
 
    ;; reflection api
    #:reflection-invoke

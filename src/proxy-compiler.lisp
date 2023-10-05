@@ -145,6 +145,10 @@
                        (= 1 (%array-length generic-params)))
               (return (make-generic-method mi type)))))))))
 
+(defun get-cast-method (type)
+  (make-generic-method [[:BikeInterop.TypeCaster] GetMethod "Cast"]
+                       type))
+
 (defmacro with-il-generator ((generator &rest label-names) &body body)
   (with-gensyms (generator-var)
     `(let ((,generator-var ,generator))
@@ -322,7 +326,7 @@
                                   (if readerp
                                     (empty-types)
                                     (type-vector property-type))]))
-      (with-il-generator ([builder GetILGenerator])
+      (with-il-generator ([builder GetILGenerator] do-unbox)
         (emit Ldarg_0)
         (emit Ldfld (if readerp getter-field setter-field))
         (emit Ldarg_0)
@@ -331,13 +335,29 @@
         (if readerp
           (progn
             (emit Callvirt [(field-type getter-field) GetMethod "Invoke"])
-            (emit Unbox_Any property-type))
+            (cond ((value-type-p property-type)
+                   (declare-local [:object])
+                   (emit Stloc_0)
+                   (emit Ldloc_0)
+                   (emit Isinst property-type)
+                   (emit Brtrue_S do-unbox)
+                   (emit Ldloc_0)
+                   (emit Tailcall)
+                   (emit Call (get-cast-method property-type))
+                   (emit Ret)
+                   (mark-label do-unbox)
+                   (emit Ldloc_0)
+                   (emit Unbox_any property-type)
+                   (emit Ret))
+                  (t (emit Castclass property-type)
+                     (emit Ret))))
           (progn
             (emit Ldarg_1)
             (when (value-type-p property-type)
               (emit Box property-type))
-            (emit Callvirt [(field-type setter-field) GetMethod "Invoke"])))
-        (emit Ret))
+            (emit Tailcall)
+            (emit Callvirt [(field-type setter-field) GetMethod "Invoke"])
+            (emit Ret))))
       (if readerp
         [property-builder SetGetMethod builder]
         [property-builder SetSetMethod builder])
@@ -360,8 +380,9 @@
         (tbs-add-property-method state name property-builder nil))
       property-builder)))
 
-(defun tbs-add-constructor (state)
-  (declare (type type-builder-state state))
+(defun tbs-add-constructor (state base-constructor base-callable-p)
+  (declare (type type-builder-state state)
+           (type dotnet-object base-constructor))
   (with-accessors ((type-builder tbs-type-builder)
                    (getter-field tbs-getter-field)
                    (setter-field tbs-setter-field)
@@ -369,39 +390,61 @@
       state
     (let* ((null-arg-ex-ctr [[:System.ArgumentNullException] GetConstructor
                              (type-vector [:string])])
+           (base-parameters (if base-callable-p
+                              (nthcdr 3 (method-parameters base-constructor))
+                              (method-parameters base-constructor)))
            (builder [type-builder DefineConstructor
                                   #e(System.Reflection.MethodAttributes Public)
                                   #e(System.Reflection.CallingConventions HasThis)
-                                  (type-vector (field-type getter-field)
-                                               (field-type setter-field)
-                                               [:object])]))
-      [builder DefineParameter 1 #e(System.Reflection.ParameterAttributes None) "getter"]
-      [builder DefineParameter 2 #e(System.Reflection.ParameterAttributes None) "setter"]
-      [builder DefineParameter 3 #e(System.Reflection.ParameterAttributes None) "context"]
+                                  (list-to-bike-vector
+                                   (list* [:object]
+                                          (field-type getter-field)
+                                          (field-type setter-field)
+                                          (mapcar #'parameter-type base-parameters))
+                                   :element-type :type)])
+           (param-attrs #e(System.Reflection.ParameterAttributes None)))
+      [builder DefineParameter 1 param-attrs "context"]
+      [builder DefineParameter 2 param-attrs "getter"]
+      [builder DefineParameter 3 param-attrs "setter"]
+      (loop :for i :from 4
+            :for param :in base-parameters
+            :do [builder DefineParameter i param-attrs (parameter-name param)])
       (with-il-generator ([builder GetILGenerator]
                           setter-not-null
                           getter-not-null)
-        (emit Ldarg_1)
-        (emit Brtrue_S getter-not-null)
-        (emit Ldstr "getter")
-        (emit Newobj null-arg-ex-ctr)
-        (emit Throw)
-        (mark-label getter-not-null)
-        (emit Ldarg_2)
-        (emit Brtrue_S setter-not-null)
-        (emit Ldstr "setter")
-        (emit Newobj null-arg-ex-ctr)
-        (emit Throw)
-        (mark-label setter-not-null)
+        (emit Ldarg_0)
+        (when base-callable-p
+          (emit Ldarg_1)
+          (emit Ldarg_2)
+          (emit Ldarg_3))
+        (loop :for i :from 4
+              :for param :in base-parameters
+              :do (if (< i 256)
+                    (emit Ldarg_S i)
+                    (emit Ldarg i)))
+        (emit Call base-constructor)
+        (unless base-callable-p
+          (emit Ldarg_2)
+          (emit Brtrue_S getter-not-null)
+          (emit Ldstr "getter")
+          (emit Newobj null-arg-ex-ctr)
+          (emit Throw)
+          (mark-label getter-not-null)
+          (emit Ldarg_3)
+          (emit Brtrue_S setter-not-null)
+          (emit Ldstr "setter")
+          (emit Newobj null-arg-ex-ctr)
+          (emit Throw)
+          (mark-label setter-not-null))
         (emit Ldarg_0)
         (emit Ldarg_1)
+        (emit Stfld context-field)
+        (emit Ldarg_0)
+        (emit Ldarg_2)
         (emit Stfld getter-field)
         (emit Ldarg_0)
-        (emit Ldarg_2)
-        (emit Stfld setter-field)
-        (emit Ldarg_0)
         (emit Ldarg_3)
-        (emit Stfld context-field)
+        (emit Stfld setter-field)
         (emit Ret))
       builder)))
 

@@ -173,7 +173,13 @@ type or method definition.")
     "Returns non-NIL in case of the TYPE is an enum type")
 
 (defknown value-type-p (System.Type :property IsValueType)
-    "Returns non nil in case of type being a value type")
+    "Returns non-NIL in case of type being a value type")
+
+(defknown interface-type-p (System.Type :property IsInterface)
+    "Returns non-NIL in case of type being an interface type")
+
+(defknown type-sealed-p (System.Type :property IsSealed)
+    "Returns non-NIL in case of type being sealed")
 
 (defknown exception-message (System.Exception :property Message)
     "Returns exception message")
@@ -523,6 +529,10 @@ type or method definition.")
 
 (defknown type-constructors (System.Type :method GetConstructors)
     "Returns a .Net array of type constructors")
+
+(defknown type-constructors*
+    (System.Type :method GetConstructors System.Reflection.BindingFlags)
+    "Returns a .NET array of type constructors")
 
 (defknown type-interfaces (System.Type :method GetInterfaces)
     "Returns a .Net array of interfaces implemented by a type")
