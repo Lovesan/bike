@@ -181,6 +181,18 @@ Other values force the printing of type namespaces.")
                           :ref t
                           :stream out)))
 
+(defun qualified-type-name (type)
+  (declare (type dotnet-type type))
+  "Returns fully qualified name of a TYPE"
+  (simple-character-string
+   (with-output-to-string (out)
+     (write-type-name type :namespaces t
+                           :parameters t
+                           :qualified t
+                           :pointer t
+                           :ref t
+                           :stream out))))
+
 (defun print-normalized-newlines (string stream)
   (declare (type string string))
   (loop :with seen-cr = nil
@@ -197,6 +209,16 @@ Other values force the printing of type namespaces.")
                (setf seen-cr nil)
                (write-char c stream)))
         :finally (when seen-cr (pprint-newline :mandatory stream))))
+
+(defun symbol-full-name (symbol)
+  (declare (type symbol symbol))
+  (let* ((package (symbol-package symbol))
+         (name (symbol-name symbol))
+         (status (and package (nth-value 1 (find-symbol name package)))))
+    (format nil "~:[#~;~:*~a~]~:[::~;:~]~a"
+            (and package (package-name package))
+            (or (null package) (eq status :external))
+            name)))
 
 (defmacro pprint-dotnet-object ((object stream &key type
                                                     identity
@@ -221,7 +243,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
        (pprint-logical-block (,stream nil :prefix "#<" :suffix ">")
          ,@(when type
              `((when ,type-var
-                 (write-type-name (%bike-type-of ,object-var) :stream ,stream)
+                 (write-type-name (bike-type-of ,object-var) :stream ,stream)
                  (pprint-newline :fill ,stream))))
          ,@(when prefix
              `((when ,prefix-var
@@ -236,7 +258,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
 (defun print-exception-verbose (ex stream)
   (declare (type dotnet-exception ex)
            (type stream stream))
-  (let ((type-name (normalized-type-name (%bike-type-of ex)))
+  (let ((type-name (normalized-type-name (bike-type-of ex)))
         (message (exception-message ex))
         (trace (exception-stack-trace ex)))
     (pprint-logical-block (stream nil)
@@ -250,7 +272,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
 (defun print-dotnet-object-simple (object stream &optional identity)
   (declare (type dotnet-object object)
            (type stream stream))
-  (let* ((type (%bike-type-of object))
+  (let* ((type (bike-type-of object))
          (type-str (%to-string type))
          (str (%to-string object))
          (only-print-type (or (zerop (length str))
@@ -306,7 +328,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
         (format stream "~w" [member GetValue object])
       (System.Exception (e)
         (format stream "#<!Caught ~a>"
-                (normalized-type-name (%bike-type-of e))))))
+                (normalized-type-name (bike-type-of e))))))
   member)
 
 (defun print-member-vector (object stream members pop-callback)
@@ -332,7 +354,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
            (type stream stream)
            (type list member-names)
            (type (function () (values)) pop-callback))
-  (let* ((type (%bike-type-of object))
+  (let* ((type (bike-type-of object))
          (bflags #e(System.Reflection.BindingFlags Instance Public IgnoreCase))
          (all-member-types #e(System.Reflection.MemberTypes Property Field))
          has-any)
@@ -352,7 +374,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
   (declare (type dotnet-object object)
            (type stream stream))
   (if *print-dotnet-object*
-    (let* ((type (%bike-type-of object))
+    (let* ((type (bike-type-of object))
            (qualified-name (or (type-assembly-qualified-name type)
                                (type-full-name type))))
       (if (member qualified-name *printed-types* :test #'string=)
@@ -381,10 +403,10 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
            (type stream stream))
   (if (eq (get-dispatch-macro-character #\# #\e) 'read-sharp-e)
     (let* ((value (unbox object))
-           (type (%bike-type-of object))
+           (type (bike-type-of object))
            (flags (member-custom-attrubute type (resolve-type 'System.FlagsAttribute))))
       (pprint-logical-block (stream nil :prefix "#e(" :suffix ")")
-        (write-string (normalized-type-name (%bike-type-of object)) stream)
+        (write-string (normalized-type-name (bike-type-of object)) stream)
         (if flags
           (loop :with names = (invoke type 'GetEnumNames)
                 :with values = (invoke type 'GetEnumValues)
@@ -503,7 +525,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
           (format stream " ~_CustomAttributes: ~w" attrs)))
     (System.Exception (e)
       (format stream " ~_CustomAttributes: #<!Caught ~a>"
-              (normalized-type-name (%bike-type-of e)))))
+              (normalized-type-name (bike-type-of e)))))
   member-info)
 
 (defun write-member-attributes (attrs stream pop-callback)
@@ -767,7 +789,7 @@ Function accepts two arguments - an OBJECT to print, and a STREAM to print to."
     (if (and (not *print-escape*) (not *print-readably*))
       (print-exception-verbose ex stream)
       (print-unreadable-object (dotnet-error stream :type t :identity t)
-        (write-type-name (%bike-type-of ex) :stream stream))))
+        (write-type-name (bike-type-of ex) :stream stream))))
   dotnet-error)
 
 (defmethod print-object ((delegate dotnet-delegate) stream)
@@ -798,7 +820,7 @@ Function accepts two arguments - an OBJECT to print, and a STREAM to print to."
              (when printer
                (funcall printer object stream)
                t))))
-    (loop :with initial-type = (%bike-type-of object)
+    (loop :with initial-type = (bike-type-of object)
           :for type = initial-type :then (type-base-type type)
           :while type :do
             (when (maybe-invoke-printer type)

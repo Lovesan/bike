@@ -39,7 +39,8 @@
                #:trivial-garbage
                #:bordeaux-threads
                #:bike-internals
-               #:named-readtables)
+               #:named-readtables
+               #:closer-mop)
   :serial t
   :components ((:module "src"
                 :serial t
@@ -66,6 +67,8 @@
                              (:file "api")
                              (:file "syntax")
                              (:file "print")
+                             (:file "proxy-compiler")
+                             (:file "proxy-classes")
                              (:file "shutdown"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))
 

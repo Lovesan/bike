@@ -25,16 +25,16 @@
 (in-package #:bike)
 
 (defun invoke (target method &rest args)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type dotnet-method-designator method)
            (dynamic-extent args))
   "Invokes a method designated by METHOD on a TARGET which can
  either be a type specifier, in which case a static method is
  invoked, or an instance, which would lead to instance method
  invocation."
-  (let* ((instancep (dotnet-object-p target))
+  (let* ((instancep (typep target 'dotnet-object*))
          (type (if instancep
-                 (%bike-type-of target)
+                 (bike-type-of target)
                  (resolve-type target)))
          (genericp (consp method))
          (name (simple-character-string-upcase (if genericp (car method) method)))
@@ -49,15 +49,15 @@
     (apply #'%invoke-method type name (and instancep target) type-args args)))
 
 (defun property (target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Retrieves a value of property named NAME from a TARGET, which
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (let* ((instancep (dotnet-object-p target))
+  (let* ((instancep (typep target 'dotnet-object*))
          (type (if instancep
-                 (%bike-type-of target)
+                 (bike-type-of target)
                  (resolve-type target))))
     (%access-property type
                       (simple-character-string-upcase name)
@@ -66,15 +66,15 @@
                       nil)))
 
 (defun (setf property) (new-value target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Changes a value of property named NAME of a TARGET, which
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
-  (let* ((instancep (dotnet-object-p target))
+  (let* ((instancep (typep target 'dotnet-object*))
          (type (if instancep
-                 (%bike-type-of target)
+                 (bike-type-of target)
                  (resolve-type target))))
     (%access-property type
                       (simple-character-string-upcase name)
@@ -83,29 +83,29 @@
                       new-value)))
 
 (defun ref (target index &rest indices)
-  (declare (type dotnet-object target)
+  (declare (type dotnet-object* target)
            (dynamic-extent indices))
   "Retrieves a value of an indexer from a TARGET, which
  must be an instance."
   (apply #'%access-indexer target t nil (cons index indices)))
 
 (defun (setf ref) (new-value target index &rest indices)
-  (declare (type dotnet-object target)
+  (declare (type dotnet-object* target)
            (dynamic-extent indices))
   "Changes a value of an indexer from a TARGET, which
  must be an instance."
   (apply #'%access-indexer target nil new-value (cons index indices)))
 
 (defun field (target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Retrieves a value of field named NAME from TARGET, which
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (let* ((instancep (dotnet-object-p target))
+  (let* ((instancep (typep target 'dotnet-object*))
          (type (if instancep
-                 (%bike-type-of target)
+                 (bike-type-of target)
                  (resolve-type target))))
     (%access-field type
                    (simple-character-string-upcase name)
@@ -114,15 +114,15 @@
                    nil)))
 
 (defun (setf field) (new-value target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Changes a value of field named NAME of a TARGET, which
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
-  (let* ((instancep (dotnet-object-p target))
+  (let* ((instancep (typep target 'dotnet-object*))
          (type (if instancep
-                 (%bike-type-of target)
+                 (bike-type-of target)
                  (resolve-type target))))
     (%access-field type
                    (simple-character-string-upcase name)
@@ -148,18 +148,23 @@ In case of the TYPE being a delegate type, first,
 (defun unbox (object)
   "Attempts to unbox an OBJECT into lisp object"
   (if (dotnet-object-p object)
-    (let ((code (%get-full-type-code (%dotnet-object-handle object))))
-      (values (%unbox (%dotnet-object-handle object) code t)))
+    (let* ((handle (%dotnet-object-handle object))
+           (code (%get-full-type-code handle)))
+      (values (%unbox handle code t)))
     object))
 
 (defun box (object &optional (type nil typep))
   (declare (type (or null dotnet-type-designator) type))
   "Makes a boxed representation of an OBJECT"
-  (let ((boxed (if (dotnet-object-p object)
-                 object
-                 (let* ((ptr (%box object))
-                        (code (%get-full-type-code ptr)))
-                   (%get-boxed-object ptr (ash code -8) nil)))))
+  (let ((boxed (cond ((dotnet-object-p object)
+                      object)
+                     ((typep object 'dotnet-proxy-object)
+                      (%dotnet-object
+                       (%%box-lisp-object
+                        (%alloc-lisp-handle object))))
+                     (t (let* ((ptr (%box object))
+                               (code (%get-full-type-code ptr)))
+                          (%get-boxed-object ptr (ash code -8) nil))))))
     (if typep
       (%cast boxed (resolve-type type))
       boxed)))
@@ -260,7 +265,7 @@ The bindings are searched first to last in the event of a thrown exception"
                           (lambda (,err)
                             (declare (type dotnet-error ,err))
                             (let* ((,err (dotnet-error-object ,err))
-                                   (,err-type (%bike-type-of ,err)))
+                                   (,err-type (bike-type-of ,err)))
                               (declare (ignorable ,err-type)
                                        (type dotnet-exception ,err))
                               (cond ,@cases)))))

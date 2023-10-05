@@ -214,7 +214,7 @@
 
 (defun %ensure-assembly (assembly)
   (cond ((null assembly) nil)
-        ((dotnet-object-p assembly)
+        ((typep assembly 'dotnet-object*)
          assembly)
         ((typep assembly 'string-designator)
          (load-assembly assembly))

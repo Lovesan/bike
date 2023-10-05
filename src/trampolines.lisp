@@ -69,8 +69,7 @@
                        initializers)
                  (push :pointer hostargs)
                  (push boxed-old hostargs)
-                 (push `(when ,need-cleanup (%free-handle ,boxed-old)) cleanups)
-                 )
+                 (push `(when ,need-cleanup (%free-handle ,boxed-old)) cleanups))
                 (:ref
                  (push `(,boxed-old (null-pointer)) boxeds)
                  (push need-cleanup need-cleanups)
@@ -120,10 +119,10 @@
         `(lambda (,@(unless staticp `(,this)) ,@funargs ,@(when params-type `(&rest ,rest)))
            ,@(when doc `(,doc))
            (declare ,@arg-decls)
-           ,@(unless staticp `((declare (type dotnet-object ,this))))
+           ,@(unless staticp `((declare (type dotnet-object* ,this))))
            ,@decls
            (let (,@(unless staticp
-                     `((,this (%dotnet-object-handle ,this))))
+                     `((,this (dotnet-object-handle ,this))))
                  ,@(when params-type
                      `((,rest (%list-to-bike-vector ,rest ,params-type))))
                  ,@boxeds
@@ -167,7 +166,7 @@
     (with-gensyms (ex rv result cleanup type-code)
       `(lambda (,@(unless staticp `(,this)))
          ,@(when doc `(,doc))
-         ,@(unless staticp `((declare (type dotnet-object ,this))))
+         ,@(unless staticp `((declare (type dotnet-object* ,this))))
          ,@decls
          (with-foreign-objects (,@(unless primitive-type
                                     `((,type-code :int)))
@@ -175,7 +174,7 @@
            (let* ((,rv (foreign-funcall-pointer
                         ,fptr
                         (:convention :stdcall)
-                        ,@(unless staticp `(:pointer (%dotnet-object-handle ,this)))
+                        ,@(unless staticp `(:pointer (dotnet-object-handle ,this)))
                         ,@(unless primitive-type `(:pointer ,type-code))
                         :pointer ,ex
                         ,(or primitive-type :pointer)))
@@ -205,7 +204,7 @@
       `(lambda (,@(unless staticp `(,this)) ,value)
          ,@(when doc `(,doc))
          ,@(when lisp-type `((declare (type ,lisp-type ,value))))
-         ,@(unless staticp `((declare (type dotnet-object ,this))))
+         ,@(unless staticp `((declare (type dotnet-object* ,this))))
          ,@decls
          (with-foreign-objects ((,ex :pointer))
            (,@(if primitive-type
@@ -215,7 +214,7 @@
             (foreign-funcall-pointer
              ,fptr
              (:convention :stdcall)
-             ,@(unless staticp `(:pointer (%dotnet-object-handle ,this)))
+             ,@(unless staticp `(:pointer (dotnet-object-handle ,this)))
              ,@(if primitive-type
                  `(,primitive-type ,value)
                  `(:pointer ,boxed))

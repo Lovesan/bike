@@ -26,8 +26,8 @@
 
 (declaim (inline %resolve-enum-value))
 (defun %resolve-enum-value (type enum-values designator)
-  (cond ((dotnet-object-p designator)
-         (let* ((handle (%dotnet-object-handle designator))
+  (cond ((typep designator 'dotnet-object*)
+         (let* ((handle (dotnet-object-handle designator))
                 (code (%get-full-type-code handle)))
            (multiple-value-bind
                  (unboxed cleanup) (%unbox handle code t)

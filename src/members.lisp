@@ -30,7 +30,7 @@
 (declaim (inline %call-ientry))
 (defun %call-ientry-accessor (entry instance readp new-value)
   (declare (type invocation-entry entry)
-           (type (or null dotnet-object) instance))
+           (type (or null dotnet-object*) instance))
   (with-ientry (type name reader writer) entry
     (cond ((and readp reader instance)
            (funcall (the function reader) instance))
@@ -50,7 +50,7 @@
   (declare (type dotnet-type type)
            (type simple-character-string name)
            (type (member :field :property) kind)
-           (type (or null dotnet-object) instance))
+           (type (or null dotnet-object*) instance))
   (multiple-value-bind (reader-delegate reader-ptr
                         writer-delegate writer-ptr)
       (%get-accessor-trampolines info kind)
@@ -173,7 +173,7 @@
 (defun %access-field (type name instance readp new-value)
   (declare (type dotnet-type type)
            (type simple-character-string name)
-           (type (or null dotnet-object) instance))
+           (type (or null dotnet-object*) instance))
   (let ((entry (get-ientry type name :field)))
     (unless entry
       (let ((info (type-get-field type name (%get-binding-flags instance))))
@@ -188,7 +188,7 @@
 (defun %access-property (type name instance readp new-value)
   (declare (type dotnet-type type)
            (type simple-character-string name)
-           (type (or null dotnet-object) instance))
+           (type (or null dotnet-object*) instance))
   (let ((entry (get-ientry type name :property)))
     (unless entry
       (let ((info (%find-named-property type name instance)))
@@ -200,27 +200,56 @@
                      type info (property-type info) name :property instance))))
     (%call-ientry-accessor entry instance readp new-value)))
 
+(defun params-array-p (info)
+  (declare (type dotnet-object info))
+  "Returns non-NIL in case of INFO being a params[] parameter"
+  (and (parameter-custom-attrubute
+        info
+        (resolve-type 'System.ParamArrayAttribute))
+       t))
+
+(defun make-param-array-iterator (parameters)
+  (declare (type dotnet-object parameters))
+  (let* ((count (%array-length parameters))
+         (i 0))
+    (lambda ()
+      (when (< i count)
+        (let* ((param (dnvref parameters i))
+               (type (parameter-type param))
+               (type-name (type-full-name type))
+               (outp (parameter-out-p param))
+               (refp (ref-type-p type))
+               (name (parameter-name param)))
+          (multiple-value-prog1
+              (values (or name (string (gensym (string '#:arg))))
+                      type
+                      (%get-primitive-type type-name)
+                      (%get-lisp-primitive-type type-name)
+                      (if refp (if outp :out :ref) :in)
+                      (params-array-p param))
+            (incf i)))))))
+
 (defun %compile-method (info fptr &optional name doc decls)
   (declare (type dotnet-object info))
-  (let* ((void-type (%get-type "System.Void" t nil))
+  (let* ((void-type (resolve-type :void))
          (return-type (method-return-type info))
          (voidp (bike-equals void-type return-type))
          (staticp (method-static-p info))
          (params (%method-parameters info))
-         (iter (%make-param-array-iterator params)))
+         (iter (make-param-array-iterator params)))
     (compile-method-trampoline fptr staticp voidp iter name doc decls)))
 
 (defun %compile-constructor (info fptr &optional name doc decls)
   (declare (type dotnet-object info))
   (let* ((params (%method-parameters info))
-         (iter (%make-param-array-iterator params)))
+         (iter (make-param-array-iterator params)))
     (compile-method-trampoline fptr t nil iter name doc decls)))
 
 (defun %access-indexer (instance readp new-value &rest args)
-  (declare (type dotnet-object instance)
+  (declare (type dotnet-object* instance)
            (dynamic-extent args))
   (let* ((arg-type-count (length args))
-         (type (%bike-type-of instance))
+         (type (bike-type-of instance))
          (arg-types (mapcar #'bike-type-of args)))
     (let ((entry (get-ientry type +empty-dotnet-name+
                              :indexer :arg-type-count arg-type-count
@@ -271,7 +300,7 @@
 (defun %invoke-method (type name instance type-args &rest args)
   (declare (type dotnet-type type)
            (type simple-character-string name)
-           (type (or null dotnet-object) instance)
+           (type (or null dotnet-object*) instance)
            (type list type-args args))
   (let* ((arg-type-count (length args))
          (type-arg-count (length type-args))
@@ -303,7 +332,7 @@
                                     :reader-delegate delegate))))))
     (with-ientry (reader) entry
       (if instance
-        (apply (the function reader) (cons instance args))
+        (apply (the function reader) instance args)
         (apply (the function reader) args)))))
 
 (defun %new (type &rest args)

@@ -24,10 +24,6 @@
 
 (in-package #:bike)
 
-(declaim (ftype (function (dotnet-object) dotnet-type) %bike-type-of))
-(defknown %bike-type-of (System.Object :method GetType)
-    "Retrieves .Net type of an object")
-
 (defknown %get-hash-code (System.Object :method GetHashCode)
     "Retrieves hash code of an object")
 
@@ -175,6 +171,9 @@ type or method definition.")
 
 (defknown enum-type-p (System.Type :property IsEnum)
     "Returns non-NIL in case of the TYPE is an enum type")
+
+(defknown value-type-p (System.Type :property IsValueType)
+    "Returns non nil in case of type being a value type")
 
 (defknown exception-message (System.Exception :property Message)
     "Returns exception message")
@@ -401,6 +400,9 @@ type or method definition.")
 (defknown parameter-type (System.Reflection.ParameterInfo :property ParameterType)
     "Retrieves parameter type")
 
+(defknown parameter-attributes (System.Reflection.ParameterInfo :property Attributes)
+    "Retrieves parameter attributes")
+
 (declaim (ftype (function (dotnet-object) (signed-byte 32)) parameter-position))
 (defknown parameter-position (System.Reflection.ParameterInfo :property Position)
     "Retrieves parameter position")
@@ -435,12 +437,6 @@ type or method definition.")
 (defknown parameter-custom-attrubute
     (System.Attribute :method GetCustomAttribute System.Reflection.ParameterInfo System.Type)
     "Retrieves custom attribute of a parameter info")
-
-(defun params-array-p (info)
-  (declare (type dotnet-object info))
-  "Returns non-NIL in case of INFO being a params[] parameter"
-  (let ((attr-type (%get-type "System.ParamArrayAttribute" t nil)))
-    (not (null (parameter-custom-attrubute info attr-type)))))
 
 (defknown default-binder (System.Type :property DefaultBinder)
     "Returns a default reflection binder")
@@ -503,7 +499,7 @@ type or method definition.")
         (property-info-type (%get-type "System.Reflection.PropertyInfo" t nil)))
     (loop :for i :below (%array-length members)
           :for info = (%net-vref members i)
-          :when (bike-subclass-p (%bike-type-of info) property-info-type)
+          :when (bike-subclass-p (bike-type-of info) property-info-type)
             :collect info)))
 
 (defknown select-property (System.Reflection.Binder :method SelectProperty

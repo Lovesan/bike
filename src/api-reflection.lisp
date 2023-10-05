@@ -32,7 +32,7 @@
       (values name types))))
 
 (defun reflection-invoke (target method &rest args)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type dotnet-method-designator method)
            (dynamic-extent args))
   "Using reflection, invokes a method designated by METHOD on a TARGET which can
@@ -43,69 +43,69 @@
       (if (consp method)
         (%resolve-generic-types method)
         (values (simple-character-string-upcase method) '()))
-    (if (dotnet-object-p target)
+    (if (typep target 'dotnet-object*)
       (apply #'%invoke target nil type-args method-name args)
       (apply #'%invoke (resolve-type target) t type-args method-name args))))
 
 (defun reflection-property (target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Using reflection, retrieves a value of property named NAME from a TARGET, which
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
   (let ((name (simple-character-string-upcase name)))
-    (if (dotnet-object-p target)
+    (if (typep target 'dotnet-object*)
       (%get-property target nil name)
       (%get-property (resolve-type target) t name))))
 
 (defun (setf reflection-property) (new-value target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Using reflection, changes a value of property named NAME of a TARGET, which
  can either be a type specifier, in which case a static property
  is accessed, or an instance, which would lead to instance property
  access."
   (let ((name (simple-character-string-upcase name)))
-    (if (dotnet-object-p target)
+    (if (typep target 'dotnet-object*)
       (%set-property target nil name new-value)
       (%set-property (resolve-type target) t name new-value))))
 
 (defun reflection-ref (target index &rest indices)
-  (declare (type dotnet-object target)
+  (declare (type dotnet-object* target)
            (dynamic-extent indices))
   "Using reflection, retrieves a value of an indexer from a TARGET, which
  must be an instance."
   (apply #'%get-index target index indices))
 
 (defun (setf reflection-ref) (new-value target index &rest indices)
-  (declare (type dotnet-object target)
+  (declare (type dotnet-object* target)
            (dynamic-extent indices))
   "Using reflection, changes a value of an indexer from a TARGET, which
  must be an instance."
   (apply #'%set-index target new-value index indices))
 
 (defun reflection-field (target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Using reflection, retrieves a value of field named NAME from TARGET, which
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
   (let ((name (simple-character-string-upcase name)))
-    (if (dotnet-object-p target)
+    (if (typep target 'dotnet-object*)
       (%get-field target nil name)
       (%get-field (resolve-type target) t name))))
 
 (defun (setf reflection-field) (new-value target name)
-  (declare (type (or dotnet-object dotnet-type-designator) target)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
            (type string-designator name))
   "Using reflection, changes a value of field named NAME of a TARGET, which
  can either be a type specifier, in which case a static field
  is accessed, or an instance, which would lead to instance field
  access."
   (let ((name (simple-character-string-upcase name)))
-    (if (dotnet-object-p target)
+    (if (typep target 'dotnet-object*)
       (%set-field target nil name new-value)
       (%set-field (resolve-type target) t name new-value))))
 

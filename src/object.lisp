@@ -86,6 +86,28 @@
   (frob delegate)
   (frob exception))
 
+(defclass dotnet-proxy-object ()
+  ((%value :reader dotnet-proxy-object-value
+          :accessor dpo-value
+          :type dotnet-object))
+  (:documentation "Base class for objects which contain proxies to dotnet objects."))
+
+(defclass dotnet-callable-object (dotnet-proxy-object)
+  ((%value :reader dotnet-callable-object-proxy
+          :accessor dco-proxy
+          :type dotnet-object))
+  (:documentation "Base class for dotnet-callable objects."))
+
+(deftype dotnet-object* () '(or dotnet-object dotnet-proxy-object))
+
+(declaim (inline dotnet-object-handle))
+(defun dotnet-object-handle (object)
+  (declare (type dotnet-object* object))
+  "Retrieves object handle"
+  (etypecase object
+    (dotnet-object (%dotnet-object-handle object))
+    (dotnet-proxy-object (%dotnet-object-handle (dpo-value object)))))
+
 (macrolet
     ((frob (name type)
        (let* ((slot-name (symbolicate 'box- name))
@@ -136,8 +158,8 @@
 
 (declaim (inline dotnet-object-handle-id))
 (defun dotnet-object-handle-id (object)
-  (declare (type dotnet-object object))
-  (pointer-address (%dotnet-object-handle object)))
+  (declare (type dotnet-object* object))
+  (pointer-address (dotnet-object-handle object)))
 
 (declaim (inline %get-string-length))
 (defun %get-string-length (value)
@@ -287,6 +309,8 @@
          (values (%box-double object) t))
         ((typep object 'foreign-pointer)
          (values (%box-intptr object) t))
+        ((typep object 'dotnet-proxy-object)
+         (values (%dotnet-object-handle (dpo-value object)) nil))
         (t (values
             (%%box-lisp-object
              (%alloc-lisp-handle object))

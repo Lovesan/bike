@@ -26,6 +26,40 @@
 
 (uiop:define-package #:bike
   (:use #:cl #:global-vars #:cffi #:bike-internals #:named-readtables)
+  (:shadowing-import-from #:closer-mop
+                          #:defclass
+                          #:defgeneric
+                          #:defmethod
+                          #:slot-definition
+                          #:standard-slot-definition
+                          #:direct-slot-definition
+                          #:effective-slot-definition
+                          #:standard-direct-slot-definition
+                          #:standard-effective-slot-definition
+                          #:direct-slot-definition-class
+                          #:effective-slot-definition-class
+                          #:compute-effective-slot-definition
+                          #:validate-superclass
+                          #:finalize-inheritance
+                          #:standard-class
+                          #:standard-object
+                          #:slot-definition-name
+                          #:slot-definition-initfunction
+                          #:slot-definition-initform
+                          #:slot-definition-allocation
+                          #:slot-definition-initargs
+                          #:slot-definition-type
+                          #:class-name
+                          #:class-slots
+                          #:compute-slots
+                          #:class-direct-slots
+                          #:class-finalized-p
+                          #:slot-value-using-class
+                          #:slot-boundp-using-class
+                          #:slot-makunbound-using-class
+                          #:fix-slot-initargs
+                          #:class-precedence-list
+                          #:subclassp)
   (:import-from #:uiop
                 #:strcat
                 #:register-image-restore-hook
@@ -85,6 +119,11 @@
    #:dotnet-exception-p
    #:dotnet-delegate
    #:dotnet-delegate-p
+   #:dotnet-proxy-object
+   #:dotnet-proxy-object-value
+   #:dotnet-callable-object
+   #:dotnet-callable-object-proxy
+   #:dotnet-object*
 
    ;; conditions
    #:bike-condition
@@ -104,6 +143,8 @@
    #:inner-ref-type-error-datum
    #:invalid-type-name
    #:invalid-type-name-datum
+   #:invalid-ref-type
+   #:invalid-ref-type-datum
    #:type-name-parser-error
    #:type-name-parser-error-string
    #:type-name-parser-error-character
@@ -142,6 +183,11 @@
    #:enum-resolution-error
    #:bike-reader-error
    #:bike-reader-error-message
+   #:duplicate-dotnet-name
+   #:duplicate-dotnet-name-value
+   #:duplicate-dotnet-name-class
+   #:delegate-type-expected
+   #:delegate-type-expected-datum
 
    ;; reflection api
    #:reflection-invoke
@@ -184,7 +230,7 @@
    ;; syntax
    #:bike-syntax
 
-   ;;printer
+   ;; printer
    #:*print-dotnet-object*
    #:*print-enumerable*
    #:*print-dotnet-type-namespaces*
@@ -195,6 +241,30 @@
    #:pprint-dotnet-object
    #:write-type-name
    #:set-dotnet-object-printer
-   #:define-dotnet-object-printer))
+   #:define-dotnet-object-printer
+
+   ;; proxy classes and metaclasses
+   #:dotnet-proxy-class
+   #:dotnet-proxy-class-object-type
+   #:dotnet-callable-class
+   #:dotnet-callable-class-proxy-type
+   #:dotnet-slot-definition
+   #:slot-definition-dotnet-name
+   #:property-slot-definition
+   #:slot-definition-property-type
+   #:slot-definition-getter
+   #:slot-definition-setter
+   #:event-slot-definition
+   #:slot-definition-handler-type
+   #:callable-event-slot-definition
+   #:slot-definition-raise-method-dotnet-name
+   #:direct-dotnet-slot-definition
+   #:direct-property-slot-definition
+   #:direct-event-slot-definition
+   #:direct-callable-event-slot-definition
+   #:effective-dotnet-slot-definition
+   #:effective-property-slot-definition
+   #:effective-event-slot-definition
+   #:effective-callable-event-slot-definition))
 
 ;;; vim: ft=lisp et

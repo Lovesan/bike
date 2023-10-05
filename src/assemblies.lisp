@@ -38,7 +38,7 @@
   (declare (type (or dotnet-object string-designator)
                  assembly-designator))
   "Imports an assembly designated by ASSEMBLY-STRING"
-  (let* ((assembly (if (dotnet-object-p assembly-designator)
+  (let* ((assembly (if (typep assembly-designator 'dotnet-object*)
                      assembly-designator
                      (load-assembly assembly-designator)))
          (types (assembly-exported-types assembly)))

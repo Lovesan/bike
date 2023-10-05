@@ -87,13 +87,13 @@
     (%transform-rv rv code ex)))
 
 (defun %cast (object type)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (type dotnet-type type))
   (with-foreign-objects ((rv :pointer)
                          (code :int)
                          (ex :pointer))
     (hostcall cast
-              :pointer (%dotnet-object-handle object)
+              :pointer (dotnet-object-handle object)
               :pointer (%dotnet-object-handle type)
               :pointer rv
               :pointer code
@@ -136,7 +136,7 @@
         (%transform-rv rv code ex cleanup-list)))))
 
 (defun %invoke (object staticp type-args method-name &rest args)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (type list type-args)
            (type string method-name)
            (dynamic-extent args))
@@ -153,7 +153,7 @@
                     (%dotnet-type-handle type-arg)))
       (let ((cleanup-list (%transform-args args argp)))
         (hostcall invoke
-                  :pointer (%dotnet-object-handle object)
+                  :pointer (dotnet-object-handle object)
                   :bool staticp
                   lpwstr method-name
                   :pointer targp
@@ -167,13 +167,13 @@
         (%transform-rv rv code ex cleanup-list)))))
 
 (defun %get-field (object staticp field-name)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (type string field-name))
   (with-foreign-objects ((rv :pointer)
                          (code :int)
                          (ex :pointer))
     (hostcall get-field
-              :pointer (%dotnet-object-handle object)
+              :pointer (dotnet-object-handle object)
               :bool staticp
               lpwstr field-name
               :pointer rv
@@ -183,12 +183,12 @@
     (%transform-rv rv code ex)))
 
 (defun %set-field (object staticp field-name value)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (type string field-name))
   (multiple-value-bind (boxed cleanup) (%box value)
     (with-foreign-objects ((ex :pointer))
       (hostcall set-field
-                :pointer (%dotnet-object-handle object)
+                :pointer (dotnet-object-handle object)
                 :bool staticp
                 lpwstr field-name
                 :pointer boxed
@@ -198,13 +198,13 @@
       (%transform-exception (mem-ref ex :pointer)))))
 
 (defun %get-property (object staticp property-name)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (type string property-name))
   (with-foreign-objects ((rv :pointer)
                          (code :int)
                          (ex :pointer))
     (hostcall get-property
-              :pointer (%dotnet-object-handle object)
+              :pointer (dotnet-object-handle object)
               :bool staticp
               lpwstr property-name
               :pointer rv
@@ -214,12 +214,12 @@
     (%transform-rv rv code ex)))
 
 (defun %set-property (object staticp property-name value)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (type string property-name))
   (multiple-value-bind (boxed cleanup) (%box value)
     (with-foreign-objects ((ex :pointer))
       (hostcall set-property
-                :pointer (%dotnet-object-handle object)
+                :pointer (dotnet-object-handle object)
                 :bool staticp
                 lpwstr property-name
                 :pointer boxed
@@ -229,7 +229,7 @@
       (%transform-exception (mem-ref ex :pointer)))))
 
 (defun %get-index (object index &rest indices)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (dynamic-extent indices))
   (let* ((args (cons index indices))
          (argc (length args)))
@@ -240,7 +240,7 @@
                            (argp :pointer argc))
       (let ((cleanup-list (%transform-args args argp)))
         (hostcall get-index
-                  :pointer (%dotnet-object-handle object)
+                  :pointer (dotnet-object-handle object)
                   :pointer argp
                   :int argc
                   :pointer rv
@@ -250,7 +250,7 @@
         (%transform-rv rv code ex cleanup-list)))))
 
 (defun %set-index (object value index &rest indices)
-  (declare (type dotnet-object object)
+  (declare (type dotnet-object* object)
            (dynamic-extent indices))
   (let* ((args (cons index indices))
          (argc (length args)))
@@ -264,7 +264,7 @@
               (mem-ref rv :pointer) (null-pointer))
         (let ((cleanup-list (%transform-args args argp)))
           (hostcall set-index
-                    :pointer (%dotnet-object-handle object)
+                    :pointer (dotnet-object-handle object)
                     :pointer boxed
                     :pointer argp
                     :int argc
@@ -557,9 +557,7 @@
 (defun bike-type-of (object)
   "Retrieves .Net type of an OBJECT"
   (multiple-value-bind (boxed cleanup)
-      (if (dotnet-object-p object)
-        (values (%dotnet-object-handle object) nil)
-        (%box object))
+      (%box object)
     (let ((type (%dotnet-type (hostcall get-type-of
                                         :pointer boxed
                                         :pointer))))

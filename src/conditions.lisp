@@ -50,7 +50,8 @@
            :reader invalid-type-designator-datum
            :reader invalid-type-ast-datum
            :reader inner-ref-type-error-datum
-           :reader enum-resolution-error-datum))
+           :reader enum-resolution-error-datum
+           :reader invalid-ref-type-datum))
   (:report (lambda (c s)
              (format s "~&Unable to resolve type: ~s"
                      (type-resolution-error-datum c)))))
@@ -67,17 +68,23 @@
              (format s "~&Invalid type ast: ~s"
                      (invalid-type-designator-datum c)))))
 
-(define-condition inner-ref-type-error (invalid-type-ast)
-  ()
-  (:report (lambda (c s)
-             (format s "~&Inner ref types are not allowed: ~s"
-                     (invalid-type-designator-datum c)))))
-
 (define-condition invalid-type-name (invalid-type-designator)
   ()
   (:report (lambda (c s)
              (format s "~&Invalid type name: ~s"
                      (invalid-type-name-datum c)))))
+
+(define-condition invalid-ref-type (invalid-type-designator)
+  ()
+  (:report (lambda (c s)
+             (format s "~&Reference types are not allowed here: ~s"
+                     (invalid-ref-type-datum c)))))
+
+(define-condition inner-ref-type-error (invalid-ref-type)
+  ()
+  (:report (lambda (c s)
+             (format s "~&Inner ref types are not allowed: ~s"
+                     (invalid-type-designator-datum c)))))
 
 (define-condition type-name-parser-error (invalid-type-name)
   ((%c :initarg :character :reader type-name-parser-error-character)
@@ -224,5 +231,23 @@
 
 (defun bike-reader-error (stream message)
   (error 'bike-reader-error :message message :stream stream))
+
+(define-condition duplicate-dotnet-name (bike-error)
+  ((value :initarg :value
+          :reader duplicate-dotnet-name-value)
+   (class :initarg :class
+          :reader duplicate-dotnet-name-class))
+  (:report (lambda (c s)
+             (format s "Duplicate dotnet name ~s in class ~s"
+                     (duplicate-dotnet-name-value c)
+                     (duplicate-dotnet-name-class c)))))
+
+(define-condition delegate-type-expected (bike-error)
+  ((datum :initarg :type
+          :initarg :datum
+          :reader delegate-type-expected-datum))
+  (:report (lambda (c s)
+             (format s "~s is not a delegate type"
+                     (delegate-type-expected-datum c)))))
 
 ;;; vim: ft=lisp et

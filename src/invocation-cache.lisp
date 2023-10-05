@@ -26,7 +26,7 @@
 
 ;; Implement our own version of DLR
 
-(deftype member-kind () '(member :method :property :field :indexer :constructor))
+(deftype member-kind () '(member :method :property :field :event :indexer :constructor))
 
 (defstruct (invocation-entry (:constructor make-ientry)
                              (:copier nil)

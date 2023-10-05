@@ -29,6 +29,8 @@
   (clear-invocation-cache)
   (format *error-output* "~&[bike] Wiping out lisp handles~%")
   (%clear-handle-table)
+  (clear-dynamic-type-cache)
+  (format *error-output* "~&[bike] Clearing proxy type cache~%")
   (format *error-output* "~&[bike] Performing full GC~%")
   (tg:gc :full t)
   (format *error-output* "~&[bike] Performing CoreCLR GC~%")
