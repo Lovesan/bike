@@ -122,6 +122,29 @@
                                     [:object]
                                     #e(System.Reflection.FieldAttributes Private)]))))
 
+(defun get-compare-exchange-method (type)
+  (declare (type dotnet-type type))
+  (let ((interlocked-type [:System.Threading.Interlocked])
+        (method-name "CompareExchange")
+        (binding-flags #e(System.Reflection.BindingFlags Public Static)))
+    (if (or (value-type-p type)
+            (bike-equals type [:object]))
+      [interlocked-type GetMethod method-name binding-flags (type-vector
+                                                             (resolve-type (list :ref type))
+                                                             type
+                                                             type)]
+      (do-enumerable (mi (type-get-members interlocked-type
+                                           method-name
+                                           #e(System.Reflection.MemberTypes Method)
+                                           binding-flags))
+        (when (and (string= method-name (member-info-name mi))
+                   (generic-method-definition-p mi))
+          (let ((params (%method-parameters mi))
+                (generic-params (method-generic-arguments mi)))
+            (when (and (= 3 (%array-length params))
+                       (= 1 (%array-length generic-params)))
+              (return (make-generic-method mi type)))))))))
+
 (defmacro with-il-generator ((generator &rest label-names) &body body)
   (with-gensyms (generator-var)
     `(let ((,generator-var ,generator))
@@ -167,19 +190,49 @@
                                             Virtual
                                             NewSlot)
                                          [:void]
-                                         (type-vector handler-type)]))
+                                         (type-vector handler-type)])
+           (compare-exchange (get-compare-exchange-method handler-type)))
+      (unless compare-exchange
+        (error "Internal error. No Interlocked.CompareExchange for ~s" handler-type))
       [method-builder DefineParameter
                       1
                       #e(System.Reflection.ParameterAttributes None)
                       "value"]
-      (with-il-generator ([method-builder GetILGenerator])
-        (emit Ldarg_0)
+      (with-il-generator ([method-builder GetILGenerator] cmp-loop)
+        ;; HandlerType fieldValue;
+        ;; HandlerType tmp;
+        ;; HandlerType combineResult;
+        ;; fieldValue = this.EventName;
+        ;; do
+        ;; {
+        ;;     tmp = fieldValue;
+        ;;     combineResult = (HandlerType)Delegate.Combine(tmp, value);
+        ;;     fieldValue = Interlocked.CompareExchange(ref this.EventName, combineResult, tmp);
+        ;; } while ( fieldValue != tmp );
+        (declare-local handler-type)
+        (declare-local handler-type)
+        (declare-local handler-type)
         (emit Ldarg_0)
         (emit Ldfld event-field)
+        (emit Stloc_0)
+        (mark-label cmp-loop)
+        (emit Ldloc_0)
+        (emit Stloc_1)
+        (emit Ldloc_1)
         (emit Ldarg_1)
         (emit Call combine-method)
         (emit Castclass handler-type)
-        (emit Stfld event-field)
+        (emit Stloc_2)
+        (emit Ldarg_0)
+        (emit Ldflda event-field)
+        (emit Ldloc_2)
+        (emit Ldloc_1)
+        (emit Call compare-exchange)
+        (emit StLoc_0)
+        (emit Ldloc_0)
+        (emit Ldloc_1)
+        (emit Ceq)
+        (emit Brfalse_S cmp-loop)
         (emit Ret))
       (if addp
         [event-builder SetAddOnMethod method-builder]

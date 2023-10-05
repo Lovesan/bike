@@ -142,7 +142,7 @@ Other values force the printing of type namespaces.")
                              (rec definition)
                              (when parameters
                                (write-char #\[ stream)
-                               (rec (car args))
+                               (rec (car args) t)
                                (dolist (arg (rest args))
                                  (write-char #\, stream)
                                  (rec arg t))
