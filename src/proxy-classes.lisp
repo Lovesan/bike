@@ -503,7 +503,7 @@
                            :collect class :into classes
                          :finally (return classes))))
       (setf -dynamic-type-cache- (make-dynamic-type-cache))
-      (dolist (class classes)
+      (dolist (class (reverse classes))
         (let ((slots (class-slots class)))
           (dolist (eslotd (remove-if
                            (lambda (slotd)
