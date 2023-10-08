@@ -111,7 +111,7 @@
   ()
   (:default-initargs
    :property-type (required-slot :name :property-type
-                                 :message "Please dotnet supply property type.")
+                                 :message "Please supply property type.")
    :getter t
    :setter t))
 
