@@ -146,6 +146,8 @@
    #:invalid-type-name-datum
    #:invalid-ref-type
    #:invalid-ref-type-datum
+   #:inner-qualified-type-error
+   #:inner-qualified-type-error-datum
    #:type-name-parser-error
    #:type-name-parser-error-string
    #:type-name-parser-error-character
@@ -193,6 +195,23 @@
    #:interface-type-expected-datum
    #:sealed-inheritance
    #:sealed-inheritance-type
+   #:parameter-direction-mismatch
+   #:parameter-direction-mismatch-datum
+   #:invalid-params-array-definition
+   #:invalid-params-array-definition-datum
+   #:duplicate-parameter-name
+   #:duplicate-parameter-name-value
+   #:duplicate-parameter-name-datum
+   #:invalid-generic-constraint
+   #:invalid-generic-constraint-message
+   #:invalid-generic-constraint-list
+   #:method-slot-write-attempt
+   #:method-slot-write-attempt-object
+   #:method-slot-write-attempt-slot-name
+   #:method-slot-write-attempt-value
+   #:method-slot-makunbound-attempt
+   #:method-slot-makunbound-attempt-object
+   #:method-slot-makunbound-attempt-slot-name
 
    ;; reflection api
    #:reflection-invoke
@@ -270,6 +289,9 @@
    #:effective-dotnet-slot-definition
    #:effective-property-slot-definition
    #:effective-event-slot-definition
-   #:effective-callable-event-slot-definition))
+   #:effective-callable-event-slot-definition
+
+   ;; proxy macros
+   #:define-dotnet-callable-class))
 
 ;;; vim: ft=lisp et

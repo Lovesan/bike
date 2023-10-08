@@ -39,6 +39,8 @@
                       :accessor dcc-direct-interfaces)
    (%name-cache :accessor dcc-name-cache
                 :type hash-table)
+   (%function-name-cache :accessor dcc-function-name-cache
+                         :type hash-table)
    (%name-cache-lock :accessor dcc-name-cache-lock
                      :type rwlock))
   (:documentation "Base metaclass for dotnet callable classes")
@@ -51,7 +53,7 @@
                 :accessor slotd-dotnet-name
                 :reader slot-definition-dotnet-name)
    (kind :initarg :kind
-         :type (member :event :property)
+         :type (member :event :property :method)
          :accessor slotd-kind
          :reader slot-definition-kind)))
 
@@ -81,6 +83,25 @@
     :type (or null simple-character-string)
     :reader slot-definition-raise-method-dotnet-name)))
 
+(defclass method-slot-definition (dotnet-slot-definition)
+  ((return-type :initarg :return-type
+                :accessor slotd-return-type
+                :reader slot-definition-return-type)
+   (parameters :initarg :parameters
+               :accessor slotd-parameters
+               :reader slot-definition-parameters)
+   (params-array-parameter :accessor slotd-params-array-parameter
+                           :initform nil
+                           :reader slot-definition-rest-parameter)
+   (generic-parameters :initarg :generic-parameters
+                       :accessor slotd-generic-parameters
+                       :reader slot-definition-generic-parameters)
+   (function-name :initarg :function-name
+                  :accessor slotd-function-name
+                  :type (or (and symbol (not null))
+                            (cons (eql setf) (cons symbol null)))
+                  :reader slot-definition-function-name)))
+
 (defclass direct-dotnet-slot-definition (dotnet-slot-definition
                                          standard-direct-slot-definition)
   ())
@@ -99,11 +120,20 @@
   ()
   (:default-initargs
    :handler-type (required-slot :name :handler-type
-                                :message "Please supply dotnet handler type.")))
+                                :message "Please supply event handler type.")))
 
 (defclass direct-callable-event-slot-definition (callable-event-slot-definition
                                                  direct-event-slot-definition)
   ())
+
+(defclass direct-method-slot-definition (method-slot-definition
+                                         direct-dotnet-slot-definition)
+  ()
+  (:default-initargs
+   :return-type (required-slot :name :return-type
+                               :message "Please supply method return type.")
+   :parameters '()
+   :generic-parameters '()))
 
 (defclass effective-dotnet-slot-definition (dotnet-slot-definition
                                             standard-effective-slot-definition)
@@ -119,6 +149,10 @@
 
 (defclass effective-callable-event-slot-definition (callable-event-slot-definition
                                                     effective-event-slot-definition)
+  ())
+
+(defclass effective-method-slot-definition (method-slot-definition
+                                            effective-dotnet-slot-definition)
   ())
 
 (defmethod validate-superclass ((class dotnet-callable-class) (superclass standard-class))
@@ -143,7 +177,7 @@
     (let ((type (resolve-type property-type)))
       (when (ref-type-p type)
         (error 'invalid-ref-type :datum property-type))
-      (setf (slotd-property-type slotd) (qualified-type-name type)))))
+      (setf (slotd-property-type slotd) (normalize-typespec type)))))
 
 (defmethod initialize-instance :after
     ((slotd direct-event-slot-definition)
@@ -155,7 +189,7 @@
         (error 'invalid-ref-type :datum handler-type))
       (unless (delegate-type-p type)
         (error 'delegate-type-expected :datum type))
-      (setf (slotd-handler-type slotd) (qualified-type-name type)))))
+      (setf (slotd-handler-type slotd) (normalize-typespec type)))))
 
 (defmethod initialize-instance :after
     ((slotd direct-callable-event-slot-definition)
@@ -163,7 +197,7 @@
   (destructuring-bind
       (&key (raise-method-dotnet-name nil raise-method-dotnet-name-p)
        &allow-other-keys)
-      initargs
+      (fix-slot-initargs initargs)
     (setf (slotd-raise-method-dotnet-name slotd)
           (if raise-method-dotnet-name-p
             (and raise-method-dotnet-name
@@ -171,11 +205,209 @@
             (simple-character-string
              (strcat "raise_" (slotd-dotnet-name slotd)))))))
 
+(defun parse-method-parameter-definition (def restp generic-parameters)
+  (declare (type list generic-parameters))
+  (destructuring-bind (name type &key (dotnet-name nil dotnet-name-p)
+                                      (direction :in dirp)
+                                      (ref nil refp))
+      def
+    (check-type name (and symbol (not null)))
+    (setf dotnet-name (if dotnet-name-p
+                        (simple-character-string dotnet-name)
+                        (camel-case-string name)))
+    (setf type (normalize-typespec type generic-parameters))
+    (if restp
+      (unless (and (consp type)
+                   (eq :array (first type))
+                   (integerp (third type))
+                   (eq direction :in)
+                   (not ref))
+        (error 'invalid-params-array-definition :datum def))
+      (progn
+        (check-type direction (member :in :out :io))
+        (cond (refp
+               (if ref
+                 (unless dirp (setf direction :io))
+                 (when dirp
+                   (assert (eq direction :in) (ref direction)
+                           'parameter-direction-mismatch :datum def))))
+              (dirp (setf ref (case direction ((:out :io) t))))
+              (t (when (and (consp type) (eq (car type) :ref))
+                   (setf direction :io))))
+        (when (and (consp type) (eq (car type) :ref))
+          (setf ref t
+                type (second type)))))
+    `(,name ,type :dotnet-name ,dotnet-name
+                  :direction ,direction
+                  :ref ,ref)))
+
+(defun check-duplicate-method-parameter-names (parameters parsed)
+  (declare (type list parameters parsed))
+  (let (names dotnet-names)
+    (dolist (definition parsed)
+      (destructuring-bind (name type &key dotnet-name &allow-other-keys)
+          definition
+        (declare (ignore type))
+        (when (find name names)
+          (duplicate-parameter-name name parameters))
+        (when (find dotnet-name dotnet-names :test #'string=)
+          (duplicate-parameter-name dotnet-name parameters))
+        (push name names)
+        (push dotnet-name dotnet-names)))))
+
+(defun parse-method-lambda-list (parameters generic-parameters)
+  (declare (type list parameters generic-parameters))
+  (loop :with rest = nil
+        :for c :on parameters
+        :for p = (car c)
+        :if (eq p '&rest)
+          :collect (let ((p (second c)))
+                     (when (or (null p)
+                               (endp (cdr c))
+                               (cddr c))
+                       (error 'invalid-params-array-definition
+                              :datum parameters))
+                     (setf c (cddr c))
+                     (setf rest (parse-method-parameter-definition
+                                 p t generic-parameters))
+                     rest)
+            :into parsed
+        :else
+          :collect (parse-method-parameter-definition
+                    p nil generic-parameters)
+            :into parsed
+        :finally
+           (check-duplicate-method-parameter-names parameters parsed)
+           (return (values parsed rest))))
+
+(defun validate-generic-parameters (generic-parameters)
+  (declare (type list generic-parameters))
+  (let ((names (loop :for p :in generic-parameters
+                     :collect
+                     (destructuring-bind (name &rest constraints)
+                         (ensure-list p)
+                       (declare (ignore constraints))
+                       (check-type name symbol)
+                       (when (find name names)
+                         (duplicate-parameter-name name generic-parameters))
+                       name)
+                       :into names
+                     :finally (return names))))
+    (loop :for param :in generic-parameters
+          :collect
+          (destructuring-bind (name &rest constraints)
+              (ensure-list param)
+            (flet ((error-one-of (a b)
+                     (invalid-generic-constraint
+                      constraints "Only one of: ~s or ~s should be specified" a b))
+                   (error-duplicate (x)
+                     (invalid-generic-constraint
+                      constraints "Duplicate ~s constraint" x))
+                   (error-unknown (x)
+                     (invalid-generic-constraint
+                      constraints "Unknown constraint: ~s" x))
+                   (error-no-arg (x)
+                     (invalid-generic-constraint
+                      constraints "Constraint ~s requires an argument" x))
+                   (error-single-arg (x)
+                     (invalid-generic-constraint
+                      constraints "Constraint ~s requires only one argument" x)))
+              (loop :with in = nil
+                    :with out = nil
+                    :with class = nil
+                    :with struct = nil
+                    :with base-type = nil
+                    :with interfaces = nil
+                    :with new = nil
+                    :for c :in constraints
+                    :collect
+                    (typecase c
+                      ((eql :in)
+                       (when in (error-duplicate :in))
+                       (when out (error-one-of :in :out))
+                       (setf in t)
+                       :in)
+                      ((eql :out)
+                       (when out (error-duplicate :out))
+                       (when in (error-one-of :in :out))
+                       (setf out t)
+                       :out)
+                      ((eql :new)
+                       (when new (error-duplicate :new))
+                       (setf new t)
+                       :new)
+                      ((eql :struct)
+                       (when struct (error-duplicate :struct))
+                       (when class (error-one-of :struct :class))
+                       (setf struct t)
+                       :struct)
+                      ((eql :class)
+                       (when class (error-duplicate :class))
+                       (when struct (error-one-of :struct :class))
+                       (setf class t)
+                       :class)
+                      ((eql :base-type)
+                       (error-no-arg :base-type))
+                      ((eql :interfaces)
+                       (error-no-arg :interfaces))
+                      (cons (destructuring-bind (constraint-name value &rest values) c
+                              (case constraint-name
+                                (:base-type
+                                 (unless (null values)
+                                   (error-single-arg :base-type))
+                                 (when base-type
+                                   (error-duplicate :base-type))
+                                 (prog1 (list :base-type (normalize-typespec value names))
+                                   (setf base-type t)))
+                                (:interfaces
+                                 (prog1 (list* :interfaces
+                                               (normalize-typespec value names)
+                                               (mapcar (lambda (v)
+                                                         (normalize-typespec v names))
+                                                       values))
+                                   (setf interfaces t)))
+                                (t (error-unknown c)))))
+                      (t (error-unknown c)))
+                      :into validated
+                    :finally (setf constraints validated))
+              (cons name constraints))))))
+
+(defmethod initialize-instance :after
+    ((slotd direct-method-slot-definition)
+     &rest initargs &key &allow-other-keys)
+  (destructuring-bind (&key name
+                            return-type
+                            parameters
+                            generic-parameters
+                            (function-name name)
+                       &allow-other-keys)
+      (fix-slot-initargs initargs)
+    (check-type function-name (and symbol (not null)))
+    (let* ((generic-parameters (validate-generic-parameters generic-parameters))
+           (gp-names (mapcar #'car generic-parameters))
+           (return-type (normalize-typespec return-type gp-names)))
+      (multiple-value-bind (parameters params-array-parameter)
+          (parse-method-lambda-list parameters gp-names)
+        (setf (slotd-return-type slotd) return-type
+              (slotd-generic-parameters slotd) generic-parameters
+              (slotd-parameters slotd) parameters
+              (slotd-params-array-parameter slotd) params-array-parameter
+              (slotd-function-name slotd) function-name)))))
+
 (defmethod initialize-instance :around
     ((slotd direct-event-slot-definition)
      &rest initargs &key &allow-other-keys)
   (destructuring-bind (&rest initargs &key (allocation :instance) &allow-other-keys)
-      initargs
+      (fix-slot-initargs initargs)
+    (declare (ignore allocation))
+    (remf initargs :allocation)
+    (apply #'call-next-method slotd :allocation :dotnet initargs)))
+
+(defmethod initialize-instance :around
+    ((slotd direct-method-slot-definition)
+     &rest initargs &key &allow-other-keys)
+  (destructuring-bind (&rest initargs &key (allocation :instance) &allow-other-keys)
+      (fix-slot-initargs initargs)
     (declare (ignore allocation))
     (remf initargs :allocation)
     (apply #'call-next-method slotd :allocation :dotnet initargs)))
@@ -188,7 +420,8 @@
             "~s only supports :instance slot :allocation(was: ~s)" class allocation)
     (ecase kind
       (:property (find-class 'direct-property-slot-definition))
-      (:event (find-class 'direct-callable-event-slot-definition)))))
+      (:event (find-class 'direct-callable-event-slot-definition))
+      (:method (find-class 'direct-method-slot-definition)))))
 
 (defgeneric compute-direct-slot-definitions (class slot-name)
   (:documentation "Computes ordered list of direct slot definitons for SLOT-NAME")
@@ -208,6 +441,8 @@
          (find-class 'effective-property-slot-definition))
         (direct-callable-event-slot-definition
          (find-class 'effective-callable-event-slot-definition))
+        (direct-method-slot-definition
+         (find-class 'effective-method-slot-definition))
         (t (call-next-method))))))
 
 (defgeneric initialize-effective-slot-definition (effective-slotd direct-slotd)
@@ -239,6 +474,35 @@
      (direct-slotd direct-callable-event-slot-definition))
   (setf (slotd-raise-method-dotnet-name slotd)
         (slotd-raise-method-dotnet-name direct-slotd)))
+
+(defmethod initialize-effective-slot-definition :after
+    ((slotd effective-method-slot-definition)
+     (direct-slotd direct-method-slot-definition))
+  (setf (slotd-return-type slotd) (slotd-return-type direct-slotd)
+        (slotd-function-name slotd) (slotd-function-name direct-slotd))
+  (loop :for (name . constraints) :in (slotd-generic-parameters direct-slotd)
+        :collect (make-gpi :name name :constraints constraints)
+          :into generic-params
+        :finally (setf (slotd-generic-parameters slotd) generic-params))
+  (loop :with params-array = (slotd-params-array-parameter direct-slotd)
+        :for param :in (slotd-parameters direct-slotd)
+        :for i :from 0
+        :collect (destructuring-bind (name type &key dotnet-name
+                                                     direction
+                                                     ref)
+                     param
+                   (let ((parsed (make-mpi :name name
+                                           :dotnet-name dotnet-name
+                                           :type type
+                                           :position i
+                                           :direction direction
+                                           :ref-p ref)))
+                     (when (eq param params-array)
+                       (setf params-array parsed))
+                     parsed))
+          :into params
+        :finally (setf (slotd-params-array-parameter slotd) params-array
+                       (slotd-parameters slotd) params)))
 
 (defmethod compute-effective-slot-definition ((class dotnet-callable-class) name dslotds)
   (let ((slotd (call-next-method)))
@@ -318,8 +582,17 @@
                                (slotd-dotnet-name slotd)
                                (slotd-property-type slotd)
                                (slotd-getter slotd)
-                               (slotd-setter slotd)))))
+                               (slotd-setter slotd)))
+            (effective-method-slot-definition
+             (setf (slotd-return-type slotd)
+                   (tbs-add-method state
+                                   (slotd-dotnet-name slotd)
+                                   (slotd-generic-parameters slotd)
+                                   (slotd-return-type slotd)
+                                   (slotd-parameters slotd)
+                                   (slotd-params-array-parameter slotd))))))
         (setf (dcc-name-cache class) (make-hash-table :test #'equal)
+              (dcc-function-name-cache class) (make-hash-table :test #'equal)
               (dcc-name-cache-lock class) (make-rwlock
                                            :name (format nil "~s name cache lock"
                                                          (class-name class)))
@@ -384,20 +657,38 @@
             (or (find class classes :key #'tg:weak-pointer-value)
                 (push (tg:make-weak-pointer class) classes)))))))
 
-(defun get-slot-name-by-dotnet-name (class dotnet-name)
+(defun get-slot-name-by-dotnet-name (class dotnet-name function-name-cache-p)
   (declare (type dotnet-callable-class class)
            (type simple-character-string dotnet-name))
   (check-type class dotnet-callable-class)
-  (let ((cache (dcc-name-cache class))
+  (let ((cache (if function-name-cache-p
+                 (dcc-function-name-cache class)
+                 (dcc-name-cache class)))
         (lock (dcc-name-cache-lock class)))
     (with-read-lock (lock)
       (let ((slot-name (gethash dotnet-name cache)))
         (or slot-name
-            (let ((slot-name (loop :for slotd :in (class-slots class)
-                                   :when (typep slotd 'effective-dotnet-slot-definition)
-                                     :do (let ((name (slotd-dotnet-name slotd)))
-                                           (when (string= name dotnet-name)
-                                             (return (slot-definition-name slotd)))))))
+            (let ((slot-name
+                    (dolist (slotd (class-slots class))
+                      (when (typep slotd 'effective-dotnet-slot-definition)
+                        (let ((name (slotd-dotnet-name slotd)))
+                          (when (string= name dotnet-name)
+                            (return
+                              (if function-name-cache-p
+                                (let* ((function-name (slotd-function-name slotd))
+                                       (args (slotd-parameters slotd))
+                                       (params-array
+                                         (slotd-params-array-parameter slotd))
+                                       (argc (if params-array
+                                               (1- (length args))
+                                               (length args))))
+                                  (list* function-name
+                                         (bike-equals
+                                          [:void]
+                                          (slotd-return-type slotd))
+                                         argc
+                                         args))
+                                (slot-definition-name slotd)))))))))
               (when slot-name
                 (with-write-lock (lock)
                   (setf (gethash dotnet-name cache) slot-name)))
@@ -407,7 +698,7 @@
   (declare (type dotnet-callable-object object)
            (type simple-character-string name))
   (let* ((class (class-of object))
-         (slot-name (get-slot-name-by-dotnet-name class name)))
+         (slot-name (get-slot-name-by-dotnet-name class name nil)))
     (if slot-name
       (slot-value object slot-name)
       (slot-missing class object name 'slot-value))))
@@ -416,10 +707,40 @@
   (declare (type dotnet-callable-object object)
            (type simple-character-string name))
   (let* ((class (class-of object))
-         (slot-name (get-slot-name-by-dotnet-name class name)))
+         (slot-name (get-slot-name-by-dotnet-name class name nil)))
     (if slot-name
       (setf (slot-value object slot-name) new-value)
       (slot-missing class object name 'setf new-value))))
+
+(defun invoke-dotnet-callable-object-method (object name args)
+  (declare (type dotnet-callable-object object)
+           (type simple-character-string name)
+           (type dotnet-object args))
+  (let ((class (class-of object)))
+    (destructuring-bind (function-name voidp argc &rest parameters)
+        (get-slot-name-by-dotnet-name class name t)
+      (declare (type (or (and symbol (not null))
+                         (cons (eql setf) (cons symbol null)))
+                     function-name)
+               (type (signed-byte 32) argc))
+      (let* ((arglist (loop :for i :below (%array-length args)
+                            :for plist = parameters :then (rest plist)
+                            :for p = (car plist)
+                            :if (and p (member (mpi-direction p) '(:in :io)))
+                              :collect (dnvref args i)
+                            :else
+                              :if (null plist)
+                                :collect (dnvref args i)))
+             (result (multiple-value-list
+                      (apply (fdefinition function-name) object arglist))))
+        (loop :with return-values = (if voidp result (rest result))
+              :for i :below argc
+              :for p :in parameters :do
+                (when (or (mpi-ref-p p)
+                          (member (mpi-direction p) '(:out :io)))
+                  (setf (dnvref args i) (car return-values)
+                        return-values (cdr return-values))))
+        (if voidp (values) (first result))))))
 
 (defun initialize-dotnet-callable-object-proxy (object)
   (declare (type dotnet-callable-object object))
@@ -431,9 +752,11 @@
                       type-proxy
                       (box object)
                       (new '(System.Func :object :string :object)
-                           #'get-dotnet-callable-object-slot-value)
+                           'get-dotnet-callable-object-slot-value)
                       (new '(System.Action :object :string :object)
-                           #'set-dotnet-callable-object-slot-value))))
+                           'set-dotnet-callable-object-slot-value)
+                      (new '(System.Func :object :string (array :object) :object)
+                           'invoke-dotnet-callable-object-method))))
     (setf (dco-proxy object) proxy)
     proxy))
 
@@ -493,6 +816,36 @@
   (when (slot-boundp object '%value)
     (setf (slot-value-using-class class object slotd) nil))
   object)
+
+(defmethod slot-boundp-using-class ((class dotnet-proxy-class)
+                                    (object dotnet-proxy-object)
+                                    (slotd effective-method-slot-definition))
+  (slot-boundp object '%value))
+
+
+(defmethod slot-makunbound-using-class ((class dotnet-proxy-class)
+                                        (object dotnet-proxy-object)
+                                        (slotd effective-method-slot-definition))
+  (error 'method-slot-makunbound-attempt
+         :object object
+         :slot-name (slot-definition-name slotd)))
+
+(defmethod slot-value-using-class ((class dotnet-callable-class)
+                                   (object dotnet-proxy-object)
+                                   (slotd effective-method-slot-definition))
+  (let ((function-name (slotd-function-name slotd)))
+    (labels ((delegate (&rest method-arguments)
+               (apply function-name object method-arguments)))
+      #'delegate)))
+
+(defmethod (setf slot-value-using-class) (new-value
+                                          (class dotnet-proxy-class)
+                                          (object dotnet-proxy-object)
+                                          (slotd effective-method-slot-definition))
+  (error 'method-slot-write-attempt
+         :object object
+         :slot-name (slot-definition-name slotd)
+         :value new-value))
 
 (defun initialize-dynamic-type-cache ()
   (if (null -dynamic-type-cache-)

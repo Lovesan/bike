@@ -74,6 +74,7 @@
    #:simple-character-string
    #:simple-character-string-upcase
    #:camel-case-string
+   #:lisp-case-string
    #:whitespace-char-p
 
    ;; Pathnames

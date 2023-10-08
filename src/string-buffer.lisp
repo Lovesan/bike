@@ -245,4 +245,137 @@
              (t (upcase) (add :cont)))))))
     (subseq res 0 j)))
 
+(defun lisp-case-string (designator &key (case (readtable-case *readtable*))
+                                         (handle-underscores t)
+                                         (handle-whitespace t)
+                                         (handle-dot t)
+                                         suffix
+                                         prefix)
+  (declare (type string-designator designator)
+           (type (or null string-designator) suffix prefix)
+           (type (member :upcase :downcase :preserve :invert) case))
+  "Converts a DESIGNATOR which must be a STRING-DESIGNATOR to a string
+   in a Lisp-style `naming-convention' instead of a `camelCase' one.
+
+:HANDLE-UNDERSCORES - non-NIL value designates that `_' characters should
+                      be treated as word separators.
+
+:HANDLE-DOT - non-NIL value designates that `.' characters should
+              be treated as word separators.
+
+:HANDLE-WHITESPACE - non-NIL value designates that whitespace characters should
+                     be treated as word separators.
+
+:PREFIX - either NIL or a string designator which would be prepended to the result.
+
+:SUFFIX - either NIL or a string designator which would be appended to the result.
+"
+  (let* ((suffix (or (and suffix (simple-character-string suffix))
+                     (make-simple-character-string 0)))
+         (prefix (or (and prefix (simple-character-string prefix))
+                     (make-simple-character-string 0)))
+         (str (simple-character-string designator))
+         (len (length str))
+         (res (make-simple-character-string (+ (length prefix)
+                                               (+ len  (floor len 2))
+                                               (length suffix))))
+         (res-len (length res))
+         (i 0)
+         (j 0)
+         (c nil)
+         (state :start))
+    (labels ((ensure-size ()
+               (unless (< j res-len)
+                 (let* ((new-res-len (1+ (* res-len 2)))
+                        (new-res (make-simple-character-string new-res-len)))
+                   (replace new-res res)
+                   (setf res-len new-res-len
+                         res new-res))))
+             (next (next-state)
+               (when (< i len) (incf i))
+               (setf state next-state))
+             (peek () (setf c (if (< i len) (schar str i) nil)))
+             (add (next-state)
+               (when c
+                 (ensure-size)
+                 (setf (schar res j) c)
+                 (incf j)
+                 (when (< i len) (incf i)))
+               (setf state next-state))
+             (separator ()
+               (ensure-size)
+               (setf (schar res j) #\-)
+               (incf j))
+             (set-case ()
+               (when c (setf c (ecase case
+                                 (:upcase (char-upcase c))
+                                 (:downcase (char-downcase c))
+                                 (:preserve c)
+                                 (:invert (cond ((upper-case-p c)
+                                                 (char-downcase c))
+                                                ((lower-case-p c)
+                                                 (char-upcase c))
+                                                (t c))))))))
+      (dotimes (i (length prefix))
+        (setf (schar res j) (schar prefix i))
+        (incf j))
+      (loop
+        (case state
+          (:start
+           (peek)
+           (cond
+             ((null c) (return))
+             ((and handle-whitespace (whitespace-char-p c))
+              (next :start))
+             ((and handle-underscores (char= c #\_))
+              (next :start))
+             ((and handle-dot (char= c #\.))
+              (next :start))
+             ((upper-case-p c)
+              (set-case) (add :upcase))
+             (t (set-case) (add :downcase))))
+          (:upcase
+           (peek)
+           (cond
+             ((null c) (return))
+             ((and handle-whitespace (whitespace-char-p c))
+              (next :break))
+             ((and handle-underscores (char= c #\_))
+              (next :break))
+             ((and handle-dot (char= c #\.))
+              (next :break))
+             ((upper-case-p c)
+              (set-case) (add :upcase))
+             (t (set-case) (add :downcase))))
+          (:downcase
+           (peek)
+           (cond
+             ((null c) (return))
+             ((and handle-whitespace (whitespace-char-p c))
+              (next :break))
+             ((and handle-underscores (char= c #\_))
+              (next :break))
+             ((and handle-dot (char= c #\.))
+              (next :break))
+             ((upper-case-p c)
+              (set-case) (separator) (add :upcase))
+             (t (set-case) (add :downcase))))
+          (:break
+           (peek)
+           (cond
+             ((null c) (return))
+             ((and handle-whitespace (whitespace-char-p c))
+              (next :break))
+             ((and handle-underscores (char= c #\_))
+              (next :break))
+             ((and handle-dot (char= c #\.))
+              (next :break))
+             ((upper-case-p c)
+              (set-case) (separator) (add :upcase))
+             (t (set-case) (separator) (add :downcase))))))
+      (dotimes (i (length suffix))
+        (setf (schar res j) (schar suffix i))
+        (incf j)))
+    (subseq res 0 j)))
+
 ;;; vim: ft=lisp et

@@ -444,6 +444,16 @@ type or method definition.")
     (System.Attribute :method GetCustomAttribute System.Reflection.ParameterInfo System.Type)
     "Retrieves custom attribute of a parameter info")
 
+(defknown parameter-modifier-ref
+    (System.Reflection.ParameterModifier :method get_Item System.Int32)
+    "Retrieves value of parameter modifier")
+
+(defknown parameter-modifier-set
+    (System.Reflection.ParameterModifier :method set_Item System.Int32 System.Boolean)
+    "Changes value of parameter modifier")
+
+(defsetf parameter-modifier-ref parameter-modifier-set)
+
 (defknown default-binder (System.Type :property DefaultBinder)
     "Returns a default reflection binder")
 
@@ -570,5 +580,19 @@ type or method definition.")
 
 (defknown intptr->pointer (System.IntPtr :method ToPointer)
     "Converts IntPtr to pointer")
+
+(macrolet ((defemit (name type)
+             (let ((name (symbolicate '#:%emit '- name)))
+               `(defknown ,name
+                    (System.Reflection.Emit.ILGenerator
+                     :method Emit System.Reflection.Emit.OpCode ,type)))))
+  (defemit s1 System.SByte)
+  (defemit u1 System.Byte)
+  (defemit s2 System.Int16)
+  (defemit u2 System.UInt16)
+  (defemit s4 System.Int32)
+  (defemit u4 System.Int32)
+  (defemit s8 System.Int64)
+  (defemit u8 System.UInt64))
 
 ;;; vim: ft=lisp et

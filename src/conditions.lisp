@@ -51,7 +51,8 @@
            :reader invalid-type-ast-datum
            :reader inner-ref-type-error-datum
            :reader enum-resolution-error-datum
-           :reader invalid-ref-type-datum))
+           :reader invalid-ref-type-datum
+           :reader inner-qualified-type-error-datum))
   (:report (lambda (c s)
              (format s "~&Unable to resolve type: ~s"
                      (type-resolution-error-datum c)))))
@@ -84,7 +85,13 @@
   ()
   (:report (lambda (c s)
              (format s "~&Inner ref types are not allowed: ~s"
-                     (invalid-type-designator-datum c)))))
+                     (inner-ref-type-error-datum c)))))
+
+(define-condition inner-qualified-type-error (invalid-type-designator)
+  ()
+  (:report (lambda (c s)
+             (format s "~&Inner qualified types are not allowed here: ~s~%"
+                     (inner-qualified-type-error-datum c)))))
 
 (define-condition type-name-parser-error (invalid-type-name)
   ((%c :initarg :character :reader type-name-parser-error-character)
@@ -122,7 +129,7 @@
                           (value (type-name-parser-error-value c)))
      (format
       stream
-      "~&Generic type argument count mismatch for ~a~a~% at position ~d in name ~s"
+      "~&Generic type argument count mismatch for ~:[~;~:*~a~]~a~% at position ~d in name ~s"
       token
       value
       (1+ (type-name-parser-error-position c))
@@ -193,7 +200,10 @@
 (define-condition constructor-resolution-error (method-resolution-error)
   ()
   (:report (lambda (c s)
-             (format s "~&Unable to resolve constructor of type ~s~% with arguments (~{~a~^, ~})"
+             (format s (concatenate
+                        'string
+                        "~&Unable to resolve constructor of"
+                        " type ~s~% with arguments (~{~a~^, ~})")
                      (member-resolution-error-type c)
                      (member-resolution-error-args c))))
   (:default-initargs :method ".ctor"))
@@ -238,9 +248,10 @@
    (class :initarg :class
           :reader duplicate-dotnet-name-class))
   (:report (lambda (c s)
-             (format s "Duplicate dotnet name ~s in class ~s"
-                     (duplicate-dotnet-name-value c)
-                     (duplicate-dotnet-name-class c)))))
+             (format s "~<Duplicate dotnet name ~s in class ~s~:>"
+                     (list
+                      (duplicate-dotnet-name-value c)
+                      (duplicate-dotnet-name-class c))))))
 
 (define-condition delegate-type-expected (bike-error)
   ((datum :initarg :type
@@ -264,5 +275,77 @@
   (:report (lambda (c s)
              (format s "~s is sealed."
                      (sealed-inheritance-type c)))))
+
+(define-condition parameter-direction-mismatch (bike-error)
+  ((datum :initarg :datum
+          :reader parameter-direction-mismatch-datum))
+  (:report (lambda (c s)
+             (format s "Parameter direction mismatch: ~s"
+                     (parameter-direction-mismatch-datum c)))))
+
+(define-condition invalid-params-array-definition (bike-error)
+  ((datum :initarg :datum
+          :reader invalid-params-array-definition-datum))
+  (:report (lambda (c s)
+             (format s "Invalid params array definition: ~s"
+                     (invalid-params-array-definition-datum c)))))
+
+(define-condition duplicate-parameter-name (bike-error)
+  ((datum :initarg :datum
+          :reader duplicate-parameter-name-datum)
+   (value :initarg :value
+          :reader duplicate-parameter-name-value))
+  (:report (lambda (c s)
+             (format s "~<Duplicate parameter name ~s in ~s~:>"
+                     (list
+                      (duplicate-parameter-name-value c)
+                      (duplicate-parameter-name-datum c))))))
+
+(defun duplicate-parameter-name (name datum)
+  (error 'duplicate-parameter-name :value name
+                                   :datum datum))
+
+(define-condition invalid-generic-constraint (bike-error)
+  ((message :initarg :message
+            :reader invalid-generic-constraint-message)
+   (list :initarg :list
+         :reader invalid-generic-constraint-list))
+  (:report (lambda (c s)
+             (format s "~<Invalid generic constraint: ~:@_~a ~:@_Constraint list was: ~s~:>"
+                     (list
+                      (invalid-generic-constraint-message c)
+                      (invalid-generic-constraint-list c))))))
+
+(defun invalid-generic-constraint (list message &rest args)
+  (error 'invalid-generic-constraint
+         :list list
+         :message (apply #'format nil message args)))
+
+(define-condition method-slot-write-attempt (bike-error)
+  ((object :initarg :object
+           :reader method-slot-write-attempt-object)
+   (slot-name :initarg :slot-name
+              :reader method-slot-write-attempt-slot-name)
+   (value :initarg :value
+          :reader method-slot-write-attempt-value))
+  (:report (lambda (c s)
+             (format s #.(strcat "~<Cannot write to slot ~s of ~s~:@_"
+                                 "  becase it is a .NET method slot~:@_"
+                                 "Value was: ~s~:>")
+                     (list (method-slot-write-attempt-slot-name c)
+                           (method-slot-write-attempt-object c)
+                           (method-slot-write-attempt-value c))))))
+
+(define-condition method-slot-makunbound-attempt (bike-error)
+  ((object :initarg :object
+           :reader method-slot-makunbound-attempt-object)
+   (slot-name :initarg :slot-name
+              :reader method-slot-makunbound-attempt-slot-name))
+  (:report (lambda (c s)
+             (format s #.(strcat "~<Cannot unbind slot ~s of ~s~:@_"
+                                 "  becase it is a .NET method slot~:@_"
+                                 "~:>")
+                     (list (method-slot-makunbound-attempt-slot-name c)
+                           (method-slot-makunbound-attempt-object c))))))
 
 ;;; vim: ft=lisp et

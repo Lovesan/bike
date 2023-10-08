@@ -155,7 +155,7 @@
   (let ((entry (%ensure-type-entry type)))
     (with-type-entry (array-entries mz-vector-entry type) entry
       (flet ((lookup ()
-               (if mz-array-p
+               (if (and mz-array-p (= rank 1))
                  mz-vector-entry
                  (and array-entries (svref array-entries (1- rank))))))
         (or (lookup)
@@ -172,7 +172,7 @@
                     (progn
                       (unless array-entries
                         (setf array-entries entries))
-                      (if mz-array-p
+                      (if (and mz-array-p (= rank 1))
                         (setf mz-vector-entry array-entry)
                         (setf (svref entries (1- rank)) array-entry)))))))))))
 
@@ -220,15 +220,13 @@
          (load-assembly assembly))
         (t (error 'invalid-assembly-designator :datum assembly))))
 
-(defvar *intern-typespec-toplevel* nil)
-
-(defun %intern-string-ast (ast level assembly)
+(defun %intern-string-ast (ast assembly)
   (declare (type simple-character-string ast))
   (with-type-table (data aliases namespaces)
     (let* ((dotnet-name (simple-character-string-upcase ast))
            (aliased (gethash dotnet-name aliases)))
       (if aliased
-        (%intern-type-ast (%parse-typespec aliased) level nil)
+        (%intern-type-ast (parse-typespec aliased) nil)
         (flet ((lookup (name) (gethash name data)))
           (or (lookup dotnet-name)
               (loop :for prefix :in namespaces
@@ -240,81 +238,208 @@
                                          t
                                          (%ensure-assembly assembly)))))))))))
 
-(defun %intern-type-ast (ast level assembly)
+(defun %intern-type-ast (ast assembly)
   "Interns parsed type designator AST"
   (cond ((dotnet-type-p ast)
          (%ensure-type-entry ast))
         ((stringp ast)
-         (%intern-string-ast ast level assembly))
+         (%intern-string-ast ast assembly))
         ((consp ast)
          (case (car ast)
            (* (%ensure-pointer-type-entry-by-element-type
-               (%intern-type-ast (second ast) (1+ level) assembly)))
-           (:ref (unless (zerop level)
-                   (error 'inner-ref-type-error :datum *intern-typespec-toplevel*))
+               (%intern-type-ast (second ast) assembly)))
+           (:ref
             (%ensure-ref-type-entry-by-element-type
-             (%intern-type-ast (second ast) (1+ level) assembly)))
+             (%intern-type-ast (second ast) assembly)))
            (:array (let* ((element-type
-                            (%intern-type-ast (second ast) (1+ level) assembly))
+                            (%intern-type-ast (second ast) assembly))
                           (rank (third ast))
                           (mz-vector-p (eq rank '*)))
                      (%ensure-array-type-entry-by-element-type
                       element-type
                       (if mz-vector-p 1 rank)
                       mz-vector-p)))
-           (:qualified (%intern-type-ast (second ast) level (third ast)))
+           (:qualified (%intern-type-ast (second ast) (third ast)))
            ;; generic type
-           (t (let ((definition (%intern-type-ast (car ast) (1+ level) assembly))
+           (t (let ((definition (%intern-type-ast (car ast) assembly))
                     (args (loop :for arg :in (rest ast)
-                                :collect (%intern-type-ast arg (1+ level) nil))))
+                                :collect (%intern-type-ast arg nil))))
                 (%ensure-generic-type-entry-with-args definition args)))))
         (t (error 'invalid-type-ast :datum ast))))
 
-(defun %intern-toplevel-type-ast (ast &optional assembly)
-  (let ((*intern-typespec-toplevel* ast))
-    (%intern-type-ast ast 0 assembly)))
+(defvar *parse-typespec-toplevel* nil)
 
-(defun %parse-typespec (type)
-  "Parses external API type designator"
+(defun type-name-generic-parameter-count (name)
+  (declare (type simple-character-string name))
+  (let* ((len (length name))
+         (pos (loop :for i :of-type fixnum :downfrom (- len 2)
+                    :downto 1
+                    :when (char= (schar name i) #\`)
+                      :return (1+ i))))
+    (and pos
+         (< pos len)
+         (loop :with res = 0
+               :for i :from pos :below len
+               :for d = (digit-char-p (schar name i))
+               :if d :do (setf res (+ d (* res 10)))
+               :else :return nil
+               :finally (return res)))))
+
+(defun %parse-typespec (type level generic-parameters &optional parsedp qualifiedp)
+  (declare (type list generic-parameters))
   (cond ((dotnet-type-p type) type)
         ((typep type 'string-designator)
-         (parse-type-name (simple-character-string type)))
+         (let ((type (parse-type-name (simple-character-string type))))
+           (if (consp type)
+             (%parse-typespec type level generic-parameters t qualifiedp)
+             (or (and generic-parameters
+                      (find type generic-parameters
+                            :test #'string-equal
+                            :key #'simple-character-string))
+                 type))))
         ((consp type)
          (destructuring-bind (head &rest rest) type
            (declare (type string-designator head))
-           (let* ((name (simple-character-string-upcase head)))
-             (cond ((string= name "ARRAY")
-                    (destructuring-bind (element-type &optional (rank 1)) rest
-                      (declare (type (or (integer 1 32) (eql *)) rank))
-                      (list :array (%parse-typespec element-type) rank)))
-                   ((string= name "REF")
-                    (destructuring-bind (inner-type) rest
-                      (list :ref (%parse-typespec inner-type))))
-                   ((string= name "*")
-                    (destructuring-bind (inner-type) rest
-                      (list '* (%parse-typespec inner-type))))
-                   (t (destructuring-bind (arg &rest args) rest
-                        (let* ((args (cons arg args))
-                               (def (format nil "~a`~d" head (length args))))
-                          (cons (%parse-typespec def)
-                                (mapcar #'%parse-typespec args)))))))))
-        (t (error 'invalid-type-designator type))))
+           (if parsedp
+             ;; Recursive search for generic parameters
+             (case head
+               (:array (list :array
+                             (%parse-typespec (first rest) (1+ level) generic-parameters t)
+                             (second rest)))
+               (:ref
+                (unless (zerop level)
+                  (error 'inner-ref-type-error :datum *parse-typespec-toplevel*))
+                (list :ref (%parse-typespec (first rest) (1+ level) generic-parameters t)))
+               (* (list '* (%parse-typespec (first rest) (1+ level) generic-parameters t)))
+               (:qualified
+                (when qualifiedp
+                  (error 'inner-qualified-type-error :datum *parse-typespec-toplevel*))
+                (list :qualified
+                      (%parse-typespec (first rest) level generic-parameters t)
+                      (second rest)))
+               ;; generic type
+               (t (cons head
+                        ;; ^
+                        ;; apparently, a generic type parameter can not be
+                        ;; a generic type designator itself
+                        (mapcar (lambda (arg)
+                                  (%parse-typespec arg (1+ level) generic-parameters t))
+                                rest))))
+             (let* ((name (simple-character-string-upcase head)))
+               (cond ((string= name "ARRAY")
+                      (destructuring-bind (element-type &optional (rank 1)) rest
+                        (check-type rank (or (integer 1 32) (eql *)))
+                        (list :array
+                              (%parse-typespec element-type (1+ level) generic-parameters)
+                              rank)))
+                     ((string= name "REF")
+                      (unless (zerop level)
+                        (error 'inner-ref-type-error :datum *parse-typespec-toplevel*))
+                      (destructuring-bind (inner-type) rest
+                        (list :ref (%parse-typespec inner-type (1+ level) generic-parameters))))
+                     ((string= name "*")
+                      (destructuring-bind (inner-type) rest
+                        (list '* (%parse-typespec inner-type (1+ level) generic-parameters))))
+                     ((string= name "QUALIFIED")
+                      (when qualifiedp
+                        (error 'inner-qualified-type-error :datum *parse-typespec-toplevel*))
+                      (destructuring-bind (inner-type assembly-designator) rest
+                        (list :qualified
+                              (%parse-typespec inner-type level generic-parameters nil t)
+                              (simple-character-string assembly-designator))))
+                     ;; Generic type
+                     (t (destructuring-bind (arg &rest args) rest
+                          (let* ((args (cons arg args))
+                                 (arg-count (length args))
+                                 (declared-count (type-name-generic-parameter-count name))
+                                 (def (if declared-count
+                                        (progn
+                                          (unless (= declared-count arg-count)
+                                            (error 'generic-argument-count-mismatch
+                                                   :token nil
+                                                   :value type
+                                                   :position (position #\` name)
+                                                   :datum name))
+                                          name)
+                                        (format nil "~a`~d" name arg-count))))
+                            (cons (%parse-typespec def (1+ level) generic-parameters)
+                                  (mapcar (lambda (arg)
+                                            (%parse-typespec arg (1+ level) generic-parameters))
+                                          args))))))))))
+        (t (error 'invalid-type-designator :datum type))))
+
+(defun parse-typespec (type &optional generic-parameters)
+  "Parses external API type designator"
+  (declare (type list generic-parameters))
+  (let ((*parse-typespec-toplevel* type))
+    (%parse-typespec type 0 generic-parameters)))
+
+(defun normalize-typespec (typespec &optional generic-parameters)
+  (declare (type list generic-parameters))
+  "Returns normalized representation of a type specifier"
+  (let ((ast (parse-typespec typespec generic-parameters)))
+    (labels ((walk-type-entry (entry)
+               (let* ((type (%type-entry-type entry))
+                      (name (or (type-assembly-qualified-name type)
+                                (type-full-name type)))
+                      (ast (parse-type-name name)))
+                 (walk ast nil t)))
+             (walk (ast assembly &optional parsedp)
+               (cond
+                 ((dotnet-type-p ast)
+                  (walk-type-entry (%ensure-type-entry ast)))
+                 ((symbolp ast) ast) ;; generic parameter
+                 ((stringp ast)
+                  (if parsedp
+                    ;;
+                    (or (find ast generic-parameters
+                              :test #'string-equal
+                              :key #'simple-character-string)
+                        (if assembly
+                          (list :qualified ast assembly)
+                          ast))
+                    (walk-type-entry (%intern-string-ast ast assembly))))
+                 ((consp ast)
+                  (destructuring-bind (head &rest rest)
+                      ast
+                    (case head
+                      (* (list '* (walk (first rest) assembly parsedp)))
+                      (:ref (list :ref (walk (first rest) assembly parsedp)))
+                      (:array (list :array
+                                    (walk (first rest) assembly parsedp)
+                                    (second rest)))
+                      (:qualified
+                       (let* ((assembly (second rest))
+                              (inner-type (walk (first rest) assembly parsedp)))
+                         inner-type))
+                      ;; Generic type
+                      (t (let ((def (walk head assembly parsedp))
+                               (args (mapcar (lambda (arg) (walk arg nil parsedp)) rest)))
+                           (if (and (consp def)
+                                    (eq (car def) :qualified))
+                             (list :qualified
+                                   (cons (second def) args)
+                                   (third def))
+                             (cons def args)))))))
+                 (t (error 'invalid-type-ast :datum ast)))))
+      (with-type-table-lock (:read)
+        (walk ast nil)))))
 
 (defun %resolve-type-entry (type &optional assembly)
   (declare (type dotnet-type-designator type))
   "Resolves type entry for a type designator"
-  (%intern-toplevel-type-ast (%parse-typespec type) assembly))
+  (%intern-type-ast (parse-typespec type) assembly))
 
 (defun resolve-type (type &key (errorp t) (error-value nil) assembly)
   (declare (type dotnet-type-designator type))
   "Resolves a .Net type designated by TYPE specifier from an
  internal type cache."
-  (let ((ast (%parse-typespec type)))
+  (let ((ast (parse-typespec type)))
     (handler-bind ((error (lambda (e)
                             (declare (ignore e))
                             (unless errorp
                               (return-from resolve-type error-value)))))
       (with-type-table-lock (:read)
-        (%type-entry-type (%intern-toplevel-type-ast ast assembly))))))
+        (%type-entry-type (%intern-type-ast ast assembly))))))
 
 ;;; vim: ft=lisp et
