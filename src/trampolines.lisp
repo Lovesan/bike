@@ -49,7 +49,7 @@
                  (push name hostargs))
                 (:ref
                  (push `(,pname ,primitive-type) withs)
-                 (push `(setf (mem-ref ,pname) ,name) initializers)
+                 (push `(setf (mem-ref ,pname ,primitive-type) ,name) initializers)
                  (push :pointer hostargs)
                  (push pname hostargs)
                  (push `(mem-ref ,pname ,primitive-type) results))
