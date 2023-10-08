@@ -414,14 +414,15 @@
 
 (defmethod direct-slot-definition-class ((class dotnet-callable-class)
                                          &rest initargs &key &allow-other-keys)
-  (destructuring-bind (&key (kind :property) (allocation :instance) &allow-other-keys)
+  (destructuring-bind (&key kind (allocation :instance) &allow-other-keys)
       (fix-slot-initargs initargs)
     (assert (eq allocation :instance) (allocation)
             "~s only supports :instance slot :allocation(was: ~s)" class allocation)
-    (ecase kind
+    (case kind
       (:property (find-class 'direct-property-slot-definition))
       (:event (find-class 'direct-callable-event-slot-definition))
-      (:method (find-class 'direct-method-slot-definition)))))
+      (:method (find-class 'direct-method-slot-definition))
+      (t (call-next-method)))))
 
 (defgeneric compute-direct-slot-definitions (class slot-name)
   (:documentation "Computes ordered list of direct slot definitons for SLOT-NAME")
