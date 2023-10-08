@@ -81,7 +81,7 @@
                                           ("System.Boolean" . t)
                                           ("System.SByte" . (signed-byte 8))
                                           ("System.Byte" . (unsigned-byte 8))
-                                          ("System.Int16" . (signed byte 16))
+                                          ("System.Int16" . (signed-byte 16))
                                           ("System.UInt16" . (unsigned-byte 16))
                                           ("System.Int32" . (signed-byte 32))
                                           ("System.UInt32" . (unsigned-byte 32))
@@ -143,18 +143,19 @@
       (when (< i count)
         (let* ((param (%net-vref parameters i))
                (type (%get-property param nil "ParameterType"))
-               (type-name (%get-type-full-name type))
-               (outp (%get-property param nil "IsOut"))
                (refp (%get-property type nil "IsByRef"))
+               (outp (%get-property param nil "IsOut"))
                (name (%get-property param nil "Name")))
-          (multiple-value-prog1
-              (values (or name (string (gensym #.(string '#:arg))))
-                      type
-                      (%get-primitive-type type-name)
-                      (%get-lisp-primitive-type type-name)
-                      (if refp (if outp :out :ref) :in)
-                      (%params-array-p param))
-            (incf i)))))))
+          (let* ((type (if refp (%invoke type nil '() "GetElementType") type))
+                 (type-name (%get-type-full-name type)))
+            (multiple-value-prog1
+                (values (or name (string (gensym #.(string '#:arg))))
+                        type
+                        (%get-primitive-type type-name)
+                        (%get-lisp-primitive-type type-name)
+                        (if refp (if outp :out :ref) :in)
+                        (%params-array-p param))
+              (incf i))))))))
 
 (defun %register-known (name type-name member-name type-args kind delegates &optional arg-types)
   (declare (type symbol name)

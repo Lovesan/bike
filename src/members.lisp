@@ -216,18 +216,19 @@
       (when (< i count)
         (let* ((param (dnvref parameters i))
                (type (parameter-type param))
-               (type-name (type-full-name type))
                (outp (parameter-out-p param))
                (refp (ref-type-p type))
                (name (parameter-name param)))
-          (multiple-value-prog1
-              (values (or name (string (gensym (string '#:arg))))
-                      type
-                      (%get-primitive-type type-name)
-                      (%get-lisp-primitive-type type-name)
-                      (if refp (if outp :out :ref) :in)
-                      (params-array-p param))
-            (incf i)))))))
+          (let* ((type (if refp (element-type-of type) type))
+                 (type-name (type-full-name type)))
+            (multiple-value-prog1
+                (values (or name (string (gensym (string '#:arg))))
+                        type
+                        (%get-primitive-type type-name)
+                        (%get-lisp-primitive-type type-name)
+                        (if refp (if outp :out :ref) :in)
+                        (params-array-p param))
+              (incf i))))))))
 
 (defun %compile-method (info fptr &optional name doc decls)
   (declare (type dotnet-object info))

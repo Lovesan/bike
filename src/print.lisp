@@ -187,7 +187,7 @@ Other values force the printing of type namespaces.")
   (simple-character-string
    (with-output-to-string (out)
      (write-type-name type :namespaces t
-                           :parameters t
+                           :parameters (not (generic-type-definition-p type))
                            :qualified t
                            :pointer t
                            :ref t
