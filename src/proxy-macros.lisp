@@ -68,7 +68,7 @@
           (setf dotnet-name (camel-case-string lisp-name :capitalize capitalize)))
         (list* lisp-name dotnet-name rest))))
 
-  (defun parse-callable-method-definition (def class-name)
+  (defun parse-callable-method-definition (def class-name defmethodp)
     (destructuring-bind
         (name-options-and-generic-parameters return-type (&rest parameters) &body body)
         def
@@ -76,7 +76,7 @@
           (ensure-list name-options-and-generic-parameters)
         (destructuring-bind (name dotnet-name &rest slot-args
                                               &key (function-name name)
-                                                   defmethodp
+                                                   (defmethodp defmethodp)
                                               &allow-other-keys)
             (parse-callable-name-and-options name-and-options)
           (let* ((slot-args (copy-list slot-args))
@@ -92,26 +92,33 @@
                  (this-var (intern (string '#:this))))
             (remf slot-args :function-name)
             (remf slot-args :defmethod)
-            (values `(,name :kind :method
-                            :dotnet-name ,dotnet-name
-                            :return-type ,return-type
-                            :parameters ,parameters
-                            :generic-parameters ,generic-parameters
-                            :function-name ,function-name
-                            ,@slot-args)
-                    (if defmethodp
-                      `(progn
-                         (eval-when (:compile-toplevel :load-toplevel :execute)
-                           (ensure-generic-function
-                            ',function-name
-                            :lambda-list '(,this-var ,@lambda-list)))
-                         (defmethod ,function-name ((,this-var ,class-name) ,@lambda-list)
-                           (declare (ignorable ,this-var))
-                           ,@body))
-                      `(defun ,function-name (,this-var ,@lambda-list)
-                         (declare (type ,class-name ,this-var)
-                                  (ignorable ,this-var))
-                         ,@body))))))))
+            (multiple-value-bind (body decls doc) (parse-body body :documentation t)
+              (values `(,name :kind :method
+                              :dotnet-name ,dotnet-name
+                              :return-type ,return-type
+                              :parameters ,parameters
+                              :generic-parameters ,generic-parameters
+                              :function-name ,function-name
+                              :documentation ,doc
+                              ,@slot-args)
+                      (if defmethodp
+                        `(progn
+                           (eval-when (:compile-toplevel :load-toplevel :execute)
+                             (ensure-generic-function
+                              ',function-name
+                              :lambda-list '(,this-var ,@lambda-list)))
+                           (defmethod ,function-name ((,this-var ,class-name)
+                                                      ,@lambda-list)
+                             ,@(when doc `(,doc))
+                             (declare (ignorable ,this-var))
+                             ,@decls
+                             ,@body))
+                        `(defun ,function-name (,this-var ,@lambda-list)
+                           ,@(when doc `(,doc))
+                           (declare (type ,class-name ,this-var)
+                                    (ignorable ,this-var))
+                           ,@decls
+                           ,@body)))))))))
 
   (defun parse-callable-event-definition (def)
     (destructuring-bind (name-and-options type &rest slot-args &key &allow-other-keys)
@@ -151,7 +158,8 @@
                    (parse-callable-property-definition (rest slot)))
                   (:event
                    (parse-callable-event-definition (rest slot)))
-                  (:method (parse-callable-method-definition (rest slot) class-name))
+                  (:method (parse-callable-method-definition (rest slot) class-name nil))
+                  (:defmethod (parse-callable-method-definition (rest slot) class-name t))
                   (t slot))
                 slot))
           (setf slots (cdr slots)))))))
@@ -161,15 +169,19 @@
      &body slots)
   (multiple-value-bind (slots decls doc)
       (parse-body slots :documentation t :whole whole)
+    (when (and (null doc) (stringp slots))
+      (psetf slots doc doc slots))
     (when decls
       (error "Declarations are not allowed here: ~s" whole))
-    (destructuring-bind (name &key base-type
-                                   interfaces
-                                   (metaclass 'dotnet-callable-class)
-                                   default-initargs)
+    (destructuring-bind (name &rest class-options)
         (ensure-list name-and-options)
       (check-type name (and symbol (not null)))
-      (let (slots other-defs (parser (make-callable-slot-parser slots name)))
+      (let (slots
+            other-defs
+            (parser (make-callable-slot-parser slots name))
+            (metaclass-opt (assoc :metaclass class-options)))
+        (setf class-options (remove :metaclass class-options :key #'car))
+        (unless metaclass-opt (setf metaclass-opt '(:metaclass dotnet-callable-class)))
         (loop (multiple-value-bind (slotd other)
                   (funcall parser)
                 (unless slotd (return))
@@ -178,10 +190,8 @@
         `(progn
            (defclass ,name ,superclasses
              ,(nreverse slots)
-             (:metaclass ,metaclass)
-             ,@(when base-type `((:base-type . ,base-type)))
-             ,@(when interfaces `((:interfaces ,@interfaces)))
-             ,@(when default-initargs `((:default-initargs . ,default-initargs)))
+             ,metaclass-opt
+             ,@class-options
              ,@(when doc `((:documentation ,doc))))
            ,@(nreverse other-defs)
            ',name)))))

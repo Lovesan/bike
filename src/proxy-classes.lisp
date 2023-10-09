@@ -614,7 +614,7 @@
   (when base-type
     (remf initargs :base-type)
     (let ((type (resolve-type base-type)))
-      (setf initargs (list* :base-type (qualified-type-name type) initargs))))
+      (setf initargs (list* :base-type (normalize-typespec type) initargs))))
   (when interfaces
     (remf initargs :interfaces)
     (let ((interfaces (mapcar (lambda (interface)
@@ -622,7 +622,7 @@
                                   (unless (interface-type-p type)
                                     (error 'interface-type-expected
                                            :datum type))
-                                  (qualified-type-name type)))
+                                  (normalize-typespec type)))
                               interfaces)))
       (setf initargs (list* :interfaces interfaces initargs))))
   (remf initargs :direct-superclasses)
