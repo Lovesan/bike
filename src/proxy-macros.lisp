@@ -116,11 +116,15 @@
   (defun parse-callable-event-definition (def)
     (destructuring-bind (name-and-options type &rest slot-args &key &allow-other-keys)
         def
-      (destructuring-bind (name dotnet-name)
+      (destructuring-bind (name dotnet-name &key (raise-method-dotnet-name
+                                                  nil
+                                                  raise-method-dotnet-name-p))
           (parse-callable-name-and-options name-and-options)
         `(,name :kind :event
                 :dotnet-name ,dotnet-name
                 :handler-type ,type
+                ,@(when raise-method-dotnet-name-p
+                    `(:raise-method-dotnet-name ,raise-method-dotnet-name))
                 ,@slot-args))))
 
   (defun parse-callable-property-definition (def)

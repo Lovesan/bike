@@ -33,7 +33,10 @@
   (assembly (required-slot) :type dotnet-object)
   (module (required-slot) :type dotnet-object)
   (type-count 0 :type (unsigned-byte 32))
-  (classes '() :type list))
+  (classes '() :type list)
+  (getter-delegate (required-slot) :type dotnet-object)
+  (setter-delegate (required-slot) :type dotnet-object)
+  (invoke-delegate (required-slot) :type dotnet-object))
 
 (defstruct (type-builder-state (:constructor %make-type-builder-state)
                                (:conc-name tbs-)
@@ -104,12 +107,15 @@
   [assembly DefineDynamicModule
             (or [assembly %FullName] +dynamic-assembly-name+)])
 
-(defun make-dynamic-type-cache (&optional classes)
+(defun make-dynamic-type-cache (getter setter invoke &optional classes)
   (let* ((asm (make-dynamic-type-cache-assembly))
          (module (make-dynamic-type-cache-module asm)))
     (%make-dynamic-type-cache :assembly asm
                               :module module
-                              :classes classes)))
+                              :classes classes
+                              :getter-delegate getter
+                              :setter-delegate setter
+                              :invoke-delegate invoke)))
 
 (defun type-vector (&rest elements)
   (list-to-bike-vector elements :element-type :type))
@@ -143,11 +149,11 @@
        :type-builder type-builder
        :getter-field [type-builder DefineField
                                    +callable-proxy-getter-field-name+
-                                   [:(System.Func :object :string :object)]
+                                   [:(System.Func :object :object :string :object)]
                                    #e(System.Reflection.FieldAttributes Private)]
        :setter-field [type-builder DefineField
                                    +callable-proxy-setter-field-name+
-                                   [:(System.Action :object :string :object)]
+                                   [:(System.Action :object :object :string :object)]
                                    #e(System.Reflection.FieldAttributes Private)]
        :context-field [type-builder DefineField
                                     +callable-proxy-context-field-name+
@@ -156,6 +162,7 @@
        :invoke-field [type-builder DefineField
                                    +callable-proxy-invoke-field-name+
                                    [:(System.Func :object
+                                                  :object
                                                   :string
                                                   (array :object)
                                                   :object)]
@@ -445,6 +452,7 @@
         (emit Ldarg_0)
         (emit Ldfld (if readerp getter-field setter-field))
         (emit Ldarg_0)
+        (emit Ldarg_0)
         (emit Ldfld context-field)
         (emit Ldstr property-name)
         (if readerp
@@ -504,9 +512,7 @@
                    (context-field tbs-context-field)
                    (invoke-field tbs-invoke-field))
       state
-    (let* ((null-arg-ex-ctr [[:System.ArgumentNullException] GetConstructor
-                             (type-vector [:string])])
-           (base-parameters (if base-callable-p
+    (let* ((base-parameters (if base-callable-p
                               (nthcdr 4 (method-parameters base-constructor))
                               (method-parameters base-constructor)))
            (builder [type-builder DefineConstructor
@@ -528,47 +534,19 @@
             :for param :in base-parameters
             :for base-param-attrs = (parameter-attributes param)
             :do [builder DefineParameter i base-param-attrs (parameter-name param)])
-      (with-il-generator (gen [builder GetILGenerator]
-                              context-not-null
-                              setter-not-null
-                              getter-not-null
-                              invoke-not-null)
+      (with-il-generator (gen [builder GetILGenerator])
         (emit Ldarg_0)
         (when base-callable-p
           (emit Ldarg_1)
           (emit Ldarg_2)
-          (emit Ldarg_3))
+          (emit Ldarg_3)
+          (emit-u1 Ldarg_S 4))
         (loop :for i :from 5
               :for param :in base-parameters
               :do (if (< i 256)
                     (emit-u1 Ldarg_S i)
                     (emit-u2 Ldarg i)))
         (emit Call base-constructor)
-        (unless base-callable-p
-          (emit Ldarg_1)
-          (emit Brtrue_S context-not-null)
-          (emit Ldstr "$context")
-          (emit Newobj null-arg-ex-ctr)
-          (emit Throw)
-          (mark-label context-not-null)
-          (emit Ldarg_2)
-          (emit Brtrue_S getter-not-null)
-          (emit Ldstr "$getter")
-          (emit Newobj null-arg-ex-ctr)
-          (emit Throw)
-          (mark-label getter-not-null)
-          (emit Ldarg_3)
-          (emit Brtrue_S setter-not-null)
-          (emit Ldstr "$setter")
-          (emit Newobj null-arg-ex-ctr)
-          (emit Throw)
-          (mark-label setter-not-null)
-          (emit-u1 Ldarg_S 4)
-          (emit Brtrue_S invoke-not-null)
-          (emit Ldstr "$invoke")
-          (emit Newobj null-arg-ex-ctr)
-          (emit Throw)
-          (mark-label invoke-not-null))
         (emit Ldarg_0)
         (emit Ldarg_1)
         (emit Stfld context-field)
@@ -735,6 +713,7 @@
               (tbs-gen-copy-array
                gen params-array-local 0 args-local argc/plain)))
           (tbs-gen-load-field gen invoke-field)
+          (emit Ldarg_0)
           (tbs-gen-load-field gen context-field)
           (emit Ldstr name)
           (emit Ldloc args-local)

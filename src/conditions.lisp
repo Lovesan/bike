@@ -348,4 +348,18 @@
                      (list (method-slot-makunbound-attempt-slot-name c)
                            (method-slot-makunbound-attempt-object c))))))
 
+(define-condition dotnet-callable-object-orphan-proxy ()
+  ((value :initarg :value
+          :reader dotnet-callable-object-orphan-proxy-value)
+   (operation :initarg :operation
+              :reader dotnet-callable-object-orphan-proxy-operation)
+   (arguments :initarg :arguments
+              :reader dotnet-callable-object-orphan-proxy-arguments))
+  (:report (lambda (c s)
+             (format s #.(strcat "Orphan proxy has been invoked.~%"
+                                 "Operation was: ~s~%"
+                                 "Arguments: ~s")
+                     (dotnet-callable-object-orphan-proxy-operation c)
+                     (dotnet-callable-object-orphan-proxy-arguments c)))))
+
 ;;; vim: ft=lisp et

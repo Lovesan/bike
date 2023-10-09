@@ -124,6 +124,8 @@
    #:dotnet-proxy-object-value
    #:dotnet-callable-object
    #:dotnet-callable-object-proxy
+   #:dotnet-callable-object-proxy-initialized-p
+   #:dotnet-callable-proxy-object
    #:dotnet-object*
 
    ;; conditions
@@ -212,6 +214,10 @@
    #:method-slot-makunbound-attempt
    #:method-slot-makunbound-attempt-object
    #:method-slot-makunbound-attempt-slot-name
+   #:dotnet-callable-object-orphan-proxy
+   #:dotnet-callable-object-orphan-proxy-value
+   #:dotnet-callable-object-orphan-proxy-operation
+   #:dotnet-callable-object-orphan-proxy-arguments
 
    ;; reflection api
    #:reflection-invoke

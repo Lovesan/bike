@@ -98,6 +98,11 @@
           :type dotnet-object))
   (:documentation "Base class for dotnet-callable objects."))
 
+(defun dotnet-callable-object-proxy-initialized-p (object)
+  (declare (type dotnet-callable-object object))
+  "Returns non-NIL value in case of an OBJECT proxy has been initialized."
+  (slot-boundp object '%value))
+
 (deftype dotnet-object* () '(or dotnet-object dotnet-proxy-object))
 
 (declaim (inline dotnet-object-handle))

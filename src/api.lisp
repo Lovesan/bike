@@ -161,7 +161,7 @@ In case of the TYPE being a delegate type, first,
                      ((typep object 'dotnet-proxy-object)
                       (%dotnet-object
                        (%%box-lisp-object
-                        (%alloc-lisp-handle object))))
+                        (%alloc-lisp-handle object t))))
                      (t (let* ((ptr (%box object))
                                (code (%get-full-type-code ptr)))
                           (%get-boxed-object ptr (ash code -8) nil))))))

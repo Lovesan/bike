@@ -70,20 +70,28 @@
           (setf data new-data)
           t)))))
 
-(defun %alloc-lisp-handle (object)
+(defun %alloc-lisp-handle (object &optional weakp)
   (with-handle-table (data length :write)
     (let* ((slots data)
            (index (loop :for i :of-type fixnum :from 1 :below length
-                        :when (null (svref slots i)) :do (return i)
-                          :finally (return 0))))
+                        :for value = (svref slots i)
+                        :when (or (null value)
+                                  (and (cdr value)
+                                       (null (tg:weak-pointer-value (car value)))))
+                          :do (return i)
+                        :finally (return 0)))
+           (value (cons (if weakp
+                          (tg:make-weak-pointer object)
+                          object)
+                        weakp)))
       (cond ((> index 0)
-             (setf (svref slots index) object)
+             (setf (svref slots index) value)
              index)
             ((or (< length (length slots))
                  (%resize-handle-table))
              (let ((slots data)
                    (index length))
-               (setf (svref slots index) object)
+               (setf (svref slots index) value)
                (incf length)
                index))
             (t 0)))))
@@ -101,7 +109,13 @@
   (with-handle-table (data length :read)
     (when (and (> handle 0)
                (< handle length))
-      (svref data handle))))
+      (let ((value (svref data handle)))
+        (when value
+          (destructuring-bind (ptr . weakp)
+              value
+            (if weakp
+              (tg:weak-pointer-value ptr)
+              ptr)))))))
 
 (defun %clear-handle-table ()
   (with-handle-table (data length :write)

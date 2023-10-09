@@ -695,28 +695,54 @@
                   (setf (gethash dotnet-name cache) slot-name)))
               slot-name))))))
 
-(defun get-dotnet-callable-object-slot-value (object name)
-  (declare (type dotnet-callable-object object)
+(defun get-dotnet-callable-object-slot-value (proxy object name)
+  (declare (type (or null dotnet-callable-object) object)
            (type simple-character-string name))
+  ;; Proxy has outlived its parent. This is an erroneous condition.
+  (unless object
+    (restart-case
+        (error 'dotnet-callable-object-orphan-proxy
+               :value proxy
+               :operation 'slot-value
+               :arguments (list name))
+      (continue ()
+        (return-from get-dotnet-callable-object-slot-value))))
   (let* ((class (class-of object))
          (slot-name (get-slot-name-by-dotnet-name class name nil)))
     (if slot-name
       (slot-value object slot-name)
       (slot-missing class object name 'slot-value))))
 
-(defun set-dotnet-callable-object-slot-value (object name new-value)
-  (declare (type dotnet-callable-object object)
+(defun set-dotnet-callable-object-slot-value (proxy object name new-value)
+  (declare (type (or null dotnet-callable-object) object)
            (type simple-character-string name))
+  ;; Proxy has outlived its parent. This is an erroneous condition.
+  (unless object
+    (restart-case
+        (error 'dotnet-callable-object-orphan-proxy
+               :value proxy
+               :operation '(setf slot-value)
+               :arguments (list name new-value))
+      (continue () (return-from set-dotnet-callable-object-slot-value))))
   (let* ((class (class-of object))
          (slot-name (get-slot-name-by-dotnet-name class name nil)))
     (if slot-name
       (setf (slot-value object slot-name) new-value)
       (slot-missing class object name 'setf new-value))))
 
-(defun invoke-dotnet-callable-object-method (object name args)
-  (declare (type dotnet-callable-object object)
+(defun invoke-dotnet-callable-object-method (proxy object name args)
+  (declare (type (or null dotnet-callable-object) object)
            (type simple-character-string name)
            (type dotnet-object args))
+  ;; Proxy has outlived its parent. This is an erroneous condition.
+  (unless object
+    (restart-case
+        (error 'dotnet-callable-object-orphan-proxy
+               :value proxy
+               :operation 'invoke
+               :arguments (list name args))
+      (continue ()
+        (return-from invoke-dotnet-callable-object-method))))
   (let ((class (class-of object)))
     (destructuring-bind (function-name voidp argc &rest parameters)
         (get-slot-name-by-dotnet-name class name t)
@@ -749,16 +775,21 @@
               (callable-class-p (typep class 'dotnet-callable-class))
               (type-proxy (dcc-proxy-type class))
               ;; TODO: Handle constructors with parameters
-              (proxy (reflection-new
-                      type-proxy
-                      (box object)
-                      (new '(System.Func :object :string :object)
-                           'get-dotnet-callable-object-slot-value)
-                      (new '(System.Action :object :string :object)
-                           'set-dotnet-callable-object-slot-value)
-                      (new '(System.Func :object :string (array :object) :object)
-                           'invoke-dotnet-callable-object-method))))
+              (proxy (with-accessors ((getter dtc-getter-delegate)
+                                      (setter dtc-setter-delegate)
+                                      (invoke dtc-invoke-delegate))
+                         -dynamic-type-cache-
+                       (reflection-new
+                        type-proxy
+                        (box object)
+                        getter
+                        setter
+                        invoke)))
+              (proxy-handle (%dotnet-object-handle proxy)))
     (setf (dco-proxy object) proxy)
+    (tg:cancel-finalization proxy)
+    (tg:finalize object (lambda ()
+                          (%free-handle proxy-handle)))
     proxy))
 
 (defmethod shared-initialize ((object dotnet-callable-object)
@@ -849,29 +880,35 @@
          :value new-value))
 
 (defun initialize-dynamic-type-cache ()
-  (if (null -dynamic-type-cache-)
-    (setf -dynamic-type-cache- (make-dynamic-type-cache))
-    (let ((classes (loop :for wp :in (dtc-classes -dynamic-type-cache-)
-                         :for class = (tg:weak-pointer-value wp)
-                         :when (and class (not (find class classes)))
-                           :collect class :into classes
-                         :finally (return classes))))
-      (setf -dynamic-type-cache- (make-dynamic-type-cache))
-      (dolist (class (reverse classes))
-        (let ((slots (class-slots class)))
-          (dolist (eslotd (remove-if
-                           (lambda (slotd)
-                             (not (typep slotd 'effective-dotnet-slot-definition)))
-                           slots))
-            (initialize-effective-slot-definition
-             eslotd
-             (first (compute-direct-slot-definitions
-                     class
-                     (slot-definition-name eslotd))))))
-        (initialize-class-proxy class)
-        (make-instances-obsolete class))
-      (setf (dtc-classes -dynamic-type-cache-) (mapcar #'tg:make-weak-pointer classes))
-      -dynamic-type-cache-)))
+  (let ((getter (new '(System.Func :object :object :string :object)
+                     #'get-dotnet-callable-object-slot-value))
+        (setter (new '(System.Action :object :object :string :object)
+                     #'set-dotnet-callable-object-slot-value))
+        (invoke (new '(System.Func :object :object :string (array :object) :object)
+                     #'invoke-dotnet-callable-object-method)))
+    (if (null -dynamic-type-cache-)
+      (setf -dynamic-type-cache- (make-dynamic-type-cache getter setter invoke))
+      (let ((classes (loop :for wp :in (dtc-classes -dynamic-type-cache-)
+                           :for class = (tg:weak-pointer-value wp)
+                           :when (and class (not (find class classes)))
+                             :collect class :into classes
+                           :finally (return classes))))
+        (setf -dynamic-type-cache- (make-dynamic-type-cache getter setter invoke))
+        (dolist (class (reverse classes))
+          (let ((slots (class-slots class)))
+            (dolist (eslotd (remove-if
+                             (lambda (slotd)
+                               (not (typep slotd 'effective-dotnet-slot-definition)))
+                             slots))
+              (initialize-effective-slot-definition
+               eslotd
+               (first (compute-direct-slot-definitions
+                       class
+                       (slot-definition-name eslotd))))))
+          (initialize-class-proxy class)
+          (make-instances-obsolete class))
+        (setf (dtc-classes -dynamic-type-cache-) (mapcar #'tg:make-weak-pointer classes))
+        -dynamic-type-cache-))))
 
 (defun clear-dynamic-type-cache ()
   (let* ((dtc -dynamic-type-cache-))
@@ -879,16 +916,38 @@
                      (assembly dtc-assembly)
                      (module dtc-module)
                      (classes dtc-classes)
-                     (type-count dtc-type-count))
+                     (type-count dtc-type-count)
+                     (getter-delegate dtc-getter-delegate)
+                     (setter-delegate dtc-setter-delegate)
+                     (invoke-delegate dtc-invoke-delegate))
         dtc
       (let* ((new-assembly (make-dynamic-type-cache-assembly))
-             (new-module (make-dynamic-type-cache-module new-assembly)))
+             (new-module (make-dynamic-type-cache-module new-assembly))
+             (new-getter (new '(System.Func :object :object :string :object)
+                              #'get-dotnet-callable-object-slot-value))
+             (new-setter (new '(System.Action :object :object :string :object)
+                              #'set-dotnet-callable-object-slot-value))
+             (new-invoke (new '(System.Func :object :object :string (array :object) :object)
+                              #'invoke-dotnet-callable-object-method)))
         (with-write-lock (lock)
           (setf assembly new-assembly
                 module new-module
+                getter-delegate new-getter
+                setter-delegate new-setter
+                invoke-delegate new-invoke
                 classes '()
                 type-count 0)
           (values))))))
+
+(defun dotnet-callable-proxy-object (proxy)
+  (declare (type dotnet-object proxy))
+  "Retrieves an object associated with the proxy"
+  (let* ((type (bike-type-of proxy))
+         (field (type-get-field type "_context" #e(System.Reflection.BindingFlags
+                                                   NonPublic
+                                                   Instance))))
+    (when field
+      [field GetValue proxy])))
 
 (register-image-restore-hook 'initialize-dynamic-type-cache (not -dynamic-type-cache-))
 
