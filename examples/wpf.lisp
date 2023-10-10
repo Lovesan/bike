@@ -48,9 +48,14 @@
 (defvar *window* nil)
 ;; view model object requires to be alive during the UI session
 ;;   because of callable class limitations:
-;;   Generated .NET proxies hold weak references to their instances, to avoid
-;;     memory leaks, so proxy could be orphaned.
-;;     In such a case, an error is signalled.
+;; Generated .Net proxies only hold weak references to callable class instances,
+;;   to avoid memory leaks, so a proxy could be orphaned, i.e. it can
+;;   outlive its parent. This, of course, prevents access to object slots
+;;   and methods(because there is no object anymore).
+;;   Under normal circumstances, should such a proxy be encountered,
+;;   an error is signaled. But sometimes, as in WPF case, we don't care
+;;   that much, and can invoke the `continue' restart.
+;;   Nevertheless, we must retain the object reference somewhere.
 (defvar *vm* nil)
 
 ;; import WPF assemblies
@@ -198,7 +203,7 @@
     [packages-oc Clear]
     [symbols-oc Clear]
     (setf (evm-symbol-description evm) "")
-    ;; add packages view models to observable collection
+    ;; add package view models to observable collection
     (dolist (pvm package-vms)
       [packages-oc Add pvm])
     ;; store package view models inside the main VM
@@ -332,7 +337,8 @@
             (handler-case
                 (handler-bind ((dotnet-callable-object-orphan-proxy
                                  ;; Stale proxies may originate from class redefenitions
-                                 ;;   during file recompilation.
+                                 ;;   during file recompilation or from
+                                 ;;   stale references in controls.
                                  ;; It is almost safe to ignore such proxies
                                  ;;   in WPF context.
                                  ;; The results of `continue' restart invocation
