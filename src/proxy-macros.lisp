@@ -167,6 +167,7 @@
 (defmacro define-dotnet-callable-class
     (&whole whole name-and-options (&rest superclasses)
      &body slots)
+  "Defines a class which instances could be passed to .NET code."
   (multiple-value-bind (slots decls doc)
       (parse-body slots :documentation t :whole whole)
     (when (and (null doc) (stringp slots))

@@ -126,6 +126,9 @@
    #:dotnet-callable-object-proxy
    #:dotnet-callable-object-proxy-initialized-p
    #:dotnet-callable-proxy-object
+   #:dotnet-callable-proxy-type-p
+   #:dotnet-callable-proxy-p
+   #:unwrap-dotnet-callable-proxy
    #:dotnet-object*
 
    ;; conditions

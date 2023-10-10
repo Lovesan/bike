@@ -36,7 +36,8 @@
   (classes '() :type list)
   (getter-delegate (required-slot) :type dotnet-object)
   (setter-delegate (required-slot) :type dotnet-object)
-  (invoke-delegate (required-slot) :type dotnet-object))
+  (invoke-delegate (required-slot) :type dotnet-object)
+  (proxy-interface-type (required-slot) :type dotnet-type))
 
 (defstruct (type-builder-state (:constructor %make-type-builder-state)
                                (:conc-name tbs-)
@@ -109,9 +110,18 @@
 
 (defun make-dynamic-type-cache (getter setter invoke &optional classes)
   (let* ((asm (make-dynamic-type-cache-assembly))
-         (module (make-dynamic-type-cache-module asm)))
+         (module (make-dynamic-type-cache-module asm))
+         (proxy-if-builder [module DefineType
+                                   (format nil "~a.IDotNetCallableProxy"
+                                           +dynamic-assembly-name+)
+                                   #e(System.Reflection.TypeAttributes
+                                      Public
+                                      Abstract
+                                      Interface
+                                      AutoClass)]))
     (%make-dynamic-type-cache :assembly asm
                               :module module
+                              :proxy-interface-type [proxy-if-builder CreateType]
                               :classes classes
                               :getter-delegate getter
                               :setter-delegate setter

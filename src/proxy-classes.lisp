@@ -563,7 +563,14 @@
         (error 'constructor-resolution-error :type base-type
                                              :args '(*)))
       (let* ((eslotds (class-slots class))
-             (interfaces (mapcar #'resolve-type (dcc-direct-interfaces class)))
+             (direct-interfaces (mapcar #'resolve-type (dcc-direct-interfaces class)))
+             (interfaces (delete-duplicates
+                          (cons
+                           (dtc-proxy-interface-type -dynamic-type-cache-)
+                           (append direct-interfaces
+                                   (bike-vector-to-list
+                                    (type-interfaces base-type))))
+                          :test #'bike-equals))
              (class-name (class-name class))
              (name (simple-character-string
                     (or (and class-name (symbol-full-name class-name))
@@ -948,6 +955,25 @@
                                                    Instance))))
     (when field
       [field GetValue proxy])))
+
+(defun dotnet-callable-proxy-type-p (type)
+  "Returns non-NIL in case if a TYPE is a proxy type for dotnet-callable-class"
+  (declare (type dotnet-type type))
+  (let ((proxy-if-type
+          (with-read-lock ((dtc-lock -dynamic-type-cache-))
+            (dtc-proxy-interface-type -dynamic-type-cache-))))
+    (assignable-from-p proxy-if-type type)))
+
+(defun dotnet-callable-proxy-p (object)
+  "Return non-NIL in case of an OBJECT being a callable proxy of a dotnet-callable-object."
+  (and (dotnet-object-p object)
+       (dotnet-callable-proxy-type-p (bike-type-of object))))
+
+(defun unwrap-dotnet-callable-proxy (object)
+  "Returns an underlying object of a dotnet callable proxy in case an OBJECT is a proxy."
+  (if (dotnet-callable-proxy-p object)
+    (dotnet-callable-proxy-object object)
+    object))
 
 (register-image-restore-hook 'initialize-dynamic-type-cache (not -dynamic-type-cache-))
 
