@@ -69,16 +69,16 @@
 ;; Delegate command pattern implementation
 (define-dotnet-callable-class (delegate-command (:interfaces ICommand)) ()
   "A Lisp implementation of Delegate Commmand pattern."
-  ;; This slot 'holds' event handler wrapper, which
-  ;;   could be obtained by means of 'slot-value'.
-  ;; It can then be funcall'ed to invoke
-  ;;   delegates subscribed on the event.
   (can-execute-callback :initarg :can-execute-callback
                         :initform (constantly t)
                         :accessor can-execute-callback)
   (execute-callback :initarg :execute-callback
                     :initform (constantly nil)
                     :accessor execute-callback)
+  ;; This slot 'holds' event handler wrapper, which
+  ;;   could be obtained by means of 'slot-value'.
+  ;; It can then be funcall'ed to invoke
+  ;;   delegates subscribed on the event.
   (:event can-execute-changed EventHandler)
   ;; :defmethod designates that generic methods are generated
   ;;   on the lisp side.
