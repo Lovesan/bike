@@ -63,23 +63,26 @@
 (defun %resize-handle-table ()
   (with-handle-table (data length nil)
     (let* ((size (length data))
-           (new-size (min most-positive-fixnum (1+ (* size 2)))))
+           (new-size (min array-total-size-limit (1+ (* size 2)))))
       (when (< size new-size)
         (let ((new-data (make-array new-size :initial-element nil)))
-          (replace new-data data :end1 new-size :end2 size)
+          (replace new-data data :start1 0 :end1 size
+                                 :start2 0 :end2 size)
           (setf data new-data)
           t)))))
+
+(defun %find-free-lisp-handle ()
+  (with-handle-table (data length nil)
+    (loop :with slots = data
+          :for i :of-type non-negative-fixnum :from 1 :below length
+          :for descriptor = (svref slots i)
+          :when (null descriptor) :return i
+          :finally (return 0))))
 
 (defun %alloc-lisp-handle (object &optional weakp)
   (with-handle-table (data length :write)
     (let* ((slots data)
-           (index (loop :for i :of-type fixnum :from 1 :below length
-                        :for value = (svref slots i)
-                        :when (or (null value)
-                                  (and (cdr value)
-                                       (null (tg:weak-pointer-value (car value)))))
-                          :do (return i)
-                        :finally (return 0)))
+           (index (%find-free-lisp-handle))
            (value (cons (if weakp
                           (tg:make-weak-pointer object)
                           object)
