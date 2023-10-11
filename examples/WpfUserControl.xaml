@@ -51,37 +51,46 @@
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <StackPanel Orientation="Horizontal">
+        <StackPanel Grid.Column="0" Grid.Row="0"  Orientation="Horizontal">
             <Button Style="{StaticResource RefreshButtonStyle}"
                     Command="{Binding RefreshCommand}"
                     CommandParameter="{Binding}"/>
             <TextBlock Style="{StaticResource HeaderTextBlockStyle}" Text="Packages"/>
         </StackPanel>
-        <ListView Grid.Column="0" Grid.Row="1" ItemsSource="{Binding Packages}"
+        <TextBlock Grid.Column="0" Grid.Row="1"
+                   Text="Search"
+                   VerticalAlignment="Center"
+                   HorizontalAlignment="Right"
+                   Margin="5,5"/>
+        <TextBox Grid.Column="1" Grid.Row="1"
+                 VerticalContentAlignment="Center"
+                 Text="{Binding Search, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Delay=500}"/>
+        <ListView Grid.Column="0" Grid.Row="2" ItemsSource="{Binding Packages}"
                   SelectedItem="{Binding SelectedPackage, Mode=TwoWay}">
             <ListView.ItemTemplate>
                 <DataTemplate x:Name="PackageDataTemplate">
                     <Border Margin="5,1">
-                        <TextBlock Text="{Binding Name}"/>
+                        <TextBlock Text="{Binding PackageName}"/>
                     </Border>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
         <TextBlock Grid.Column="1" Grid.Row="0" Style="{StaticResource HeaderTextBlockStyle}" Text="External symbols"/>
-        <ListView Grid.Column="1" Grid.Row="1" ItemsSource="{Binding Symbols}"
+        <ListView Grid.Column="1" Grid.Row="2" ItemsSource="{Binding Symbols}"
                   SelectedItem="{Binding SelectedSymbol, Mode=TwoWay}">
             <ListView.ItemTemplate>
                 <DataTemplate>
                     <Border Margin="5,1">
-                        <TextBlock Text="{Binding Name}"/>
+                        <TextBlock Text="{Binding SymbolName}"/>
                     </Border>
                 </DataTemplate>
             </ListView.ItemTemplate>
         </ListView>
         <TextBlock Grid.Column="2" Grid.Row="0" Style="{StaticResource HeaderTextBlockStyle}" Text="#'cl:describe output"/>
-        <TextBox Grid.Column="2" Grid.Row="1" x:Name="Description"
+        <TextBox Grid.Column="2" Grid.Row="2" x:Name="Description"
                  IsReadOnly="True"
                  TextWrapping="Wrap"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"

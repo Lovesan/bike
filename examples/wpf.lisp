@@ -117,13 +117,14 @@
   "View model for symbols"
   (symbol :accessor svm-symbol :initarg :symbol)
   ;; :property slots are visible on .Net side as object properties.
-  (:property name :string :initarg :name :accessor svm-name))
+  (:property (name "SymbolName") :string :initarg :name :accessor svm-name))
 
 (define-dotnet-callable-class package-view-model (view-model-base)
   "View model for packages"
   (package :initarg :package :accessor pvm-package)
-  (:property name :string :initarg :name
-                          :accessor pvm-name))
+  (:property (name "PackageName")
+   :string :initarg :name
+           :accessor pvm-name))
 
 (define-dotnet-callable-class example-view-model
     (view-model-base)
@@ -149,13 +150,17 @@
    :initform nil
    :accessor evm-selected-package)
   ;; currently selected symbol. Most of the time, it is set by ListView.
-  (:property selected-symbol :object)
+  (:property selected-symbol :object
+   :initform nil)
   ;; symbol description string
   (:property (symbol-description :setter nil) :string
    :accessor evm-symbol-description)
   ;; a command for refresh button
   (:property (refresh-command :setter nil) ICommand
-   :initarg :refresh-command))
+   :initarg :refresh-command)
+  (:property search :string
+   :initarg nil
+   :accessor evm-search))
 
 (defun make-delegate-command (execute-callback &optional can-execute-callback)
   (declare (type (or symbol function) execute-callback can-execute-callback))
@@ -165,12 +170,32 @@
                  :can-execute-callback (or can-execute-callback
                                            (constantly t))))
 
-(defun make-symbol-view-model (symbol)
+(defun symbol-full-name (symbol)
+  (declare (type symbol symbol))
+  "Returns full name of a symbol"
+  (let ((package (symbol-package symbol))
+        (keyword-package (find-package :keyword))
+        (name (symbol-name symbol)))
+    (with-output-to-string (out)
+      (cond ((null package) (write-string "#:" out))
+            ((eq package keyword-package) (write-string ":" out))
+            (t (write-string (package-name package) out)
+               (multiple-value-bind (symbol status)
+                   (find-symbol name package)
+                 (declare (ignore symbol))
+                 (write-string (if (eq status :external) ":" "::")
+                               out))))
+      (write-string name out))))
+
+(defun make-symbol-view-model (symbol &optional full-name)
   (declare (type symbol symbol))
   "Creates an instance of a view model representing a symbol"
-  (make-instance 'symbol-view-model
-                 :symbol symbol
-                 :name (symbol-name symbol)))
+  (let ((name (if full-name
+                (symbol-full-name symbol)
+                (symbol-name symbol))))
+    (make-instance 'symbol-view-model
+                   :symbol symbol
+                   :name name)))
 
 (defun make-package-view-model (package)
   "Creates an instance of a view model representing a package"
@@ -185,13 +210,27 @@
                 #'string<
                 :key #'package-name)))
 
-(defun get-symbol-vms (package)
-  "Returns a view models for external symbols in a package"
+(defgeneric get-symbol-vms (designator)
+  (:documentation "Retrieves list of symbol view models based on DESIGNATOR"))
+
+(defmethod get-symbol-vms ((package package))
+  "Returns view models for external symbols in a package"
   (loop :for s :being :the :external-symbols :in package
-         :collect s :into result
-         :finally (return (mapcar #'make-symbol-view-model
-                                  (sort result #'string<
-                                        :key #'symbol-name)))))
+        :collect s :into result
+        :finally (return (mapcar #'make-symbol-view-model
+                                 (sort result #'string<
+                                       :key #'symbol-name)))))
+
+(defmethod get-symbol-vms ((search string))
+  "Returns view models for the search string"
+  (loop :for symbol :in (apropos-list search)
+        :for (s status) = (multiple-value-list
+                           (find-symbol (symbol-name symbol)
+                                        (symbol-package symbol)))
+        :when (and s (eq status :external))
+          :collect (make-symbol-view-model symbol t) :into vms
+        :finally (return (sort vms #'string<
+                               :key #'svm-name))))
 
 (defun refresh-packages (evm)
   "Refreshes list of existing packages."
@@ -202,7 +241,8 @@
     ;; clear observable collections and description slot
     [packages-oc Clear]
     [symbols-oc Clear]
-    (setf (evm-symbol-description evm) "")
+    (setf (evm-symbol-description evm) nil
+          (evm-search evm) nil)
     ;; add package view models to observable collection
     (dolist (pvm package-vms)
       [packages-oc Add pvm])
@@ -243,6 +283,20 @@
           (with-output-to-string (out)
             (describe (svm-symbol symbol-vm) out)))))
 
+(defun on-search-changed (evm search)
+  "Invoked when search text has changed"
+  (with-slots (selected-package symbols-view symbols) evm
+    (unless [:string IsNullOrWhitespace search]
+      ;; Clear package selection
+      (setf selected-package nil)
+      ;; Clear observable collection
+      [symbols-view Clear]
+      ;; Compute apropos-list
+      (setf symbols (get-symbol-vms search))
+      ;; Add view models to observable collection
+      (dolist (s symbols)
+        [symbols-view Add s]))))
+
 (defmethod (setf slot-value-using-class) :after
     (new-value
      (class dotnet-callable-class)
@@ -264,7 +318,9 @@
            (on-package-selected object (unwrap-dotnet-callable-proxy new-value)))
           (selected-symbol
            ;; Something(e.g. the ListView) changed the selected symbol
-           (on-symbol-changed object (unwrap-dotnet-callable-proxy new-value))))
+           (on-symbol-changed object (unwrap-dotnet-callable-proxy new-value)))
+          (search
+           (on-search-changed object new-value)))
         (when handler
           (funcall handler object (new 'PropertyChangedEventArgs dotnet-name))))
     (error (e) (format t "~&~a~%" e))))
@@ -345,7 +401,13 @@
                                  ;;   would be nulls, default values and invalid casts
                                  ;;   all around, but WPF can handle such
                                  ;;   situations(mostly).
-                                 (lambda (e) (continue e))))
+                                 (lambda (e &aux (*print-dotnet-object* nil))
+                                   (format *debug-io*
+                                           "~&Stale proxy ~s for op ~s (~{~s~^ ~})~%"
+                                           (dotnet-callable-object-orphan-proxy-value e)
+                                           (dotnet-callable-object-orphan-proxy-operation e)
+                                           (dotnet-callable-object-orphan-proxy-arguments e))
+                                   (continue e))))
                   (progn
                     ;; load XAML content and show window
                     (reload-content)
@@ -353,6 +415,8 @@
               (error (e) (format *error-output* "~&~a~%" e)))
          (setf *dispatcher* nil
                *vm* nil
-               *window* nil))))))
+               *window* nil
+               [window %DataContext] nil
+               [window %Content] nil))))))
 
 ;;; vim: ft=lisp et
