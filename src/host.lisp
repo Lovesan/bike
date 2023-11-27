@@ -287,8 +287,19 @@
 
 
 
-    ;; only use SIGCHLD for now, dotnet background thread perfectly handles it
-    (dolist (sig (list +sigchld+))
+    ;; revert SIGCHLD and SIGRTMIN handlers for .NET ones
+    ;;
+    ;; SIGCHLD is used by System.Diagnostics.Process
+    ;;
+    ;; SIGRTMIN is the INJECT_ACTIVATION_SIGNAL on Linux
+    ;; N.B.: on macOS, SIGUSR1 is used for the same purpose
+    ;; A comment in the .NET runtime source states the following:
+    ;;   Function :
+    ;;     inject_activation_handler
+    ;;
+    ;;     Handle the INJECT_ACTIVATION_SIGNAL signal. This signal interrupts a running thread
+    ;;     so it can call the activation function that was specified when sending the signal.
+    (dolist (sig (list +sigchld+ +sigrtmin+))
       (setf (foreign-slot-value (sigaction-address -new-sigactions- sig)
                                 '(:struct sigaction) 'handler)
             (foreign-slot-value (sigaction-address -dotnet-sigactions- sig)

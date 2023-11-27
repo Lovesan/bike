@@ -122,6 +122,7 @@
   (defconstant +sigbus+ 7)
   (defconstant +sigfpe+ 8)
   (defconstant +sigkill+ 9)
+  (defconstant +sigusr1+ 10)
   (defconstant +sigsegv+ 11)
   (defconstant +sigusr2+ 12)
   (defconstant +sigalrm+ 14)
@@ -129,6 +130,7 @@
   (defconstant +sigchld+ 17)
   (defconstant +sigurg+ 23)
   (defconstant +sigwinch+ 28)
+  (defconstant +sigrtmin+ 34)
 
   (define-global-var -lisp-sigactions- (null-pointer))
   (define-global-var -dotnet-sigactions- (null-pointer))
