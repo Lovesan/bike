@@ -25,5 +25,5 @@ workflows:
 
   tests:
     jobs:
-      - build_7_0_ccl_amd64
-      - build_7_0_sbcl_amd64
+      - build_8_0_ccl_amd64
+      - build_8_0_sbcl_amd64
