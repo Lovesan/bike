@@ -27,285 +27,236 @@
 (uiop:define-package #:bike-examples/aspnet-mvc
   (:use #:cl #:bike #:uiop)
   (:import-from #:alexandria
-                #:define-constant))
+                #:define-constant)
+  (:import-from #:named-readtables
+                #:in-readtable))
 
 (in-package #:bike-examples/aspnet-mvc)
+
+(in-readtable bike-syntax)
 
 (defvar *host* nil)
 
 (defvar *default-hello-server-port* 5000)
 
+;; Some global state.
+;; Class instances are required to be alive
+;;  while their proxies are in use by the ASP .NET framework.
 (defvar *server-port*)
+(defvar *controller-model-convention*)
+(defvar *action-model-convention*)
+(defvar *feature-provider*)
+(defvar *controller-activator*)
+(defvar *controller*)
+(defvar *logger-provider*)
 
-;;; This example consists of two parts.
-;;;
-;;; The first one is responsible for loading a set of AspNet Core
-;;;  assemblies, which are of interest to us, into a directory
-;;;  named 'AspNetMvcAssemblies' by means of creating a temporary
-;;;  .csproj file which lists the dependencies we need, and invoking
-;;;  dotnet command afterwards.
-;;; We then import all this assemblies.
-;;;
-;;; The second part is actually responsible for setting up an
-;;;  AspNet Mvc framework on top of Kestrel server, and running it.
+;;; Import ASP.NET assemblies
 
-(define-constant +tmp-project-name+ "AspNetMvcAssemblies"
-  :test #'equal)
+(import-assembly 'Microsoft.AspNetCore)
+(import-assembly 'Microsoft.AspNetCore.Server.Kestrel)
+(import-assembly 'Microsoft.AspNetCore.Server.Kestrel.Core)
+(import-assembly 'Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets)
+(import-assembly 'Microsoft.AspNetCore.Mvc)
+(import-assembly 'Microsoft.AspNetCore.Mvc.Core)
+(import-assembly 'Microsoft.Extensions.Configuration)
+(import-assembly 'Microsoft.Extensions.DependencyInjection)
+(import-loaded-assemblies)
 
-(defvar *deps-directory*
-  (native-path
-   (merge-pathnames*
-    (make-pathname* :directory (list :relative +tmp-project-name+))
-    (pathname-directory-pathname #.(current-lisp-file-pathname)))))
-
-(use-namespace 'System)
-(use-namespace 'System.Diagnostics)
-(use-namespace 'System.Text)
-(use-namespace 'System.IO)
-
-(defun write-project-file (&optional (version "2.2.0"))
-  (declare (type string version))
-  "Creates a temporary project file which is used for collecting
- AspNet assemblies required by us."
-  ;; Manually create a .csproj file xml body
-  (let ((xml (strcat "<Project Sdk=\"Microsoft.NET.Sdk\">"
-                     "<PropertyGroup>"
-                     "<TargetFramework>netstandard2.0</TargetFramework>"
-                     "<OutputType>Library</OutputType>"
-                     "</PropertyGroup>"
-                     "<ItemGroup>"
-                     (strcat
-                      "<PackageReference "
-                      "Include=\"Microsoft.AspNetCore.Mvc\" version=\""
-                      version
-                      "\"/>")
-                     (strcat
-                      "<PackageReference "
-                      "Include=\"Microsoft.AspNetCore.Server.Kestrel\" version=\""
-                      version
-                      "\"/>")
-                     "</ItemGroup>"
-                     "</Project>"))
-        (encoding (new 'UTF8Encoding :false :false))
-        (file (native-path
-               (make-pathname :defaults *deps-directory*
-                              :name +tmp-project-name+
-                              :type "csproj"))))
-    (ensure-directories-exist *deps-directory*)
-    (invoke 'File 'WriteAllText file xml encoding)
-    file))
-
-(defun make-output-handler (stream)
-  (declare (type stream stream))
-  (new 'DataReceivedEventHandler
-       (lambda (sender e)
-         (declare (ignore sender))
-         (let ((str (property e 'Data)))
-           (when str (write-line str stream))))))
-
-(defun publish-project (project-file)
-  (declare (type (or pathname string) project-file))
-  "Builds and publishes a temporary project,
- which gives us all the required AspNet assemblies"
-  (let* ((process (new 'Process))
-         (start-info (property process 'StartInfo))
-         (args (property start-info 'ArgumentList))
-         (encoding (property 'System.Text.Encoding 'UTF8)))
-    (dolist (arg (list "publish"
-                       "-c" "Release"
-                       "-o" *deps-directory*
-                       project-file))
-      (invoke args 'Add arg))
-    (setf (property start-info 'FileName) "dotnet"
-          (property start-info 'UseShellExecute) nil
-          (property start-info 'WorkingDirectory) *deps-directory*
-          (property start-info 'RedirectStandardOutput) T
-          (property start-info 'RedirectStandardError) T
-          (property start-info 'StandardOutputEncoding) encoding
-          (property start-info 'StandardErrorEncoding) encoding
-          (property process 'EnableRaisingEvents) T)
-    (invoke process "add_Exited"
-            (new 'EventHandler
-                 (lambda (sender e)
-                   (declare (ignore sender e))
-                   (cleanup-temporary-project))))
-    (invoke process "add_OutputDataReceived"
-            (make-output-handler *standard-output*))
-    (invoke process "add_ErrorDataReceived"
-            (make-output-handler *error-output*))
-    (invoke process 'Start)
-    (invoke process 'BeginOutputReadLine)
-    (invoke process 'BeginErrorReadLine)
-    (invoke process 'WaitForExit)
-    (let ((rv (property process 'ExitCode)))
-      (unless (zerop rv)
-        (error "Unable to publish project file: ~a" rv))
-      project-file)))
-
-(defun cleanup-temporary-project ()
-  "Cleans up a temporary project build"
-  ;; delete temporary project files and directories
-  (let ((bin (native-path
-              (merge-pathnames*
-               (make-pathname :directory '(:relative "bin"))
-               *deps-directory*)))
-        (obj (native-path
-              (merge-pathnames*
-               (make-pathname :directory '(:relative "obj"))
-               *deps-directory*))))
-    (format *error-output* "Deleting ~s~%" bin)
-    (invoke 'Directory 'Delete bin t)
-    (format *error-output* "Deleting ~s~%" obj)
-    (invoke 'Directory 'Delete obj t)
-    (do-bike-vector (file (invoke 'Directory 'GetFiles
-                                  *deps-directory*
-                                  (strcat +tmp-project-name+ "*.*")))
-      (format *error-output* "Deleting ~s~%" file)
-      (delete-file file))))
-
-(defun import-microsoft-assemblies ()
-  "Imports all the assemblies prefixed with 'Microsoft.' from the temp project dir."
-  (loop :for path :in (directory* (make-pathname*
-                                   :type "dll"
-                                   :name *wild*
-                                   :defaults *deps-directory*))
-        :for name = (pathname-name path)
-        :when (string-prefix-p "Microsoft." name)
-          :do (handler-case
-                  (import-assembly (load-assembly-from (native-path path)))
-                (error (e) (format *error-output* "~a~%" e)))))
-
-(defun ensure-asp-net-assemblies ()
-  "Loads and imports all required AspNet Mvc assemblies."
-  (unless (invoke 'Directory 'Exists *deps-directory*)
-    (let ((file (write-project-file)))
-      (publish-project file)))
-  (import-microsoft-assemblies))
-
-(ensure-asp-net-assemblies)
-
-;;; Now, to the actual part of this example.
-;;; First, use a bunch of namespaces
+;;; Use a bunch of namespaces
 ;;;   for the purpose of not writing qualified names of types.
 
-(use-namespace 'System.Net.Http)
-(use-namespace 'System.Threading)
-(use-namespace 'System.Threading.Tasks)
-(use-namespace 'System.Web)
-(use-namespace 'Microsoft.AspNetCore.Hosting)
-(use-namespace 'Microsoft.AspNetCore.Http)
-(use-namespace 'Microsoft.AspNetCore.Routing)
-(use-namespace 'Microsoft.Extensions.Configuration)
-(use-namespace 'Microsoft.Extensions.DependencyInjection)
-(use-namespace 'Microsoft.AspNetCore.Builder)
-(use-namespace 'Microsoft.AspNetCore.Server.Kestrel)
-(use-namespace 'Microsoft.AspNetCore.Server.Kestrel.Core)
+(use-namespace '(System
+                 System.Collections.Generic
+                 System.Net.Http
+                 System.Threading
+                 System.Threading.Tasks
+                 System.Web
+                 Microsoft.AspNetCore.Builder
+                 Microsoft.Extensions.DependencyInjection
+                 Microsoft.AspNetCore.Routing
+                 Microsoft.Extensions.Logging
+                 Microsoft.AspNetCore.Connections
+                 Microsoft.AspNetCore.Server.Kestrel.Core
+                 Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets
+                 Microsoft.AspNetCore.Hosting.Server
+                 Microsoft.AspNetCore.Mvc
+                 Microsoft.AspNetCore.Mvc.ApplicationParts
+                 Microsoft.AspNetCore.Mvc.ApplicationModels
+                 Microsoft.AspNetCore.Mvc.Controllers))
+
+;; Asp.Net MVC controller
+(define-dotnet-callable-class (example-controller
+                               (:base-type . ControllerBase))
+    ()
+  ;; Echo the 'Hello' message to client
+  (:method index :string ((name :string))
+    (format nil "Hello~:[~;, ~:*~a~]!" name)))
+
+;; Custom controller feature provider is required
+;;  because of .NET proxy class for controller is dynamically generated,
+;;  i.e. MVC cannot scavenge it from some assembly
+(define-dotnet-callable-class (example-feature-provider
+                               (:interfaces (IApplicationFeatureProvider ControllerFeature)))
+    ()
+  (:method ((efp-populate-feature "PopulateFeature")) :void
+    ((parts (IEnumerable ApplicationPart))
+     (feature ControllerFeature))
+    (declare (ignore parts))
+    ;; Mark `example-controller' class as MVC controller
+    (let ((class (find-class 'example-controller)))
+      [[feature %Controllers] Add [class GetTypeInfo]])))
+
+;; Custom controller model convention is required because
+;;   .NET proxy class for controller is dynamically generated.
+(define-dotnet-callable-class (example-controller-model-convention
+                               (:interfaces IControllerModelConvention))
+    ()
+  (:method ((ecmc-apply "Apply")) :void ((ctrl ControllerModel))
+    (when (bike-equals (find-class 'example-controller)
+                       [ctrl %ControllerType])
+      ;; Set controller name
+      (setf [ctrl %ControllerName] "Home")
+      ;; The below equals to settings [Route("/")] attribute on the controller class
+      (let ((selector-model (new 'SelectorModel)))
+        (setf [selector-model %AttributeRouteModel]
+              (new 'AttributeRouteModel (new 'RouteAttribute "/")))
+        [[ctrl %Selectors] Add selector-model]))))
+
+;; Custom action model convention.
+;; The below stuff could actually be done in the corresponding
+;;   controller model convention method.
+(define-dotnet-callable-class (example-action-model-convention
+                               (:interfaces IActionModelConvention))
+    ()
+  (:method ((eamc-apply "Apply")) :void ((am ActionModel))
+    (when (and (bike-equals (find-class 'example-controller)
+                            [[am %Controller] %ControllerType])
+               (equalp [am %ActionName] "Index"))
+      ;; The below equals to setting [HttpGet("{name}")] attribute
+      ;;   on the 'Index' method
+      (let ((selector-model (new 'SelectorModel)))
+        (setf [selector-model %AttributeRouteModel]
+              (new 'AttributeRouteModel (new 'HttpGetAttribute "{name}")))
+        [[am %Selectors] Add selector-model]))))
+
+;; Custom controller activator is required because
+;;   dotnet-callable-class proxies are sort of incompatible
+;;   with dependency injection, because their constructors
+;;   contain special arguments, required for interoperability with Lisp code.
+(define-dotnet-callable-class (example-controller-activator
+                               (:interfaces IControllerActivator))
+    ()
+  (:method ((eca-create "Create")) :object ((ctx ControllerContext))
+    (declare (ignore ctx))
+    *controller*)
+  (:method ((eca-release "Release")) :void ((ctx ControllerContext) (ctrl :object))
+    (declare (ignore ctx ctrl))))
+
+;; Custom logger class. Logs to Lisp stderr stream.
+(define-dotnet-callable-class (example-logger (:interfaces ILogger))
+    ()
+  (:method ((el-begin-scope "BeginScope") TState) IDisposable ((state TState))
+    (declare (ignore state))
+    nil)
+  (:method ((el-enabled-p "IsEnabled")) :bool ((level LogLevel))
+    (declare (ignore level))
+    t)
+  ;; N.B.: a generic method definition
+  (:method ((el-log "Log") TState) :void ((level LogLevel)
+                                          (eid EventId)
+                                          (state TState)
+                                          (ex Exception)
+                                          (formatter (Func TState Exception :string)))
+    (declare (ignore eid))
+    (format *error-output* "~&[~a] ~a~%" [level ToString] [formatter Invoke state ex])))
+
+;; Custom logger provider which creates loggers descibed above.
+(define-dotnet-callable-class (example-logger-provider (:interfaces ILoggerProvider))
+    ()
+  ;; Keep loggers in a hash table, in a thread-safe way.
+  (loggers :accessor elp-loggers :initform (make-hash-table :test #'equal))
+  (lock :accessor elp-lock :initform (bt2:make-lock))
+  (:defmethod create-logger ILogger ((category :string))
+    (bt2:with-lock-held ((elp-lock this))
+      (let ((loggers (elp-loggers this)))
+        (or (gethash category loggers)
+            (setf (gethash category loggers) (make-instance 'example-logger))))))
+  (:defmethod dispose :void ()
+    (bt2:with-lock-held ((elp-lock this))
+      (clrhash (elp-loggers this)))))
 
 (defun bike-examples:start-hello-host
     (&optional (server-port *default-hello-server-port*))
   (declare (type (integer 1 65535) server-port))
   "Starts Kestrel server listener on the specified SERVER-IP"
-  ;;; Ensure our host is not running first
+  ;; Ensure our host is not running first
   (when *host* (bike-examples:stop-hello-host))
-  (let ((builder (new 'WebHostBuilder)) ;; create a host builder
-        (*server-port* server-port))
-    ;; Now we need to do two things, first - configure Kestrel as
-    ;;   our server.
-    ;; Second - configure services available through AspNet dependency injections
-    (setf builder (invoke 'HostingAbstractionsWebHostBuilderExtensions 'UseContentRoot
-                          builder *deps-directory*)
-          builder (invoke 'WebHostBuilderKestrelExtensions 'UseKestrel builder
-                          (new '(Action KestrelServerOptions)
-                               'configure-kestrel))
-          builder (invoke builder 'ConfigureServices
-                          (new '(Action WebHostBuilderContext IServiceCollection)
-                               'configure-services)))
+  ;; set global state
+  (setf *controller* (make-instance 'example-controller)
+        *controller-activator* (make-instance 'example-controller-activator)
+        *feature-provider* (make-instance 'example-feature-provider)
+        *controller-model-convention* (make-instance 'example-controller-model-convention)
+        *action-model-convention* (make-instance 'example-action-model-convention)
+        *logger-provider* (make-instance 'example-logger-provider)
+        *server-port* server-port)
+  (let* ((app-opts (new 'WebApplicationOptions)) ;; empty options
+         ;; Create a host builder.
+         ;; Use CreateEmptyBuilder to configure framework from scratch
+         (builder [:WebApplication CreateEmptyBuilder app-opts])
+         ;; retrieve Dependency Injection container
+         (services [builder %Services]))
+    ;; Add logger provider to DI container
+    [:ServiceCollectionServiceExtensions
+     (AddSingleton ILoggerProvider) services *logger-provider*]
+    ;; Add Kestrel to DI container
+    [:ServiceCollectionServiceExtensions
+     (AddSingleton IServer KestrelServer) services]
+    ;; Add Kestrel transport to DI container
+    [:ServiceCollectionServiceExtensions
+     (AddSingleton IConnectionListenerFactory SocketTransportFactory) services]
+    ;; Add custom controller activator to DI container
+    [::ServiceCollectionServiceExtensions
+     (AddSingleton IControllerActivator) services *controller-activator*]
+    ;; Configure Kestrel
+    [:OptionsServiceCollectionExtensions
+     (Configure KestrelServerOptions)
+     [builder %Services]
+     (new '(Action KestrelServerOptions) 'configure-kestrel)]
+    ;; Configure MVC
+    (let* ((mvc [:MvcServiceCollectionExtensions
+                 AddMvc services (new '(Action MvcOptions) 'configure-mvc)])
+           (part-mgr [mvc %PartManager]))
+      ;; Configure MVC features
+      [[part-mgr %FeatureProviders] Add *feature-provider*])
     ;; Build the host and start it
-    (let ((host (invoke builder 'Build)))
-      (invoke host 'Start)
-      (setf *host* host))))
+    (let ((app [builder Build]))
+      (setf *host* app)
+      ;; Add controllers middleware
+      [:ControllerEndpointRouteBuilderExtensions MapControllers app]
+      ;; start the app
+      [[app StartAsync [:CancellationToken %None]] Wait])))
 
 (defun bike-examples:stop-hello-host ()
   "Stops Kestrel server listener"
   (when *host*
-    (invoke (invoke *host* 'StopAsync (property 'CancellationToken 'None))
-            'Wait)
+    [[*host* StopAsync [:CancellationToken %None]] Wait]
+    [*host* Dispose]
     (setf *host* nil)))
+
+(defun configure-mvc (opts)
+  ;; Add custom controller convention
+  [:ApplicationModelConventionExtensions
+   Add [opts %Conventions] *controller-model-convention*]
+  ;; Add custom action convention
+  [:ApplicationModelConventionExtensions
+   Add [opts %Conventions] *action-model-convention*])
 
 (defun configure-kestrel (opts)
   "Configures Kestrel server"
   ;; Allow for listening on any IP on the specified port (5000 by default)
-  (invoke opts 'ListenAnyIp *server-port*))
-
-(defun configure-services (ctx services)
-  (declare (ignore ctx))
-  "Configures AspNet Core services"
-  ;; First configure MVC
-  (invoke 'MvcServiceCollectionExtensions 'AddMvc services)
-  ;; Now the next thing is required because we do not use custom Startup
-  ;;  class as usual C# applications do.
-  ;; Instead, we use DelegateStartup instance and do configuration using callbacks.
-  (invoke 'ServiceCollectionServiceExtensions '(AddSingleton IStartup) services
-          (new '(Func IServiceProvider IStartup) 'get-delegate-startup)))
-
-(defun get-delegate-startup (provider)
-  (declare (type dotnet-object provider))
-  "Retrieves DelegateStartup instance for delegate-based configuration"
-  ;; First, retrieve IServiceProviderFactory<IServiceCollections> instance,
-  ;;  which is the required first argument of DelegateStartup constructor
-  (let* ((type (resolve-type '(IServiceProviderFactory IServiceCollection)))
-         (factory (invoke provider 'GetService type)))
-    ;; Create a DelegateStartup and pass our configuration callback to it
-    (new 'DelegateStartup factory
-         (new '(Action IApplicationBuilder) 'configure-pipeline))))
-
-(defun configure-pipeline (app)
-  (declare (type dotnet-object app))
-  "A callback which configures AspNet pipeline.
- APP argument represents IApplicationBuilder instance."
-  ;; We don't need a lot of configuration here, simply
-  ;;  configure MVC, and make use of our route configuration callback
-  (invoke 'MvcApplicationBuilderExtensions 'UseMvc app
-          (new '(Action IRouteBuilder) 'configure-routes)))
-
-(defun configure-routes (builder)
-  (declare (type dotnet-object builder))
-  "Configures AspNet MVC routes. BUILDER represents IRouteBuilder"
-  ;; Map a single route for GET /{name}, and supply our custom route handler
-  (invoke 'RequestDelegateRouteBuilderExtensions 'MapGet builder
-          "/{name=None}"
-          (new '(Func HttpRequest HttpResponse RouteData Task)
-               'process-request)))
-
-(defun process-request (request response route-data)
-  (declare (type dotnet-object request response route-data)
-           (ignore request))
-  "Processes a single HTTP request.
- REQUEST parameter represents an instance of HttpRequest.
- RESPONSE parameter is an instance of HttpResponse, which we would modify.
- ROUTE-DATA represent a collection of route data parameters(a RouteData instance)."
-  (handler-case
-      ;; First, retrieve the 'name' route parameter, which we have configured
-      ;;  in our CONFIGURE-ROUTES handler
-      ;; In case of it represents a string which equals to 'None',
-      ;;  we instead utilize current user name.
-      (let* ((route-arg (ref (property route-data 'Values) "name"))
-             (who (if (string-equal route-arg "None")
-                    (property 'Environment 'UserName)
-                    route-arg)))
-        ;; Set response content type
-        (setf (property response 'ContentType) "text/plain; encoding=utf-8")
-        ;; Write a string to response stream. Note that the extension method
-        ;;   which we are making use of, returns a Task instance
-        (invoke 'HttpResponseWritingExtensions 'WriteAsync response
-                (format nil "Hello from AspNet.Mvc, ~a!~%Now is ~a~%"
-                        who
-                        (invoke (property 'DateTime 'Now) 'ToString))
-                (property 'CancellationToken 'None)))
-    (error (e)
-      ;; Handle error in case of one occurs and return completed task
-      (format *error-output* "~a~%" e)
-      (property 'Task 'CompletedTask))))
+  [opts ListenAnyIp *server-port*]
+  ;; Allow synchronous IO, for convenience
+  (setf [opts %AllowSynchronousIO] t))
 
 ;;; The below function could be used for testing server response.
 ;;; You can however, use curl for that, or even open the page in browser
@@ -314,16 +265,15 @@
   (declare (type (integer 1 65535) port))
   "Retrieves a string message from running web host"
   (let* ((client (new 'HttpClient))
-         (who (when who (invoke 'HttpUtility 'UrlEncode (invoke (box who) 'ToString))))
-         (url (property (new 'UriBuilder "http" "localhost" port (or who ""))
-                        'Uri))
+         (who (when who [:HttpUtility UrlEncode [(box who) ToString]]))
+         (url  [(new 'UriBuilder "http" "localhost" port (or who "")) %Uri])
          (stdout *standard-output*))
     ;; Do not use "Result" property directly, it may cause a deadlock, especially
     ;;  if not all the required type members are cached yet
-    (invoke (invoke client 'GetStringAsync url) 'ContinueWith
-            (new '(Action Task)
-                 (lambda (task)
-                   (invoke client 'Dispose)
-                   (format stdout "~a" (property task 'Result)))))))
+    [[client GetStringAsync url] ContinueWith
+     (new '(Action Task)
+          (lambda (task)
+            [client Dispose]
+            (format stdout "~a" [task %Result])))]))
 
 ;;; vim: ft=lisp et!
