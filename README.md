@@ -27,7 +27,7 @@ The above only applies to X86-64.
 
 See below for [known issues](#known-issues).
 
-#### CircleCI status (.NET 7, SBCL and CCL on ubuntu-jammy)
+#### CircleCI status (.NET 8, SBCL and CCL on ubuntu-jammy)
 
 [![CircleCI](https://circleci.com/gh/Lovesan/bike/tree/master.svg?style=svg)](https://circleci.com/gh/Lovesan/bike/tree/master)
 
