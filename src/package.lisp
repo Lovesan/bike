@@ -64,7 +64,18 @@
   (:import-from #:uiop
                 #:strcat
                 #:register-image-restore-hook
-                #:register-image-dump-hook)
+                #:register-image-dump-hook
+                #:probe-file*
+                #:make-pathname*
+                #:merge-pathnames*
+                #:pathname-directory-pathname
+                #:get-pathname-defaults
+                #:lisp-implementation-directory
+                #:inter-directory-separator
+                #:directory*
+                #:*wild*
+                #:string-prefix-p
+                #:string-suffix-p)
   (:import-from #:alexandria
                 #:with-gensyms
                 #:once-only
@@ -79,6 +90,8 @@
                 #:ensure-list
                 #:when-let
                 #:when-let*)
+  (:import-from #:cl-ppcre
+                #:regex-replace)
   (:export
    ;; some internals reexports
    #:native-path

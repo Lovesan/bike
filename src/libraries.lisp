@@ -31,14 +31,14 @@
     (let ((lib (find-coreclr)))
       (if lib
         (progn (setf -coreclr-location- lib)
-               (pushnew (uiop:pathname-directory-pathname lib)
+               (pushnew (pathname-directory-pathname lib)
                         *foreign-library-directories*
                         :test #'equalp))
         (error "Unable to find CoreCLR")))
     (let ((lib (find-interop t)))
       (if lib
         (progn (setf -interop-location- lib)
-               (pushnew (uiop:pathname-directory-pathname lib)
+               (pushnew (pathname-directory-pathname lib)
                         *foreign-library-directories*
                         :test #'equalp))
         (error "Unable to find BikeInterop.dll")))
@@ -52,10 +52,23 @@
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %get-related-app-path (name)
-    (cl-ppcre:regex-replace
+    (regex-replace
      "(?i)Microsoft\\.NetCore\\.App"
-     (native-path (uiop:pathname-directory-pathname -coreclr-location-))
+     (native-path (pathname-directory-pathname -coreclr-location-))
      name)))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (define-global-var -aspnet-sdk-dir- nil)
+  (defun initialize-aspnet-search-location ()
+    (let* ((aspnet-sdk-dir (pathname
+                            (%get-related-app-path "Microsoft.AspNetCore.App"))))
+      (if (probe-file* (make-pathname* :name "Microsoft.AspNetCore.dll"
+                                       :defaults aspnet-sdk-dir))
+        (pushnew (setf -aspnet-sdk-dir- aspnet-sdk-dir)
+                 *foreign-library-directories*
+                 :test #'equalp)
+        (setf -aspnet-sdk-dir- nil))))
+  (register-image-restore-hook 'initialize-aspnet-search-location))
 
 #+coreclr-windows
 (progn
@@ -64,9 +77,9 @@
     (defun initialize-wpfgfx-search-location ()
       (let* ((desktop-sdk-dir (pathname
                                (%get-related-app-path "Microsoft.WindowsDesktop.App"))))
-        (if (uiop:probe-file*
-             (uiop:make-pathname* :name "wpfgfx_cor3.dll"
-                                  :defaults desktop-sdk-dir))
+        (if (probe-file*
+             (make-pathname* :name "wpfgfx_cor3.dll"
+                             :defaults desktop-sdk-dir))
           (pushnew (setf -desktop-sdk-dir- desktop-sdk-dir)
                    *foreign-library-directories*
                    :test #'equalp)
@@ -97,10 +110,10 @@
   (eval-when (:compile-toplevel :load-toplevel :execute)
     (define-global-var -has-system-native- nil)
     (defun initialize-system-native-search ()
-      (let ((path (uiop:merge-pathnames*
+      (let ((path (merge-pathnames*
                    +system-native-library-file+
-                   (uiop:pathname-directory-pathname -coreclr-location-))))
-        (when (uiop:probe-file* path)
+                   (pathname-directory-pathname -coreclr-location-))))
+        (when (probe-file* path)
           (setf -has-system-native- t))))
     (register-image-restore-hook 'initialize-system-native-search))
   (eval-when (:compile-toplevel :load-toplevel :execute)
@@ -122,23 +135,31 @@
            (mapcar #'native-path
                    (remove nil
                            (list
-                            (uiop:pathname-directory-pathname -coreclr-location-)
+                            (pathname-directory-pathname -coreclr-location-)
                             #+windows
                             -desktop-sdk-dir-
-                            (uiop:pathname-directory-pathname -interop-location-)
-                            (uiop:get-pathname-defaults)
-                            (uiop:lisp-implementation-directory)
-                            (uiop:pathname-directory-pathname (get-exe-path)))))
+                            -aspnet-sdk-dir-
+                            (pathname-directory-pathname -interop-location-)
+                            (get-pathname-defaults)
+                            (lisp-implementation-directory)
+                            (pathname-directory-pathname (get-exe-path)))))
            :test #'equalp)))
-    (format nil (strcat "~{~a~^" (uiop:inter-directory-separator) "~}")
+    (format nil (strcat "~{~a~^" (inter-directory-separator) "~}")
             (nreverse directories))))
 
 (defun get-trusted-platform-assemblies ()
   "Retrieves a list of pathnames of trusted platform assemblies"
-  (let ((defaults (uiop:directory* (uiop:make-pathname*
-                                    :name uiop:*wild*
-                                    :type "dll"
-                                    :defaults -coreclr-location-))))
+  (let ((defaults (directory* (make-pathname*
+                               :name *wild*
+                               :type "dll"
+                               :defaults -coreclr-location-))))
+    (when -aspnet-sdk-dir-
+      (setf defaults (append defaults
+                             (directory*
+                              (make-pathname*
+                               :name *wild*
+                               :type "dll"
+                               :defaults -aspnet-sdk-dir-)))))
     ;; On Windows, we want to default to Desktop SDK, should
     ;;  it be installed, to be able to use WinForms/WPF.
     ;; How's the addition of the desktop SDK dir to APP/NI
@@ -152,9 +173,9 @@
     ;;  simply extended ones of the defaults.
     #+coreclr-windows
     (if -desktop-sdk-dir-
-      (loop :with desktop-asms = (uiop:directory*
-                                  (uiop:make-pathname*
-                                   :name uiop:*wild*
+      (loop :with desktop-asms = (directory*
+                                  (make-pathname*
+                                   :name *wild*
                                    :type "dll"
                                    :defaults -desktop-sdk-dir-))
             :for asm :in defaults
@@ -170,17 +191,17 @@
     defaults))
 
 (defun %get-tpa-string ()
-  (format nil (strcat "~{~a~^" (uiop:inter-directory-separator) "~}~a~a")
+  (format nil (strcat "~{~a~^" (inter-directory-separator) "~}~a~a")
           (mapcar #'native-path (get-trusted-platform-assemblies))
-          (uiop:inter-directory-separator)
+          (inter-directory-separator)
           (native-path -interop-location-)))
 
 (defun %get-trusted-assembly-names ()
   (loop :with tpa-dlls = (get-trusted-platform-assemblies)
         :for full-pathname :in tpa-dlls
         :for name = (pathname-name full-pathname)
-        :when (and (uiop:string-prefix-p "System." name)
-                   (not (uiop:string-suffix-p name ".Native")))
+        :when (and (string-prefix-p "System." name)
+                   (not (string-suffix-p name ".Native")))
           :collect name))
 
 ;;; vim: ft=lisp et
