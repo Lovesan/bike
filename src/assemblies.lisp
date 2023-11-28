@@ -24,7 +24,7 @@
 
 (in-package #:bike)
 
-(defvar *default-assemblies* (%get-trusted-assembly-names)
+(defvar *default-assemblies* '()
   "A list of assembly names that are loaded by default,
  including on lisp image restore")
 
@@ -64,7 +64,8 @@
 (defun init-type-table (namespaces types aliases)
   (setf -type-table- (%type-table))
   ;; load default assemblies
-  (dolist (assembly-string *default-assemblies*)
+  (dolist (assembly-string (append (%get-trusted-assembly-names)
+                                   *default-assemblies*))
     (load-assembly assembly-string))
   (import-loaded-assemblies)
   (use-type-alias :object "System.Object")
