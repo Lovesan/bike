@@ -620,8 +620,9 @@
                                &allow-other-keys)
   (when base-type
     (remf initargs :base-type)
-    (let ((type (resolve-type base-type)))
-      (setf initargs (list* :base-type (normalize-typespec type) initargs))))
+    (destructuring-bind (base-type) (ensure-list base-type)
+      (let ((type (resolve-type base-type)))
+        (setf initargs (list* :base-type (normalize-typespec type) initargs)))))
   (when interfaces
     (remf initargs :interfaces)
     (let ((interfaces (mapcar (lambda (interface)

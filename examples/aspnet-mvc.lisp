@@ -86,7 +86,7 @@
 
 ;; Asp.Net MVC controller
 (define-dotnet-callable-class (example-controller
-                               (:base-type . ControllerBase))
+                               (:base-type ControllerBase))
     ()
   ;; Echo the 'Hello' message to client
   (:method index :string ((name :string))
