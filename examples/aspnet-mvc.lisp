@@ -215,7 +215,7 @@
     [:ServiceCollectionServiceExtensions
      (AddSingleton IConnectionListenerFactory SocketTransportFactory) services]
     ;; Add custom controller activator to DI container
-    [::ServiceCollectionServiceExtensions
+    [:ServiceCollectionServiceExtensions
      (AddSingleton IControllerActivator) services *controller-activator*]
     ;; Configure Kestrel
     [:OptionsServiceCollectionExtensions
