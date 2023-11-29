@@ -27,6 +27,7 @@
 (uiop:define-package #:bike-internals
   (:use #:cl #:global-vars #:uiop #:cffi #:split-sequence #:flexi-streams #:cl-ppcre)
   (:import-from #:alexandria
+                #:array-index
                 #:string-designator
                 #:define-constant
                 #:non-negative-fixnum
@@ -76,6 +77,38 @@
    #:camel-case-string
    #:lisp-case-string
    #:whitespace-char-p
+
+   ;; string buffer
+   #:*default-string-buffer-capacity*
+   #:string-buffer
+   #:string-buffer-p
+   #:make-string-buffer
+   #:copy-string-buffer
+   #:sb-data
+   #:sb-capacity
+   #:sb-length
+   #:sb-string
+   #:sb-ensure-capacity
+   #:sb-extend
+   #:sb-delete
+   #:sb-insert-string
+   #:sb-append-string
+   #:sb-append-line
+   #:sb-append-format
+
+   ;; line buffer
+   #:line-buffer
+   #:line-buffer-p
+   #:make-line-buffer
+   #:copy-line-buffer
+   #:lb-line-start
+   #:lb-position
+   #:lb-seen-cr-p
+   #:lb-shift
+   #:lb-process-lines
+   #:process-string-lines
+   #:line-callback
+   #:make-line-output-callback
 
    ;; Pathnames
    #:native-path
