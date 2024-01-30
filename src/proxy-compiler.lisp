@@ -233,7 +233,8 @@
            ,@body)))))
 
 (defun tbs-gen-unbox (gen type &optional (tmp [gen DeclareLocal [:object]]))
-  (declare (type ))
+  (declare (type dotnet-object gen tmp)
+           (type dotnet-type type))
   (with-il-generator (gen gen unbox unbox-end)
     (emit Stloc tmp)
     (emit Ldloc tmp)
