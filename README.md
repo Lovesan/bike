@@ -19,6 +19,7 @@ Now you have the batteries included! Which are of the size of Battersea Power St
 |:--------:|:-------:|:-----:|:------:|
 | **SBCL** | ![OK](https://placehold.co/80x30/239922/FFF?text=OK) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
 | **CCL**  | ![OK*](https://placehold.co/80x30/239922/FFF?text=OK%2A) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception)  | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
+| **ECL**  | [![ECL Bug](https://placehold.co/80x30/A00/DD2?text=ECL%20Bug)](https://gitlab.com/embeddable-common-lisp/ecl/-/issues/679) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-sbcl-or-ccl-on-linux-due-to-floating-point-exception)  | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
 | Other    | ![?](https://placehold.co/80x30/999/FFF?text=%3F) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) | ![?](https://placehold.co/80x30/999/FFF?text=%3F) |
 
 \* With some exceptions
@@ -112,7 +113,9 @@ Avoid using this if you pass Lisp callbacks to .Net code - this may cause deadlo
 
 A CL implementation without proper support of foreign thread callbacks probably crashes should you pass a callback to some .NET code which would execute it on a different .Net thread.
 
-SBCL has full support for foreign thread callbacks. Unlike CCL, for example.
+- SBCL has full support for foreign thread callbacks.
+- Unlike CCL, for example.
+- [ECL requires foreign code to call specific runtime function on foreign thread before lisp code can be executed](https://ecl.common-lisp.dev/static/manual/Embedding-ECL.html#index-ecl_005fimport_005fcurrent_005fthread-1), so if using FTC, write wrappers in C# and don't pass callbacks into foreign code directly.
 
 ### Windows
 
@@ -120,6 +123,8 @@ The library works well on SBCL/Windows, runtimes and garbage collectors seem to 
 SBCL callbacks can even be utilized by .Net [System.Threading.Tasks](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks?view=netcore-2.2)
 
 CCL/Windows does not handle foreign thread callbacks properly but otherwise, the library works fine on this implementation.
+
+ECL/Win64 currently has this bug, which prevents the library from building: https://gitlab.com/embeddable-common-lisp/ecl/-/issues/679
 
 #### CoreCLR location
 
@@ -145,7 +150,7 @@ Seems like it has been resolved. [This particular patch from Luís Oliveira grea
 
 ### Linux
 
-#### .NET 6+ runtime loading crashes SBCL or CCL on Linux due to floating point exception
+#### .NET 6+ runtime loading crashes Lisp runtime on Linux due to floating point exception
 
 https://github.com/Lovesan/bike/issues/10
 
@@ -182,6 +187,11 @@ However, the side effect is that you would get no floating-point-related errors 
 For CCL:
 ````lisp
 (ccl:set-fpu-mode :invalid nil)
+````
+
+ECL workaround:
+````
+(ext:trap-fpe 'floating-point-invalid-operation nil)
 ````
 
 Also, take a look at https://github.com/Shinmera/float-features library.
