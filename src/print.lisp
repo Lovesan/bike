@@ -262,11 +262,14 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
         (message (exception-message ex))
         (trace (exception-stack-trace ex)))
     (pprint-logical-block (stream nil)
-      (format stream ".Net exception ~a: " type-name)
-      (pprint-newline :linear stream)
-      (print-normalized-newlines message stream)
-      (pprint-newline :mandatory stream)
-      (print-normalized-newlines trace stream)))
+      (format stream ".Net exception ~a" type-name)
+      (when message
+        (write-string ": " stream)
+        (pprint-newline :linear stream)
+        (print-normalized-newlines message stream))
+      (when trace
+        (pprint-newline :mandatory stream)
+        (print-normalized-newlines trace stream))))
   ex)
 
 (defun print-dotnet-object-simple (object stream &optional identity)
