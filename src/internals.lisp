@@ -26,6 +26,9 @@
 
 (in-package #:bike-internals)
 
+(deftype function-designator ()
+  `(or function symbol (cons (eql setf) (cons symbol null))))
+
 (define-constant +coreclr-library-file+
   #+coreclr-windows
   "coreclr.dll"

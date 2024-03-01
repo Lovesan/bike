@@ -70,6 +70,7 @@
                              (:file "proxy-compiler")
                              (:file "proxy-classes")
                              (:file "proxy-macros")
+                             (:file "apropos")
                              (:file "shutdown"))))
   :in-order-to  ((test-op (test-op #:bike-tests))))
 

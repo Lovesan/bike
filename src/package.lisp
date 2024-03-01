@@ -89,7 +89,8 @@
                 #:parse-body
                 #:ensure-list
                 #:when-let
-                #:when-let*)
+                #:when-let*
+                #:hash-table-keys)
   (:import-from #:cl-ppcre
                 #:regex-replace)
   (:export
@@ -314,6 +315,30 @@
    #:effective-callable-event-slot-definition
 
    ;; proxy macros
-   #:define-dotnet-callable-class))
+   #:define-dotnet-callable-class
+
+   ;; apropos
+   #:do-types
+   #:type-apropos
+   #:type-apropos-list
+   #:namespace-apropos
+   #:namespace-apropos-list
+   #:do-members
+   #:member-apropos
+   #:member-apropos-list
+   #:constructor-apropos
+   #:constructor-apropos-list
+   #:event-apropos
+   #:event-apropos-list
+   #:field-apropos
+   #:field-apropos-list
+   #:method-apropos
+   #:method-apropos-list
+   #:property-apropos
+   #:property-apropos-list
+   #:custom-member-apropos
+   #:custom-member-apropos-list
+   #:nested-type-apropos
+   #:nested-type-apropos-list))
 
 ;;; vim: ft=lisp et

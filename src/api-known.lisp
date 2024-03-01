@@ -79,6 +79,8 @@
   "Returns a list of types exported from ASSEMBLY"
   (bike-vector-to-list (%assembly-exported-types assembly)))
 
+(defknown %assembly-defined-types (System.Reflection.Assembly :property DefinedTypes))
+
 (declaim (ftype (function (dotnet-type) (or null string)) %type-full-name))
 (defknown %type-full-name (System.Type :property FullName)
     "Retrieves full name of a type")
@@ -355,6 +357,9 @@ type or method definition.")
 (defun property-indexer-p (property-info)
   (declare (type dotnet-object property-info))
   (plusp (%array-length (%property-index-parameters property-info))))
+
+(declaim (ftype (function (dotnet-object dotnet-object) dotnet-object) %get-type-members))
+(defknown %get-type-members (System.Type :method GetMembers System.Reflection.BindingFlags))
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %type-fields))
 (defknown %type-fields (System.Type :method GetFields))

@@ -34,6 +34,9 @@
                 #:with-gensyms
                 #:once-only)
   (:export
+   ;; Additional types
+   #:function-designator
+
    ;; .NET runtime location
    #:find-coreclr
    #:+coreclr-library-file+
