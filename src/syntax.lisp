@@ -36,24 +36,38 @@
          (endp (maybe-read-char stream #\])))
     (if (and staticp endp)
       `(resolve-type ',target)
-      (let* ((prefix (maybe-read-char stream #\$ #\%))
+      (let* ((prefix (maybe-read-char stream #\$ #\% #\+ #\-))
              (member (read stream t nil t))
              (args (read-delimited-list #\] stream t)))
-        (when (and prefix args)
-          (bike-reader-error
-           stream
-           (format nil
-                   (strcat
-                    "~&Field and property forms must not have arguments.~%"
-                    "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
-                   staticp
-                   target
-                   prefix
-                   member
-                   args)))
+        (cond ((and (member prefix '(#\$ #\%)) args)
+               (bike-reader-error
+                stream
+                (format nil
+                        (strcat
+                         "~&Field and property forms must not have arguments.~%"
+                         "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
+                        staticp
+                        target
+                        prefix
+                        member
+                        args)))
+              ((and (member prefix '(#\+ #\-)) (/= 1 (length args)))
+               (bike-reader-error
+                stream
+                (format nil
+                        (strcat
+                         "~&Event accessor form must have exactly one argument.~%"
+                         "Form was: [~:[~;:~]~s ~:[~;~:*~a~]~a ~{~a~^ ~}]")
+                        staticp
+                        target
+                        prefix
+                        member
+                        args))))
         `(,(case prefix
              (#\% 'property)
              (#\$ 'field)
+             (#\+ 'event-add)
+             (#\- 'event-remove)
              (t 'invoke))
           ,(if staticp `(quote ,target) target)
           (quote ,member)

@@ -131,6 +131,48 @@
                    new-value))
   new-value)
 
+(defun event-add (target name handler)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
+           (type string-designator name)
+           (type (or function-designator dotnet-delegate) handler))
+  "Subscribes to an event named NAME on a TARGET, which
+  can either be a type specifier, in which case a static event
+  is accessed, or an instance, which would lead to an instance event
+  subscription.
+
+HANDLER can either be a .NET delegate or lisp function-like object, in
+  which case a delegate is allocated for it behind the scenes.
+  Note that in the latter case, you won't be able to unsubscribe from an event."
+  (let* ((instancep (typep target 'dotnet-object*))
+         (type (if instancep
+                 (bike-type-of target)
+                 (resolve-type target))))
+    (%access-event type
+                   (simple-character-string-upcase name)
+                   (and instancep target)
+                   t
+                   handler)))
+
+(defun event-remove (target name handler)
+  (declare (type (or dotnet-object* dotnet-type-designator) target)
+           (type string-designator name)
+           (type dotnet-delegate handler))
+  "Unsubscribes from an event named NAME on a TARGET, which
+  can either be a type specifier, in which case a static event
+  is accessed, or an instance, which would lead to an instance event
+  reference.
+
+HANDLER must be a .NET delegate object."
+  (let* ((instancep (typep target 'dotnet-object*))
+         (type (if instancep
+                 (bike-type-of target)
+                 (resolve-type target))))
+    (%access-event type
+                   (simple-character-string-upcase name)
+                   (and instancep target)
+                   nil
+                   handler)))
+
 (defun new (type &rest args)
   (declare (type dotnet-type-designator type)
            (dynamic-extent args))

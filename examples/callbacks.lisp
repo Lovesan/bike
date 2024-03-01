@@ -66,9 +66,9 @@
           (property start-info 'StandardOutputEncoding) encoding
           (property start-info 'StandardErrorEncoding) encoding
           (property process 'EnableRaisingEvents) T)
-    (invoke process "add_OutputDataReceived"
+    (event-add process 'OutputDataReceived
             (make-process-output-handler *standard-output*))
-    (invoke process "add_ErrorDataReceived"
+    (event-add process 'ErrorDataReceived
             (make-process-output-handler *error-output*))
     (invoke process 'Start)
     (invoke process 'BeginOutputReadLine)

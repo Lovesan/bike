@@ -752,6 +752,20 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
       stream #'next-member)
      (write-custom-attributes info stream))))
 
+(define-dotnet-printer-for-names print-event-info (info stream)
+    (DeclaringType ReflectedType)
+  (let* ((add-method (event-get-add-method info t))
+         (handler-type (event-handler-type info)))
+    (write-method-qualifiers add-method stream)
+    (format stream "event ")
+    (write-type-name handler-type :stream stream)
+    (format stream " ~a;" (member-info-name info))
+    (when *print-escape*
+      (format stream "~_ ")))
+  (after-members
+   (write-member-attributes (event-attributes info) stream #'next-member)
+   (write-custom-attributes info stream)))
+
 (defun dotnet-object-printer (type)
   (declare (type dotnet-type-designator type))
   "Retrieves a print function for a .Net TYPE"
@@ -869,10 +883,12 @@ Function accepts two arguments - an OBJECT to print, and a STREAM to print to."
           System.Reflection.PropertyInfo print-property-info
           System.Reflection.ParameterInfo print-parameter-info
           System.Reflection.MethodInfo print-method-info
+          System.Reflection.EventInfo print-event-info
           System.Reflection.ConstructorInfo print-constructor-info
           System.Reflection.Emit.ConstructorBuilder print-dotnet-object-simple
           System.Reflection.Emit.MethodBuilder print-dotnet-object-simple
           System.Reflection.Emit.FieldBuilder print-dotnet-object-simple
-          System.Reflection.Emit.PropertyBuilder print-dotnet-object-simple)))
+          System.Reflection.Emit.PropertyBuilder print-dotnet-object-simple
+          System.Reflection.Emit.EventBuilder print-dotnet-object-simple)))
 
 ;;; vim: ft=lisp et

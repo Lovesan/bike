@@ -156,4 +156,35 @@
       (System.ObjectDisposedException () (setf got-ex t)))
     (is-true got-ex)))
 
+(test test-callable-class
+  (define-dotnet-callable-class callable-test-object ()
+    (:property string-property :string :accessor cto-string-property)
+    (:event raised System.EventHandler :accessor cto-raised)
+    (:method ((cto-duplicate-string-property "DuplicateStringProperty")) :string ()
+      (let ((value (cto-string-property this)))
+        (invoke 'System.String 'Concat value value))))
+  (let ((obj (make-instance 'callable-test-object)))
+    (setf (property obj 'StringProperty) "Hello")
+    (is (string= "Hello" (cto-string-property obj)))
+    (is (string= "HelloHello" (invoke obj 'DuplicateStringProperty)))))
+
+(test (test-event :depends-on test-callable-class)
+  (let* ((x 0)
+         (fun (lambda (sender e)
+                (declare (ignore sender e))
+                (incf x)))
+         (handler (new 'System.EventHandler fun))
+         (obj (make-instance 'callable-test-object))
+         (empty-eargs (field 'System.EventArgs 'Empty)))
+    (event-add obj 'Raised handler)
+    (funcall (cto-raised obj) obj empty-eargs)
+    (is (= x 1))
+    (event-remove obj 'Raised handler)
+    (is (null (cto-raised obj)))
+    (event-add obj 'Raised fun)
+    (funcall (cto-raised obj) obj empty-eargs)
+    (is (= x 2))
+    (signals event-resolution-error
+      (event-add obj 'NonExistingEvent fun))))
+
 ;;; vim: ft=lisp et

@@ -72,4 +72,28 @@
     (setf #[dict "Hello"] "World!")
     dict))
 
+(define-dotnet-callable-class example-object-with-event ()
+  (:event raised EventHandler :accessor eowe-raised))
+
+(defun event-syntax ()
+  (let ((obj (make-instance 'example-object-with-event))
+        (handler (new 'EventHandler (lambda (sender e)
+                                      (declare (ignore sender e))
+                                      (write-line "Event raised")))))
+    ;; Event syntax is somewhat similiar to method invocation.
+    ;; "+EventName" subscribes to an event, and the following line
+    ;; actually equals to (event-add obj 'Raised handler)
+    [obj +Raised handler]
+    ;; "-EventName" unsubscribes from an event.
+    ;; The following equals to (event-remove obj 'Raised handler)
+    [obj -Raised handler]
+    ;; Note that there's no syntax for event invocation, as RaiseMethod
+    ;; is not guaranteed to be present in EventInfo,
+    ;;   and for ex. C# compiler completely omits it while generating MSIL.
+    ;; For dotnet-callable classes you can use event slot value for that, however.
+    [obj +Raised handler]
+    (let ((raise-method (eowe-raised obj)))
+      (funcall raise-method obj (field 'EventArgs 'Empty)))
+    obj))
+
 ;;; vim: ft=lisp et

@@ -104,7 +104,7 @@
     (funcall (execute-callback this) param)))
 
 (define-dotnet-callable-class
-    (view-model-base (:interfaces  INotifyPropertyChanged)) ()
+    (view-model-base (:interfaces INotifyPropertyChanged)) ()
   "Base class for view models"
   ;; PropertyChangedEventHandler accepts two arguments:
   ;;   1) a `sender' :object (commonly used for passing `this' around), and

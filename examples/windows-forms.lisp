@@ -48,14 +48,12 @@
           [button %Font] (new 'System.Drawing.Font "Arial" 16.0e0)
           [button %Dock] #e(System.Windows.Forms.DockStyle Fill)
           [button %Parent] form)
-    [button add_Click
-            (new 'EventHandler
-                 (lambda (s e)
-                   (declare (ignore s e))
-                   [:System.Windows.Forms.MessageBox Show
-                                                     form
-                                                     "Hello, World!"
-                                                     "bike"]))]))
+    [button +Click (lambda (s e)
+                     (declare (ignore s e))
+                     [:System.Windows.Forms.MessageBox Show
+                                                       form
+                                                       "Hello, World!"
+                                                       "bike"])]))
 
 (defun bike-examples:hello-windows-forms ()
   (bt2:make-thread

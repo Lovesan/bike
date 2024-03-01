@@ -193,6 +193,8 @@
    #:field-resolution-error-field
    #:property-resolution-error
    #:property-resolution-error-property
+   #:event-resolution-error
+   #:event-resolution-error-event
    #:indexer-resolution-error
    #:method-resolution-error
    #:method-resolution-error-method
@@ -254,6 +256,8 @@
    #:field
    #:property
    #:ref
+   #:event-add
+   #:event-remove
    #:box
    #:unbox
    #:bike-type-p

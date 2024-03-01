@@ -354,6 +354,19 @@ type or method definition.")
 (defknown property-attributes (System.Reflection.PropertyInfo :property Attributes)
     "Retrieves property attributes")
 
+(defknown event-get-add-method (System.Reflection.EventInfo :method GetAddMethod
+                                                            System.Boolean)
+    "Retrieves add method for event")
+
+(defknown event-get-remove-method (System.Reflection.EventInfo :method GetRemoveMethod
+                                                               System.Boolean)
+    "Retrieves remove method for event")
+
+(defknown event-handler-type (System.Reflection.EventInfo :property EventHandlerType)
+    "Retrieves event handler type of an event.")
+
+(defknown event-attributes (System.Reflection.EventInfo :property Attributes))
+
 (defun property-indexer-p (property-info)
   (declare (type dotnet-object property-info))
   (plusp (%array-length (%property-index-parameters property-info))))
@@ -490,6 +503,10 @@ type or method definition.")
                                          System.Type
                                          "System.Type[]"
                                          "System.Reflection.ParameterModifier[]"))
+
+(defknown type-get-event (System.Type :method GetEvent
+                                      System.String
+                                      System.Reflection.BindingFlags))
 
 (defknown empty-types (System.Type :field EmptyTypes)
     "Returns empty type array")

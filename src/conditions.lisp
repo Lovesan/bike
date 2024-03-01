@@ -179,6 +179,17 @@
                      (member-resolution-error-member c)
                      (member-resolution-error-type c)))))
 
+(define-condition event-resolution-error (member-resolution-error)
+  ((%event :initarg :event
+           :initarg :member
+           :reader event-resolution-error-event
+           :reader member-resolution-error-member))
+  (:report (lambda (c s)
+             (format s "~&Unable to resolve ~:[~;static ~]event ~a~% of type ~s"
+                     (member-resolution-error-static-p c)
+                     (member-resolution-error-member c)
+                     (member-resolution-error-type c)))))
+
 (define-condition indexer-resolution-error (property-resolution-error)
   ())
 
@@ -212,11 +223,11 @@
   ((%kind :initarg :kind
           :reader accessor-resolution-error-accessor-kind
           :reader member-resolution-error-accessor-kind
-          :type (member :reader :writer))
+          :type (member :reader :writer :add :remove))
    (%member-kind :initarg :member-kind
                  :reader accessor-resolution-error-member-kind
                  :reader member-resolution-error-member-kind
-                 :type (member :field :property :indexer))
+                 :type (member :field :property :indexer :event))
    (%member :initarg :member
             :reader accessor-resolution-error-member
             :reader member-resolution-error-member))

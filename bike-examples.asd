@@ -29,7 +29,7 @@
   :maintainer "Dmitry Ignatiev <lovesan.ru at gmail.com>"
   :licence "MIT"
   :defsystem-depends-on (#:trivial-features #:float-features)
-  :depends-on (#:bike)
+  :depends-on (#:bike #:float-features)
   :serial t
   :components ((:module "examples"
                 :serial t

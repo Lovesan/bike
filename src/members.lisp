@@ -47,7 +47,7 @@
 
 (declaim (inline %ensure-ientry-accessor))
 (defun %ensure-ientry-accessor (type info member-type name kind instance)
-  (declare (type dotnet-type type)
+  (declare (type dotnet-type type member-type)
            (type simple-character-string name)
            (type (member :field :property) kind)
            (type (or null dotnet-object*) instance))
@@ -130,6 +130,21 @@
                                         arg-types
                                         nil))))
       (when selected (return selected)))))
+
+(defun %find-event (type name instancep &optional (errorp t) error-value)
+  (declare (type dotnet-type type)
+           (type simple-character-string name))
+  (or
+   (do-type-iterator (type type instancep)
+     (let ((event (type-get-event type
+                                  name
+                                  (%get-binding-flags instancep))))
+       (when event (return event))))
+   (if errorp
+     (error 'event-resolution-error :type type
+                                    :member name
+                                    :static-p (not instancep))
+     error-value)))
 
 (defun %filter-generic-methods (candidates type-arg-count type-args)
   (declare (type dotnet-object candidates)
@@ -297,6 +312,60 @@
                         :member "this[*]"
                         :member-kind :indexer
                         :kind (if readp :reader :writer))))))))
+
+(defun %ensure-event-ientry (type info name)
+  (declare (type dotnet-type type)
+           (type dotnet-object info)
+           (type simple-character-string name))
+  (let ((entry (get-ientry type name :event)))
+    (unless entry
+      (let (add-method-delegate
+            add-method-trampoline
+            remove-method-delegate
+            remove-method-trampoline)
+        (when-let ((add-method (event-get-add-method info nil)))
+          (multiple-value-bind (delegate fptr)
+              (%get-delegate-trampoline add-method '())
+            (setf add-method-delegate delegate
+                  add-method-trampoline (%compile-method add-method fptr))))
+        (when-let ((remove-method (event-get-remove-method info nil)))
+          (multiple-value-bind (delegate fptr)
+              (%get-delegate-trampoline remove-method '())
+            (setf remove-method-delegate delegate
+                  remove-method-trampoline (%compile-method remove-method fptr))))
+        (setf entry (add-ientry type name :event
+                                :reader add-method-trampoline
+                                :reader-delegate add-method-delegate
+                                :writer remove-method-trampoline
+                                :writer-delegate remove-method-delegate))))
+    entry))
+
+(defun %access-event (type name instance addp handler)
+  (declare (type dotnet-type type)
+           (type simple-character-string name)
+           (type (or null dotnet-object*) instance)
+           (type (or function-designator dotnet-delegate) handler))
+  (let* ((info (%find-event type name instance))
+         (handler (if (and addp (not (dotnet-delegate-p handler)))
+                    (let ((handler-type (event-handler-type info)))
+                      (%get-delegate-for-lisp-function handler handler-type))
+                    handler)))
+    (with-ientry (type reader writer)
+        (%ensure-event-ientry type info name)
+      (cond ((and addp reader instance)
+             (funcall (the function reader) instance handler))
+            ((and addp reader)
+             (funcall (the function reader) handler))
+            ((and writer instance)
+             (funcall (the function writer) instance handler))
+            (writer
+             (funcall (the function writer) handler))
+            (t (error 'accessor-resolution-error
+                      :type type
+                      :static-p (not instance)
+                      :member name
+                      :member-kind :event
+                      :kind (if addp :add :remove)))))))
 
 (defun %invoke-method (type name instance type-args &rest args)
   (declare (type dotnet-type type)
