@@ -125,6 +125,8 @@ namespace BikeInterop
         public static void InstallCallbacks(
             IntPtr freeLispHandleCallback,
             IntPtr applyCallback,
+            IntPtr eclImportCurrentThreadCallback,
+            IntPtr eclReleaseCurrentThreadCallback,
             out IntPtr exception)
         {
             exception = IntPtr.Zero;
@@ -137,7 +139,9 @@ namespace BikeInterop
             {
                 LispObject.InstallCallbacks(
                     freeLispHandleCallback,
-                    applyCallback);
+                    applyCallback,
+                    eclImportCurrentThreadCallback,
+                    eclReleaseCurrentThreadCallback);
             }
             catch (Exception ex)
             {

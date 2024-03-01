@@ -64,6 +64,12 @@
     (hostcall install-callbacks
               :pointer (callback free-lisp-handle-callback)
               :pointer (callback apply-callback)
+              :pointer
+              #+ecl (foreign-symbol-pointer "ecl_import_current_thread")
+              #-(or ecl) (null-pointer)
+              :pointer
+              #+ecl (foreign-symbol-pointer "ecl_release_current_thread")
+              #-(or ecl) (null-pointer)
               :pointer ex)
     (%transform-exception (mem-ref ex :pointer))
     (setf -callbacks-initialized- t)))

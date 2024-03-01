@@ -56,6 +56,8 @@ namespace BikeInterop
         private static FreeHandleCallback _freeLispHandle;
         private static ApplyCallback _apply;
 
+        private static readonly IntPtr EclNil = new IntPtr(1);
+
         private bool _disposed;
 
         private LispObject(IntPtr handle) => Handle = handle;
@@ -83,10 +85,49 @@ namespace BikeInterop
 
         internal static void InstallCallbacks(
             IntPtr freeLispHandleCallback,
-            IntPtr applyCallback)
+            IntPtr applyCallback,
+            IntPtr eclImportCurrentThreadCallback,
+            IntPtr eclReleaseCurrentThreadCallback)
         {
-            _freeLispHandle = Marshal.GetDelegateForFunctionPointer<FreeHandleCallback>(freeLispHandleCallback);
-            _apply = Marshal.GetDelegateForFunctionPointer<ApplyCallback>(applyCallback);
+            var freeLispHandle = Marshal.GetDelegateForFunctionPointer<FreeHandleCallback>(freeLispHandleCallback);
+            var apply = Marshal.GetDelegateForFunctionPointer<ApplyCallback>(applyCallback);
+            if (eclImportCurrentThreadCallback != IntPtr.Zero &&
+                eclReleaseCurrentThreadCallback != IntPtr.Zero)
+            {
+                var eclImportCurrentThread = Marshal.GetDelegateForFunctionPointer<EclImportCurrentThreadCallback>(eclImportCurrentThreadCallback);
+                var eclReleaseCurrentThread = Marshal.GetDelegateForFunctionPointer<EclReleaseCurrentThreadCallback>(eclReleaseCurrentThreadCallback);
+                _freeLispHandle = (handle) =>
+                {
+                    var imported = eclImportCurrentThread(EclNil, EclNil);
+                    try
+                    {
+                        freeLispHandle(handle);
+                    }
+                    finally
+                    {
+                        if (imported)
+                            eclReleaseCurrentThread();
+                    }
+                };
+                _apply = (IntPtr function, IntPtr args, IntPtr codes, int nArgs, out IntPtr exception, out bool dotnetException) =>
+                {
+                    var imported = eclImportCurrentThread(EclNil, EclNil);
+                    try
+                    {
+                        return apply(function, args, codes, nArgs, out exception, out dotnetException);
+                    }
+                    finally
+                    {
+                        if (imported)
+                            eclReleaseCurrentThread();
+                    }
+                };
+            }
+            else
+            {
+                _freeLispHandle = freeLispHandle;
+                _apply = apply;
+            }
         }
 
         /// <summary>
