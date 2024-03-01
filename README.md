@@ -115,7 +115,7 @@ A CL implementation without proper support of foreign thread callbacks probably 
 
 - SBCL has full support for foreign thread callbacks.
 - Unlike CCL, for example.
-- [ECL requires foreign code to call specific runtime function on foreign thread before lisp code can be executed](https://ecl.common-lisp.dev/static/manual/Embedding-ECL.html#index-ecl_005fimport_005fcurrent_005fthread-1), so if using FTC, write wrappers in C# and don't pass callbacks into foreign code directly.
+- ECL requires foreign threads to be manually registered in the Lisp runtime. The library does this automatically.
 
 ### Windows
 
