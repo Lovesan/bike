@@ -127,9 +127,6 @@
                               :setter-delegate setter
                               :invoke-delegate invoke)))
 
-(defun type-vector (&rest elements)
-  (list-to-bike-vector elements :element-type :type))
-
 (defun make-type-builder-state (name base-type interfaces)
   (declare (type simple-character-string name)
            (type (or null dotnet-type) base-type)

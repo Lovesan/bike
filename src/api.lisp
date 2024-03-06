@@ -46,7 +46,7 @@
                                :position 0
                                :datum method))
                       (mapcar #'resolve-type (cdr method)))))
-    (apply #'%invoke-method type name (and instancep target) type-args args)))
+    (%invoke-method type name (and instancep target) type-args args)))
 
 (defun property (target name)
   (declare (type (or dotnet-object* dotnet-type-designator) target)
@@ -87,14 +87,14 @@
            (dynamic-extent indices))
   "Retrieves a value of an indexer from a TARGET, which
  must be an instance."
-  (apply #'%access-indexer target t nil (cons index indices)))
+  (%access-indexer target t nil (cons index indices)))
 
 (defun (setf ref) (new-value target index &rest indices)
   (declare (type dotnet-object* target)
            (dynamic-extent indices))
   "Changes a value of an indexer from a TARGET, which
  must be an instance."
-  (apply #'%access-indexer target nil new-value (cons index indices)))
+  (%access-indexer target nil new-value (cons index indices)))
 
 (defun field (target name)
   (declare (type (or dotnet-object* dotnet-type-designator) target)
@@ -185,7 +185,7 @@ In case of the TYPE being a delegate type, first,
       (let ((lisp-function (first args)))
         (declare (type (or symbol function) lisp-function))
         (%get-delegate-for-lisp-function lisp-function type))
-      (apply #'%new type args))))
+      (%new type args))))
 
 (defun unbox (object)
   "Attempts to unbox an OBJECT into lisp object"

@@ -141,4 +141,8 @@ In case of the TYPE being a delegate type, first,
         ((= i count) vector)
       (setf (dnvref vector i) (car sublist)))))
 
+(defun type-vector (&rest elements)
+  "Returns a .NET vector of type System.Type containing ELEMENTS"
+  (list-to-bike-vector elements :element-type :type))
+
 ;;; vim: ft=lisp et
