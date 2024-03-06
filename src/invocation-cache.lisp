@@ -57,7 +57,7 @@
 (defconstant +max-invocation-cache-count+ (min most-positive-fixnum
                                                10000))
 
-(defconstant +invocation-cache-rehash-threshold+ 1.5)
+(defconstant +invocation-cache-rehash-threshold+ 0.75)
 
 (defstruct (invocation-cache (:constructor make-icache)
                              (:copier nil)
@@ -253,7 +253,7 @@
                        :arg-type-count arg-type-count
                        :arg-types arg-types)
           (let ((vector buckets))
-            (when (> (/ count (length vector))
+            (when (> (/ (float count) (length vector))
                      +invocation-cache-rehash-threshold+)
               (%resize-icache)
               (setf vector buckets))
