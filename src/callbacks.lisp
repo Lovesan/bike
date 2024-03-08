@@ -38,6 +38,8 @@
   (handler-case
       (let ((function (%handle-table-get (pointer-address fun-handle)))
             (args '()))
+        (setf (mem-ref out-ex-from-dotnet :bool) nil
+              (mem-ref out-ex :pointer) (null-pointer))
         (dotimes (i n-args)
           (let ((boxed (mem-aref args-ptr :pointer i))
                 (type-code (mem-aref type-codes-ptr :int i)))
