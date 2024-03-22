@@ -34,7 +34,9 @@ namespace BikeInterop
     /// <param name="args">Argument array pointer</param>
     /// <param name="typeCodes">Argument type code pointer</param>
     /// <param name="nArgs">Argument count</param>
+    /// <param name="releaseRvHandle">Whether to release the handle of the return value object</param>
     /// <param name="exception">An exception object, should one occur</param>
+    /// <param name="isDotnetException">Designates whether an exception object comes from .NET</param>
     /// <returns></returns>
-    public delegate IntPtr ApplyCallback(IntPtr function, IntPtr args, IntPtr typeCodes, int nArgs, out IntPtr exception, out bool isDotnetException);
+    public delegate IntPtr ApplyCallback(IntPtr function, IntPtr args, IntPtr typeCodes, int nArgs, out bool releaseRvHandle, out IntPtr exception, out bool isDotnetException);
 }

@@ -33,13 +33,15 @@
               (args-ptr :pointer)
               (type-codes-ptr :pointer)
               (n-args :int)
+              (release-rv-ptr :pointer)
               (out-ex :pointer)
               (out-ex-from-dotnet :pointer))
   (handler-case
       (let ((function (%handle-table-get (pointer-address fun-handle)))
             (args '()))
         (setf (mem-ref out-ex-from-dotnet :bool) nil
-              (mem-ref out-ex :pointer) (null-pointer))
+              (mem-ref out-ex :pointer) (null-pointer)
+              (mem-ref release-rv-ptr :bool) nil)
         (dotimes (i n-args)
           (let ((boxed (mem-aref args-ptr :pointer i))
                 (type-code (mem-aref type-codes-ptr :int i)))
@@ -47,7 +49,10 @@
                 (%unbox boxed type-code)
               (when cleanup (%free-handle boxed))
               (push arg args))))
-        (values (%box (apply function (nreverse args)))))
+        (multiple-value-bind (boxed cleanup)
+            (%box (apply function (nreverse args)))
+          (setf (mem-ref release-rv-ptr :bool) cleanup)
+          boxed))
     (dotnet-error (e)
       (setf (mem-ref out-ex-from-dotnet :bool) t
             (mem-ref out-ex :pointer)

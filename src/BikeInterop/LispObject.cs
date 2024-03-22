@@ -109,12 +109,12 @@ namespace BikeInterop
                             eclReleaseCurrentThread();
                     }
                 };
-                _apply = (IntPtr function, IntPtr args, IntPtr codes, int nArgs, out IntPtr exception, out bool dotnetException) =>
+                _apply = (IntPtr function, IntPtr args, IntPtr codes, int nArgs, out bool releaseRvHandle, out IntPtr exception, out bool dotnetException) =>
                 {
                     var imported = eclImportCurrentThread(EclNil, EclNil);
                     try
                     {
-                        return apply(function, args, codes, nArgs, out exception, out dotnetException);
+                        return apply(function, args, codes, nArgs, out releaseRvHandle, out exception, out dotnetException);
                     }
                     finally
                     {
@@ -210,7 +210,14 @@ namespace BikeInterop
                 typeCodes[i] = args[i].GetFullTypeCode();
             }
 
-            var rv = _apply(Handle, (IntPtr) realArgs, (IntPtr)typeCodes, argCount, out var exInfo, out var isDotnetException);
+            var rv = _apply(
+                Handle,
+                (IntPtr) realArgs,
+                (IntPtr)typeCodes,
+                argCount,
+                out var releaseRvHandle,
+                out var exInfo,
+                out var isDotnetException);
             var ex = exInfo == IntPtr.Zero
                 ? null
                 : isDotnetException
@@ -221,34 +228,8 @@ namespace BikeInterop
             {
                 var handle = GCHandle.FromIntPtr(rv);
                 obj = handle.Target;
-                // ReSharper disable once SwitchStatementMissingSomeCases
-                switch (Convert.GetTypeCode(obj))
-                {
-                    case TypeCode.Empty:
-                    case TypeCode.Boolean:
-                    case TypeCode.Char:
-                    case TypeCode.String:
-                    case TypeCode.Double:
-                    case TypeCode.Single:
-                    case TypeCode.Byte:
-                    case TypeCode.SByte:
-                    case TypeCode.Int16:
-                    case TypeCode.UInt16:
-                    case TypeCode.Int32:
-                    case TypeCode.UInt32:
-                    case TypeCode.Int64:
-                    case TypeCode.UInt64:
-                        handle.Free();
-                        break;
-                    /*
-                    case TypeCode.DateTime:
-                    case TypeCode.DBNull:
-                    case TypeCode.Decimal:
-                    case TypeCode.Object:
-                    default:
-                        break;
-                    */
-                }
+                if(releaseRvHandle)
+                    handle.Free();
             }
 
             if (ex != null)
