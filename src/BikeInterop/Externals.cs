@@ -1541,7 +1541,7 @@ namespace BikeInterop
             return BoxObject(invocationResult);
         }
 
-        internal static IntPtr BoxObject(object value)
+        public static IntPtr BoxObject(object value)
         {
             if (value == null)
                 return IntPtr.Zero;
@@ -1549,7 +1549,7 @@ namespace BikeInterop
             return GCHandle.ToIntPtr(handle);
         }
 
-        internal static object UnboxObject(IntPtr pointer)
+        public static object UnboxObject(IntPtr pointer)
         {
             if (IntPtr.Zero == pointer)
                 return null;

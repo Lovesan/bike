@@ -202,7 +202,7 @@ namespace BikeInterop
         {
             var methodInfo = typeof(Externals).GetMethod(
                 nameof(Externals.UnboxObject),
-                BindingFlags.NonPublic | BindingFlags.InvokeMethod | BindingFlags.Static);
+                BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.InvokeMethod | BindingFlags.Static);
             // ReSharper disable once AssignNullToNotNullAttribute
             Expression result = Expression.Call(null, methodInfo, expression);
             if (convertTo != null)
@@ -229,7 +229,7 @@ namespace BikeInterop
         {
             var methodInfo = typeof(Externals).GetMethod(
                 nameof(Externals.BoxObject),
-                BindingFlags.NonPublic | BindingFlags.InvokeMethod | BindingFlags.Static);
+                BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.InvokeMethod | BindingFlags.Static);
             // ReSharper disable once AssignNullToNotNullAttribute
             var call = Expression.Call(null, methodInfo, expression.ConvertExpression<object>());
             return call;
