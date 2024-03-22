@@ -429,7 +429,7 @@
                       :member-kind :event
                       :kind (if addp :add :remove)))))))
 
-(defun select-constructor (type args arg-types)
+(defun select-constructor (type args arg-types &optional (errorp t) error-value)
   (declare (type dotnet-type type)
            (type list args arg-types))
   (let* ((applicable (type-constructors type))
@@ -448,11 +448,12 @@
                                   nil
                                   nil
                                   nil)))))
-    (unless info
-      (error 'constructor-resolution-error
-             :type type
-             :args (mapcar #'type-full-name arg-types)))
-    info))
+    (or info
+        (if errorp
+          (error 'constructor-resolution-error
+                 :type type
+                 :args (mapcar #'type-full-name arg-types))
+          error-value))))
 
 (defun compile-constructor (info fptr &optional name doc decls)
   (declare (type dotnet-object info)
