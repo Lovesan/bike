@@ -69,7 +69,8 @@
   (let ((name (simple-character-string-upcase name)))
     (if (typep target 'dotnet-object*)
       (%set-property target nil name new-value)
-      (%set-property (resolve-type target) t name new-value))))
+      (%set-property (resolve-type target) t name new-value)))
+  new-value)
 
 (defun reflection-ref (target index &rest indices)
   (declare (type dotnet-object* target)
@@ -83,7 +84,8 @@
            (dynamic-extent indices))
   "Using reflection, changes a value of an indexer from a TARGET, which
  must be an instance."
-  (apply #'%set-index target new-value index indices))
+  (apply #'%set-index target new-value index indices)
+  new-value)
 
 (defun reflection-field (target name)
   (declare (type (or dotnet-object* dotnet-type-designator) target)
@@ -107,7 +109,8 @@
   (let ((name (simple-character-string-upcase name)))
     (if (typep target 'dotnet-object*)
       (%set-field target nil name new-value)
-      (%set-field (resolve-type target) t name new-value))))
+      (%set-field (resolve-type target) t name new-value)))
+  new-value)
 
 (defun reflection-new (type &rest args)
   (declare (type dotnet-type-designator type)
