@@ -90,8 +90,8 @@
       (setf ns namespaces)
       (loop :for (alias . designator) :in aliases
             :do (setf (gethash alias new-aliases) designator))
-      (loop :for (full-name . qname) :in types
-            :do (resolve-type qname))))
+      (dolist (pair types)
+        (resolve-type (cdr pair)))))
   (values))
 
 (defun reload-type-table ()

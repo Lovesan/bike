@@ -400,6 +400,8 @@
                                  (prog1 (list :base-type (normalize-typespec value names))
                                    (setf base-type t)))
                                 (:interfaces
+                                 (when interfaces
+                                   (error-duplicate :interfaces))
                                  (prog1 (list* :interfaces
                                                (normalize-typespec value names)
                                                (mapcar (lambda (v)
@@ -520,7 +522,8 @@
 
 (defgeneric initialize-effective-slot-definition (effective-slotd direct-slotd)
   (:documentation "Initializes effective slot definition from direct slot definition.")
-  (:method (effective-slotd direct-slotd)))
+  (:method (effective-slotd direct-slotd)
+    (declare (ignore effective-slotd direct-slotd))))
 
 (defmethod initialize-effective-slot-definition :after
     ((slotd effective-dotnet-slot-definition)
@@ -588,6 +591,7 @@
   (intern-dslotd-parameters slotd direct-slotd nil))
 
 (defmethod compute-effective-slot-definition ((class dotnet-callable-class) name dslotds)
+  (declare (ignore name))
   (let ((slotd (call-next-method)))
     (initialize-effective-slot-definition slotd (first dslotds))
     slotd))

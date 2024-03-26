@@ -208,6 +208,9 @@ Unlike the original CFFI macro, it does not redefine the library
       (unwind-protect
            (loop :for rv = (%get-module-file-name module buf size)
                  :for last-error = (get-last-error)
+                 :do (when (zerop rv)
+                       (error "Unable to get module file name. Error: #x~8,'0X"
+                              last-error))
                  :unless (= last-error 122)
                    :return (read-lpwstr buf)
                  :else :do
@@ -298,7 +301,7 @@ Unlike the original CFFI macro, it does not redefine the library
     (with-foreign-object (ptr :uint16 count)
       (let ((rv (get-full-path-name path count ptr (null-pointer))))
         (when (zerop rv)
-          (error "Unable to get native path. Error: #x~8.'0X" (get-last-error)))
+          (error "Unable to get native path. Error: #x~8,'0X" (get-last-error)))
         (read-lpwstr ptr))))
   #-coreclr-windows
   (uiop:native-namestring path))

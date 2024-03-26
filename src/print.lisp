@@ -875,7 +875,7 @@ Function accepts two arguments - an OBJECT to print, and a STREAM to print to."
          (unless (dotnet-object-printer type)
            (set-dotnet-object-printer type printer))))
   (macrolet ((frob (&body defs)
-               (loop :for (type fn) :on defs by 'cddr
+               (loop :for (type fn) :on defs :by #'cddr
                      :collect `(ensure-printer ',type ',fn) :into calls
                      :finally (return `(progn ,@calls)))))
     (frob System.String print-string

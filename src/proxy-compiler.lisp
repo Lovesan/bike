@@ -578,10 +578,9 @@
             (type-code-method (get-full-type-code-method))
             (tmpobj-local (declare-local [:object])))
         ;; object tmpobj;
-        (loop :for p :of-type method-parameter-info :in parameters
+        (loop :for p :in parameters
               :for tpos = (mpi-trampoline-position p)
               :for dir = (mpi-direction p)
-              :for type = (mpi-type p)
               :unless (eq p params-array-parameter) :do
                 (if (eq dir :out)
                   (progn
@@ -667,7 +666,7 @@
     (let ((tmph-local (declare-local [:System.IntPtr]))
           (unbox-method (get-unbox-object-method))
           (free-handle-method (get-free-handle-method)))
-      (loop :for p :of-type method-parameter-info :in parameters
+      (loop :for p :in parameters
             :for tpos = (mpi-trampoline-position p)
             :for dir = (mpi-direction p)
             :for type = (mpi-type p)
@@ -1010,11 +1009,13 @@
         (when base-callable-p
           (emit Ldarg_1)
           (emit Ldarg_2))
-        (loop :for i :from 3
-              :for param :in base-parameters
-              :do (if (< i 256)
-                    (emit-u1 Ldarg_S i)
-                    (emit-u2 Ldarg i)))
+        (let ((i 3))
+          (dolist (param base-parameters)
+            (declare (ignore param))
+            (if (< i 256)
+              (emit-u1 Ldarg_S i)
+              (emit-u2 Ldarg i))
+            (incf i)))
         (emit Call base-constructor)
         (emit Ldarg_0)
         (emit Ldarg_1)
