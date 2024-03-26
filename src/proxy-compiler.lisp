@@ -120,7 +120,8 @@
                 (emit-u2 (opcode arg) `(%emit-u2 ,',generator-var (opcode ,opcode) ,arg))
                 (emit-s4 (opcode arg) `(%emit-s4 ,',generator-var (opcode ,opcode) ,arg))
                 (emit-u4 (opcode arg) `(%emit-u4 ,',generator-var (opcode ,opcode) ,arg))
-                (emit-s8 (opcode arg) `(%emit-u8 ,',generator-var (opcode ,opcode) ,arg))
+                (emit-s8 (opcode arg) `(%emit-s8 ,',generator-var (opcode ,opcode) ,arg))
+                (emit-u8 (opcode arg) `(%emit-u8 ,',generator-var (opcode ,opcode) ,arg))
                 (emit-calli (cconv return-type parameter-types)
                   `(%emit-calli ,',generator-var
                                 (opcode Calli)
@@ -702,6 +703,35 @@
               (tbs-gen-unbox gen type tmpobj-local)
               (emit Stobj type)))))
 
+#+(or ecl)
+(progn
+  (defun tbs-gen-ecl-import-current-thread (gen thread-imported-local)
+    (declare (type dotnet-object gen thread-imported-local))
+    (with-il-generator (gen gen)
+      (emit-s4 Ldc_I4 1)
+      (emit Conv_I)
+      (emit-s4 Ldc_I4 1)
+      (emit Conv_I)
+      (emit-s8 Ldc_I8 (pointer-address
+                       (foreign-symbol-pointer "ecl_import_current_thread")))
+      (emit Conv_I)
+      (emit-calli #e(System.Runtime.InteropServices.CallingConvention Cdecl)
+                  [:System.Boolean]
+                  (type-vector [:System.IntPtr]
+                               [:System.IntPtr]))
+      (emit Stloc thread-imported-local)))
+  (defun tbs-gen-ecl-release-current-thread (gen thread-imported-local)
+    (declare (type dotnet-object gen thread-imported-local))
+    (with-il-generator (gen gen no-import-label)
+      (emit Ldloc thread-imported-local)
+      (emit Brfalse no-import-label)
+      (emit-s8 Ldc_I8 (pointer-address
+                       (foreign-symbol-pointer "ecl_release_current_thread")))
+      (emit-calli #e(System.Runtime.InteropServices.CallingConvention Cdecl)
+                  [:void]
+                  (empty-types))
+      (mark-label no-import-label))))
+
 (defun tbs-add-method (state operation name return-type &key generic-parameters
                                                              parameters
                                                              params-array-parameter
@@ -741,7 +771,11 @@
                  (release-rvh-local (declare-local [:bool]))
                  (exh-local (declare-local [:System.IntPtr]))
                  (is-dotnet-exception-local (declare-local [:bool]))
-                 (unbox-method (get-unbox-object-method)))
+                 (unbox-method (get-unbox-object-method))
+                 #+(or ecl) (thread-imported-local (declare-local [:bool])))
+            ;; ECL must import foreign threads
+            #+(or ecl)
+            (tbs-gen-ecl-import-current-thread gen thread-imported-local)
             (emit Ldarg_0)
             (emit Call (get-box-object-method))
             (tbs-gen-load-field gen context-field)
@@ -769,6 +803,9 @@
                                      [:System.IntPtr] ; oException
                                      [:System.IntPtr])) ; oIsDotNetException
             (emit Stloc rvh-local)
+            ;; ECL must release foreign threads
+            #+(or ecl)
+            (tbs-gen-ecl-release-current-thread gen thread-imported-local)
             ;; should an exception occur, neither return value nor out/ref params
             ;;  should be initialized
             (tbs-gen-process-exception gen exh-local is-dotnet-exception-local)

@@ -298,7 +298,7 @@
 (defun parse-method-lambda-list (parameters generic-parameters)
   (declare (type list parameters generic-parameters))
   (loop :with rest = nil
-        :for c :on parameters
+        :for c :on parameters :by #'cdr
         :for p = (car c)
         :if (eq p '&rest)
           :collect (let ((p (second c)))
