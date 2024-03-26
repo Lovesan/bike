@@ -264,6 +264,28 @@
                       (duplicate-dotnet-name-value c)
                       (duplicate-dotnet-name-class c))))))
 
+(define-condition duplicate-indexer (bike-error)
+  ((class :initarg :class
+          :reader duplicate-indexer-class))
+  (:report (lambda (c s)
+             (format s "~<Duplicate indexer in class ~s~:>"
+                     (list
+                      (duplicate-indexer-class c))))))
+
+(define-condition dotnet-slot-missing (bike-error)
+  ((class :initarg :class
+          :reader dotnet-slot-missing-class)
+   (name :initarg :name
+         :reader dotnet-slot-missing-name))
+  (:report (lambda (c s)
+             (format s "~<Dotnet slot ~s is missing from class ~s~:>"
+                     (list (dotnet-slot-missing-name c)
+                           (dotnet-slot-missing-class c))))))
+
+(defun dotnet-slot-missing (class name)
+  (error 'dotnet-slot-missing :class class
+                              :name name))
+
 (define-condition delegate-type-expected (bike-error)
   ((datum :initarg :type
           :initarg :datum
@@ -332,7 +354,15 @@
          :list list
          :message (apply #'format nil message args)))
 
-(define-condition method-slot-write-attempt (bike-error)
+(define-condition dotnet-slot-write-attempt (bike-error)
+  ((object :initarg :object
+           :reader dotnet-slot-write-attempt-object)
+   (slot-name :initarg :slot-name
+              :reader dotnet-slot-write-attempt-slot-name)
+   (value :initarg :value
+          :reader dotnet-slot-write-attempt-value)))
+
+(define-condition method-slot-write-attempt (dotnet-slot-write-attempt)
   ((object :initarg :object
            :reader method-slot-write-attempt-object)
    (slot-name :initarg :slot-name
@@ -347,7 +377,28 @@
                            (method-slot-write-attempt-object c)
                            (method-slot-write-attempt-value c))))))
 
-(define-condition method-slot-makunbound-attempt (bike-error)
+(define-condition indexer-slot-write-attempt (dotnet-slot-write-attempt)
+  ((object :initarg :object
+           :reader indexer-slot-write-attempt-object)
+   (slot-name :initarg :slot-name
+              :reader indexer-slot-write-attempt-slot-name)
+   (value :initarg :value
+          :reader indexer-slot-write-attempt-value))
+  (:report (lambda (c s)
+             (format s #.(strcat "~<Cannot write to slot ~s of ~s~:@_"
+                                 "  becase it is a .NET indexer slot~:@_"
+                                 "Value was: ~s~:>")
+                     (list (indexer-slot-write-attempt-slot-name c)
+                           (indexer-slot-write-attempt-object c)
+                           (indexer-slot-write-attempt-value c))))))
+
+(define-condition dotnet-slot-makunbound-attempt (bike-error)
+  ((object :initarg :object
+           :reader dotnet-slot-makunbound-attempt-object)
+   (slot-name :initarg :slot-name
+              :reader dotnet-slot-makunbound-attempt-slot-name)))
+
+(define-condition method-slot-makunbound-attempt (dotnet-slot-makunbound-attempt)
   ((object :initarg :object
            :reader method-slot-makunbound-attempt-object)
    (slot-name :initarg :slot-name
@@ -359,18 +410,46 @@
                      (list (method-slot-makunbound-attempt-slot-name c)
                            (method-slot-makunbound-attempt-object c))))))
 
+(define-condition property-slot-makunbound-attempt (dotnet-slot-makunbound-attempt)
+  ((object :initarg :object
+           :reader property-slot-makunbound-attempt-object)
+   (slot-name :initarg :slot-name
+              :reader property-slot-makunbound-attempt-slot-name))
+  (:report (lambda (c s)
+             (format s #.(strcat "~<Cannot unbind slot ~s of ~s~:@_"
+                                 "  becase it is a .NET-only property slot~:@_"
+                                 "~:>")
+                     (list (property-slot-makunbound-attempt-slot-name c)
+                           (property-slot-makunbound-attempt-object c))))))
+
+(define-condition indexer-slot-makunbound-attempt (property-slot-makunbound-attempt)
+  ((object :initarg :object
+           :reader indexer-slot-makunbound-attempt-object)
+   (slot-name :initarg :slot-name
+              :reader indexer-slot-makunbound-attempt-slot-name))
+  (:report (lambda (c s)
+             (format s #.(strcat "~<Cannot unbind slot ~s of ~s~:@_"
+                                 "  becase it is a .NET indexer slot~:@_"
+                                 "~:>")
+                     (list (indexer-slot-makunbound-attempt-slot-name c)
+                           (indexer-slot-makunbound-attempt-object c))))))
+
 (define-condition dotnet-callable-object-orphan-proxy ()
   ((value :initarg :value
           :reader dotnet-callable-object-orphan-proxy-value)
    (operation :initarg :operation
               :reader dotnet-callable-object-orphan-proxy-operation)
+   (member-name :initarg :member-name
+                :reader dotnet-callable-object-orphan-proxy-member-name)
    (arguments :initarg :arguments
               :reader dotnet-callable-object-orphan-proxy-arguments))
   (:report (lambda (c s)
              (format s #.(strcat "Orphan proxy has been invoked.~%"
                                  "Operation was: ~s~%"
+                                 "Member name was: ~s~%"
                                  "Arguments: ~s")
                      (dotnet-callable-object-orphan-proxy-operation c)
+                     (dotnet-callable-object-orphan-proxy-member-name c)
                      (dotnet-callable-object-orphan-proxy-arguments c)))))
 
 ;;; vim: ft=lisp et

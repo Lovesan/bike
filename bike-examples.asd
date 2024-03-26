@@ -38,6 +38,7 @@
                              (:file "callbacks")
                              (:file "exceptions")
                              (:file "syntax")
+                             (:file "callable-classes")
                              (:file "aspnet-mvc")
                              (:file "windows-forms" :if-feature :windows)
                              (:file "wpf" :if-feature :windows)))))

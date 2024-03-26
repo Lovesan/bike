@@ -39,13 +39,32 @@
                       :accessor dcc-direct-interfaces)
    (%name-cache :accessor dcc-name-cache
                 :type hash-table)
-   (%function-name-cache :accessor dcc-function-name-cache
-                         :type hash-table)
    (%name-cache-lock :accessor dcc-name-cache-lock
                      :type rwlock))
   (:documentation "Base metaclass for dotnet callable classes")
   (:default-initargs :interfaces '()
                      :base-type nil))
+
+(defstruct (dcc-name-cache-item (:constructor nil)
+                                (:copier nil)
+                                (:predicate dccnci-p)
+                                (:conc-name dccnci-))
+  (name (required-slot) :type symbol))
+
+(defstruct (dcc-property-cache-item (:include dcc-name-cache-item)
+                                    (:constructor make-dccpci)
+                                    (:copier nil)
+                                    (:predicate dccpci-p)
+                                    (:conc-name dccpci-))
+  (getter (required-slot) :type function-designator)
+  (setter (required-slot) :type function-designator))
+
+(defstruct (dcc-method-cache-item (:include dcc-name-cache-item)
+                                  (:constructor make-dccmci)
+                                  (:copier nil)
+                                  (:predicate dccmci-p)
+                                  (:conc-name dccmci-))
+  (function-name (required-slot) :type function-designator))
 
 (defclass dotnet-slot-definition (slot-definition)
   ((dotnet-name :initarg :dotnet-name
@@ -53,7 +72,7 @@
                 :accessor slotd-dotnet-name
                 :reader slot-definition-dotnet-name)
    (kind :initarg :kind
-         :type (member :event :property :method)
+         :type (member :event :property :method :indexer)
          :accessor slotd-kind
          :reader slot-definition-kind)))
 
@@ -68,6 +87,14 @@
    (setter :initarg :setter
            :accessor slotd-setter
            :reader slot-definition-setter)))
+
+(defclass indexer-slot-definition (property-slot-definition)
+  ((parameters :initarg :parameters
+               :accessor slotd-parameters
+               :reader slot-definition-parameters)
+   (params-array-parameter :accessor slotd-params-array-parameter
+                           :initform nil
+                           :reader slot-definition-rest-parameter)))
 
 (defclass event-slot-definition (dotnet-slot-definition)
   ((handler-type :initarg :handler-type
@@ -115,6 +142,14 @@
    :getter t
    :setter t))
 
+(defclass direct-indexer-slot-definition (indexer-slot-definition
+                                          direct-property-slot-definition)
+  ()
+  (:default-initargs
+   :parameters '()
+   :getter nil
+   :setter nil))
+
 (defclass direct-event-slot-definition (event-slot-definition
                                         direct-dotnet-slot-definition)
   ()
@@ -143,6 +178,10 @@
                                               effective-dotnet-slot-definition)
   ())
 
+(defclass effective-indexer-slot-definition (indexer-slot-definition
+                                             effective-property-slot-definition)
+  ())
+
 (defclass effective-event-slot-definition (event-slot-definition
                                            effective-dotnet-slot-definition)
   ())
@@ -166,8 +205,9 @@
     (setf (slotd-dotnet-name slotd)
           (if dotnet-name-p
             (simple-character-string dotnet-name)
-            (camel-case-string (slot-definition-name slotd)
-                               :capitalize (member kind '(:event :property :method)))))))
+            (camel-case-string
+             (slot-definition-name slotd)
+             :capitalize (member kind '(:event :property :indexer :method)))))))
 
 (defmethod initialize-instance :after
     ((slotd direct-property-slot-definition)
@@ -394,6 +434,20 @@
               (slotd-params-array-parameter slotd) params-array-parameter
               (slotd-function-name slotd) function-name)))))
 
+(defmethod initialize-instance :after
+    ((slotd direct-indexer-slot-definition)
+     &rest initargs &key &allow-other-keys)
+  (destructuring-bind (&key parameters getter setter &allow-other-keys)
+      (fix-slot-initargs initargs)
+    (check-type parameters cons)
+    ;; an indexer cannot be an auto-property
+    (check-type getter (not (eql t)))
+    (check-type setter (not (eql t)))
+    (multiple-value-bind (parameters params-array-parameter)
+        (parse-method-lambda-list parameters '())
+      (setf (slotd-parameters slotd) parameters
+            (slotd-params-array-parameter slotd) params-array-parameter))))
+
 (defmethod initialize-instance :around
     ((slotd direct-event-slot-definition)
      &rest initargs &key &allow-other-keys)
@@ -412,17 +466,33 @@
     (remf initargs :allocation)
     (apply #'call-next-method slotd :allocation :dotnet initargs)))
 
+(defmethod initialize-instance :around
+    ((slotd direct-property-slot-definition)
+     &rest initargs &key &allow-other-keys)
+  (destructuring-bind (&rest initargs
+                       &key (allocation :instance) getter setter
+                       &allow-other-keys)
+      (fix-slot-initargs initargs)
+    (declare (ignore allocation))
+    (if (or (eq getter t)
+            (eq setter t))
+      (call-next-method)
+      (progn (remf initargs :allocation)
+             (apply #'call-next-method slotd :allocation :dotnet initargs)))))
+
 (defmethod direct-slot-definition-class ((class dotnet-callable-class)
                                          &rest initargs &key &allow-other-keys)
-  (destructuring-bind (&key kind (allocation :instance) &allow-other-keys)
+  (destructuring-bind (&key (kind nil kindp) (allocation :instance) &allow-other-keys)
       (fix-slot-initargs initargs)
     (assert (eq allocation :instance) (allocation)
             "~s only supports :instance slot :allocation(was: ~s)" class allocation)
-    (case kind
-      (:property (find-class 'direct-property-slot-definition))
-      (:event (find-class 'direct-callable-event-slot-definition))
-      (:method (find-class 'direct-method-slot-definition))
-      (t (call-next-method)))))
+    (if kindp
+      (ecase kind
+        (:property (find-class 'direct-property-slot-definition))
+        (:indexer (find-class 'direct-indexer-slot-definition))
+        (:event (find-class 'direct-callable-event-slot-definition))
+        (:method (find-class 'direct-method-slot-definition)))
+      (call-next-method))))
 
 (defgeneric compute-direct-slot-definitions (class slot-name)
   (:documentation "Computes ordered list of direct slot definitons for SLOT-NAME")
@@ -438,6 +508,8 @@
       (fix-slot-initargs initargs)
     (let ((direct-slotd (first (compute-direct-slot-definitions class name))))
       (typecase direct-slotd
+        (direct-indexer-slot-definition
+         (find-class 'effective-indexer-slot-definition))
         (direct-property-slot-definition
          (find-class 'effective-property-slot-definition))
         (direct-callable-event-slot-definition
@@ -476,6 +548,34 @@
   (setf (slotd-raise-method-dotnet-name slotd)
         (slotd-raise-method-dotnet-name direct-slotd)))
 
+(defun intern-dslotd-parameters (slotd direct-slotd resolve-types-p)
+  (loop :with params-array = (slotd-params-array-parameter direct-slotd)
+        :for param :in (slotd-parameters direct-slotd)
+        :for i :from 0
+        :collect (destructuring-bind (name type &key dotnet-name
+                                                     direction
+                                                     ref)
+                     param
+                   (let ((parsed (make-mpi name
+                                           dotnet-name
+                                           (if resolve-types-p
+                                             (resolve-type type)
+                                             type)
+                                           :position i
+                                           :direction direction
+                                           :ref ref)))
+                     (when (eq param params-array)
+                       (setf params-array parsed))
+                     parsed))
+          :into params
+        :finally (setf (slotd-params-array-parameter slotd) params-array
+                       (slotd-parameters slotd) params)))
+
+(defmethod initialize-effective-slot-definition :after
+    ((slotd effective-indexer-slot-definition)
+     (direct-slotd direct-indexer-slot-definition))
+  (intern-dslotd-parameters slotd direct-slotd t))
+
 (defmethod initialize-effective-slot-definition :after
     ((slotd effective-method-slot-definition)
      (direct-slotd direct-method-slot-definition))
@@ -485,25 +585,7 @@
         :collect (make-gpi :name name :constraints constraints)
           :into generic-params
         :finally (setf (slotd-generic-parameters slotd) generic-params))
-  (loop :with params-array = (slotd-params-array-parameter direct-slotd)
-        :for param :in (slotd-parameters direct-slotd)
-        :for i :from 0
-        :collect (destructuring-bind (name type &key dotnet-name
-                                                     direction
-                                                     ref)
-                     param
-                   (let ((parsed (make-mpi :name name
-                                           :dotnet-name dotnet-name
-                                           :type type
-                                           :position i
-                                           :direction direction
-                                           :ref-p ref)))
-                     (when (eq param params-array)
-                       (setf params-array parsed))
-                     parsed))
-          :into params
-        :finally (setf (slotd-params-array-parameter slotd) params-array
-                       (slotd-parameters slotd) params)))
+  (intern-dslotd-parameters slotd direct-slotd nil))
 
 (defmethod compute-effective-slot-definition ((class dotnet-callable-class) name dslotds)
   (let ((slotd (call-next-method)))
@@ -514,7 +596,8 @@
   (declare (type dotnet-proxy-class class))
   (let ((eslotds (remove-if (lambda (c)
                               (not (typep c 'effective-dotnet-slot-definition)))
-                            eslotds)))
+                            eslotds))
+        has-indexer)
     (dolist (slotd eslotds)
       (loop :for s :in eslotds
             :when (and (not (eq s slotd))
@@ -522,7 +605,12 @@
                                 (slotd-dotnet-name slotd)))
               :do (error 'duplicate-dotnet-name
                          :class class
-                         :value (slotd-dotnet-name slotd))))))
+                         :value (slotd-dotnet-name slotd)))
+      (when (typep slotd 'indexer-slot-definition)
+        (if has-indexer
+          (error 'duplicate-indexer
+                 :class class)
+          (setf has-indexer t))))))
 
 (defun find-callable-class-base-type (class)
   (declare (type dotnet-callable-class class))
@@ -585,22 +673,33 @@
                             (slotd-dotnet-name slotd)
                             (resolve-type (slotd-handler-type slotd))
                             (slotd-raise-method-dotnet-name slotd)))
+            (effective-indexer-slot-definition
+             (tbs-add-property state
+                               (slotd-dotnet-name slotd)
+                               (slotd-property-type slotd)
+                               :getterp (slotd-getter slotd)
+                               :setterp (slotd-setter slotd)
+                               :parameters (slotd-parameters slotd)
+                               :params-array-parameter (slotd-params-array-parameter slotd))
+             (tbs-set-custom-attribute (tbs-type-builder state)
+                                       [:System.Reflection.DefaultMemberAttribute]
+                                       (slotd-dotnet-name slotd)))
             (effective-property-slot-definition
              (tbs-add-property state
                                (slotd-dotnet-name slotd)
                                (slotd-property-type slotd)
-                               (slotd-getter slotd)
-                               (slotd-setter slotd)))
+                               :getterp (slotd-getter slotd)
+                               :setterp (slotd-setter slotd)))
             (effective-method-slot-definition
-             (setf (slotd-return-type slotd)
-                   (tbs-add-method state
-                                   (slotd-dotnet-name slotd)
-                                   (slotd-generic-parameters slotd)
-                                   (slotd-return-type slotd)
-                                   (slotd-parameters slotd)
-                                   (slotd-params-array-parameter slotd))))))
+             (tbs-add-method
+              state
+              :invoke
+              (slotd-dotnet-name slotd)
+              (slotd-return-type slotd)
+              :generic-parameters (slotd-generic-parameters slotd)
+              :parameters (slotd-parameters slotd)
+              :params-array-parameter (slotd-params-array-parameter slotd)))))
         (setf (dcc-name-cache class) (make-hash-table :test #'equal)
-              (dcc-function-name-cache class) (make-hash-table :test #'equal)
               (dcc-name-cache-lock class) (make-rwlock
                                            :name (format nil "~s name cache lock"
                                                          (class-name class)))
@@ -666,138 +765,138 @@
             (or (find class classes :key #'tg:weak-pointer-value)
                 (push (tg:make-weak-pointer class) classes)))))))
 
-(defun get-slot-name-by-dotnet-name (class dotnet-name function-name-cache-p)
+(defun get-dcc-name-cache-item (class name)
   (declare (type dotnet-callable-class class)
-           (type simple-character-string dotnet-name))
-  (check-type class dotnet-callable-class)
-  (let ((cache (if function-name-cache-p
-                 (dcc-function-name-cache class)
-                 (dcc-name-cache class)))
-        (lock (dcc-name-cache-lock class)))
-    (with-read-lock (lock)
-      (let ((slot-name (gethash dotnet-name cache)))
-        (or slot-name
-            (let ((slot-name
-                    (dolist (slotd (class-slots class))
-                      (when (typep slotd 'effective-dotnet-slot-definition)
-                        (let ((name (slotd-dotnet-name slotd)))
-                          (when (string= name dotnet-name)
-                            (return
-                              (if function-name-cache-p
-                                (let* ((function-name (slotd-function-name slotd))
-                                       (args (slotd-parameters slotd))
-                                       (params-array
-                                         (slotd-params-array-parameter slotd))
-                                       (argc (if params-array
-                                               (1- (length args))
-                                               (length args))))
-                                  (list* function-name
-                                         (bike-equals
-                                          [:void]
-                                          (slotd-return-type slotd))
-                                         argc
-                                         args))
-                                (slot-definition-name slotd)))))))))
-              (when slot-name
-                (with-write-lock (lock)
-                  (setf (gethash dotnet-name cache) slot-name)))
-              slot-name))))))
+           (type string name))
+  (let* ((cache (dcc-name-cache class))
+         (lock (dcc-name-cache-lock class))
+         (item (with-read-lock (lock)
+                 (gethash name cache))))
+    (or item
+        (let ((item (loop :for slotd :in (class-slots class)
+                          :when (and (typep slotd 'effective-property-slot-definition)
+                                     (string= name (slotd-dotnet-name slotd)))
+                            :return
+                            (make-dccpci :name (slot-definition-name slotd)
+                                         :getter (slotd-getter slotd)
+                                         :setter (slotd-setter slotd))
+                          :when (and (typep slotd 'effective-method-slot-definition)
+                                     (string= name (slotd-dotnet-name slotd)))
+                            :return
+                            (make-dccmci :name (slot-definition-name slotd)
+                                         :function-name (slotd-function-name slotd)))))
+          (unless item
+            (dotnet-slot-missing class name))
+          (with-write-lock (lock)
+            (setf (gethash name cache) item))))))
 
-(defun get-dotnet-callable-object-slot-value (proxy object name)
-  (declare (type (or null dotnet-callable-object) object)
-           (type simple-character-string name))
-  ;; Proxy has outlived its parent. This is an erroneous condition.
-  (unless object
-    (restart-case
-        (error 'dotnet-callable-object-orphan-proxy
-               :value proxy
-               :operation 'slot-value
-               :arguments (list name))
-      (continue ()
-        (return-from get-dotnet-callable-object-slot-value))))
+(defun invoke-dotnet-callable-object (object operation name args)
+  (declare (type dotnet-callable-object object)
+           (type (member :invoke :get-property :set-property) operation)
+           (type string name)
+           (type list args))
   (let* ((class (class-of object))
-         (slot-name (get-slot-name-by-dotnet-name class name nil)))
-    (if slot-name
-      (slot-value object slot-name)
-      (slot-missing class object name 'slot-value))))
+         (cache-item (get-dcc-name-cache-item class name)))
+    (ecase operation
+      (:invoke  (let* ((function-name (dccmci-function-name cache-item))
+                       (function (fdefinition function-name)))
+                  (apply function object args)))
+      (:get-property (let ((getter (dccpci-getter cache-item)))
+                       (if (eq getter t)
+                         (slot-value object (dccpci-name cache-item))
+                         (apply (fdefinition getter) object args))))
+      (:set-property (let ((setter (dccpci-setter cache-item))
+                           (new-value (first args))
+                           (args (rest args)))
+                       (if (eq setter t)
+                         (setf (slot-value object (dccpci-name cache-item)) new-value)
+                         (apply (fdefinition setter) new-value object args)))))))
 
-(defun set-dotnet-callable-object-slot-value (proxy object name new-value)
-  (declare (type (or null dotnet-callable-object) object)
-           (type simple-character-string name))
-  ;; Proxy has outlived its parent. This is an erroneous condition.
-  (unless object
-    (restart-case
-        (error 'dotnet-callable-object-orphan-proxy
-               :value proxy
-               :operation '(setf slot-value)
-               :arguments (list name new-value))
-      (continue () (return-from set-dotnet-callable-object-slot-value))))
-  (let* ((class (class-of object))
-         (slot-name (get-slot-name-by-dotnet-name class name nil)))
-    (if slot-name
-      (setf (slot-value object slot-name) new-value)
-      (slot-missing class object name 'setf new-value))))
-
-(defun invoke-dotnet-callable-object-method (proxy object name args)
-  (declare (type (or null dotnet-callable-object) object)
-           (type simple-character-string name)
-           (type dotnet-object args))
-  ;; Proxy has outlived its parent. This is an erroneous condition.
-  (unless object
-    (restart-case
-        (error 'dotnet-callable-object-orphan-proxy
-               :value proxy
-               :operation 'invoke
-               :arguments (list name args))
-      (continue ()
-        (return-from invoke-dotnet-callable-object-method))))
-  (let ((class (class-of object)))
-    (destructuring-bind (function-name voidp argc &rest parameters)
-        (get-slot-name-by-dotnet-name class name t)
-      (declare (type (or (and symbol (not null))
-                         (cons (eql setf) (cons symbol null)))
-                     function-name)
-               (type (signed-byte 32) argc))
-      (let* ((arglist (loop :for i :below (%array-length args)
-                            :for plist = parameters :then (rest plist)
-                            :for p = (car plist)
-                            :if (and p (member (mpi-direction p) '(:in :io)))
-                              :collect (dnvref args i)
-                            :else
-                              :if (null plist)
-                                :collect (dnvref args i)))
-             (result (multiple-value-list
-                      (apply (fdefinition function-name) object arglist))))
-        (loop :with return-values = (if voidp result (rest result))
-              :for i :below argc
-              :for p :in parameters :do
-                (when (or (mpi-ref-p p)
-                          (member (mpi-direction p) '(:out :io)))
-                  (setf (dnvref args i) (car return-values)
-                        return-values (cdr return-values))))
-        (if voidp (values) (first result))))))
+(defcallback (proxy-callback :convention :stdcall)
+    :pointer ((boxed-proxy :pointer)
+              (boxed-object :pointer)
+              (opcode :int)
+              (voidp :bool)
+              (name lpwstr)
+              (args-ptr :pointer)
+              (info-ptr :pointer)
+              (argc :int)
+              (release-rvh-ptr :pointer)
+              (out-ex :pointer)
+              (out-ex-from-dotnet :pointer))
+  (handler-case
+      (let* ((proxy (%dotnet-object boxed-proxy))
+             (target (%handle-table-get (pointer-address boxed-object)))
+             (args (loop :for i :below argc
+                         :for boxed = (mem-aref args-ptr :pointer i)
+                         :for info = (mem-aref info-ptr :uint32 i)
+                         :for type-code = (ldb (byte 16 0) info)
+                         :for dir-info = (logand info +param-info-direction-mask+)
+                         :for out-only = (= dir-info +param-info-out+)
+                         :unless out-only
+                           :collect (multiple-value-bind (arg cleanup)
+                                        (%unbox boxed type-code)
+                                      (when cleanup (%free-handle boxed))
+                                      arg)
+                         :do (setf (mem-aref args-ptr :pointer i) (null-pointer))))
+             (operation (eswitch (opcode)
+                          (+proxy-callback-opcode-invoke+ :invoke)
+                          (+proxy-callback-opcode-get-property+ :get-property)
+                          (+proxy-callback-opcode-set-property+ :set-property))))
+        (setf (mem-ref out-ex :pointer) (null-pointer)
+              (mem-ref out-ex-from-dotnet :bool) nil
+              (mem-ref release-rvh-ptr :bool) nil)
+        (unless target
+          (restart-case
+              (error 'dotnet-callable-object-orphan-proxy
+                     :value proxy
+                     :operation operation
+                     :member-name name
+                     :arguments args)
+            (continue () (return-from proxy-callback (null-pointer)))))
+        (destructuring-bind (&rest ref-values)
+            (multiple-value-list
+             (invoke-dotnet-callable-object target operation name args))
+          (let ((rv (unless voidp (pop ref-values))))
+            (loop :for i :below argc
+                  :for info = (mem-aref info-ptr :uint32 i)
+                  :for dir-info = (logand info +param-info-direction-mask+)
+                  :for in-only = (= dir-info +param-info-in+)
+                  :unless in-only :do
+                    (let ((val (pop ref-values)))
+                      (multiple-value-bind (boxed cleanup)
+                          (%box val)
+                        (setf (mem-aref args-ptr :pointer i) boxed)
+                        (when cleanup
+                          (setf (mem-aref info-ptr :uint32 i)
+                                (logior info +param-info-release-handle+))))))
+            (if voidp
+              (null-pointer)
+              (multiple-value-bind (boxed cleanup)
+                  (%box rv)
+                (setf (mem-ref release-rvh-ptr :bool) cleanup)
+                boxed)))))
+    (dotnet-error (e)
+      (setf (mem-ref out-ex-from-dotnet :bool) t
+            (mem-ref out-ex :pointer)
+            (%dotnet-object-handle (dotnet-error-object e)))
+      (null-pointer))
+    (error (e)
+      (setf (mem-ref out-ex-from-dotnet :bool) nil
+            (mem-ref out-ex :pointer) (make-pointer (%alloc-lisp-handle e)))
+      (null-pointer))))
 
 (defun initialize-dotnet-callable-object-proxy (object)
   (declare (type dotnet-callable-object object))
   (when-let* ((class (class-of object))
               (callable-class-p (typep class 'dotnet-callable-class))
               (type-proxy (dcc-proxy-type class))
+              (object-handle (make-pointer (%alloc-lisp-handle object t)))
               ;; TODO: Handle constructors with parameters
-              (proxy (with-accessors ((getter dtc-getter-delegate)
-                                      (setter dtc-setter-delegate)
-                                      (invoke dtc-invoke-delegate))
-                         -dynamic-type-cache-
-                       (reflection-new
-                        type-proxy
-                        (box object)
-                        getter
-                        setter
-                        invoke)))
-              (proxy-handle (%dotnet-object-handle proxy)))
+              (proxy (reflection-new type-proxy
+                                     object-handle
+                                     (callback proxy-callback))))
     (setf (dco-proxy object) proxy)
-    (tg:cancel-finalization proxy)
-    (tg:finalize object (lambda ()
-                          (%free-handle proxy-handle)))
     proxy))
 
 (defmethod shared-initialize ((object dotnet-callable-object)
@@ -807,6 +906,57 @@
   (call-next-method)
   (initialize-dotnet-callable-object-proxy object)
   object)
+
+(defmethod slot-value-using-class ((class dotnet-proxy-class)
+                                   (object dotnet-proxy-object)
+                                   (slotd effective-property-slot-definition))
+  (let ((allocation (slot-definition-allocation slotd)))
+    (if (eq allocation :dotnet)
+      (let ((getter (slot-definition-getter slotd)))
+        (unless getter
+          (error 'accessor-resolution-error
+                 :type (dcc-proxy-type class)
+                 :static-p nil
+                 :member (slotd-dotnet-name slotd)
+                 :member-kind :property
+                 :kind :reader))
+        (funcall (fdefinition getter) object))
+      (call-next-method))))
+
+(defmethod (setf slot-value-using-class) (new-value
+                                          (class dotnet-proxy-class)
+                                          (object dotnet-proxy-object)
+                                          (slotd effective-property-slot-definition))
+  (let ((allocation (slot-definition-allocation slotd)))
+    (if (eq allocation :dotnet)
+      (let ((setter (slot-definition-setter slotd)))
+        (unless setter
+          (error 'accessor-resolution-error
+                 :type (dcc-proxy-type class)
+                 :static-p nil
+                 :member (slotd-dotnet-name slotd)
+                 :member-kind :property
+                 :kind :writer))
+        (funcall (fdefinition setter) new-value object))
+      (call-next-method))))
+
+(defmethod slot-boundp-using-class ((class dotnet-proxy-class)
+                                    (object dotnet-proxy-object)
+                                    (slotd effective-property-slot-definition))
+  (let ((allocation (slot-definition-allocation slotd)))
+    (if (eq allocation :dotnet)
+      (slot-boundp object '%value)
+      (call-next-method))))
+
+(defmethod slot-makunbound-using-class ((class dotnet-proxy-class)
+                                        (object dotnet-proxy-object)
+                                        (slotd effective-property-slot-definition))
+  (let ((allocation (slot-definition-allocation slotd)))
+    (if (eq allocation :dotnet)
+      (error 'property-slot-makunbound-attempt
+             :object object
+             :slot-name (slot-definition-name slotd))
+      (call-next-method))))
 
 (defmethod slot-value-using-class ((class dotnet-proxy-class)
                                    (object dotnet-proxy-object)
@@ -829,7 +979,7 @@
      (class dotnet-proxy-class)
      (object dotnet-proxy-object)
      (slotd effective-callable-event-slot-definition))
-  (check-type new-handler (or symbol function))
+  (check-type new-handler function-designator)
   (let* ((handler-type (slotd-handler-type slotd))
          (handler (and new-handler (new handler-type new-handler)))
          (event-name (slotd-dotnet-name slotd))
@@ -862,7 +1012,6 @@
                                     (slotd effective-method-slot-definition))
   (slot-boundp object '%value))
 
-
 (defmethod slot-makunbound-using-class ((class dotnet-proxy-class)
                                         (object dotnet-proxy-object)
                                         (slotd effective-method-slot-definition))
@@ -887,65 +1036,66 @@
          :slot-name (slot-definition-name slotd)
          :value new-value))
 
+(defmethod slot-value-using-class ((class dotnet-callable-class)
+                                   (object dotnet-proxy-object)
+                                   (slotd effective-indexer-slot-definition))
+  (let ((getter (slotd-getter slotd))
+        (setter (slotd-setter slotd)))
+    (values (when getter
+              (labels ((getter-delegate (&rest index-args)
+                         (apply getter object index-args)))
+                #'getter-delegate))
+            (when setter
+              (labels ((setter-delegate (&rest index-args)
+                         (apply setter object index-args)))
+                #'setter-delegate)))))
+
+(defmethod (setf slot-value-using-class) (new-value
+                                          (class dotnet-proxy-class)
+                                          (object dotnet-proxy-object)
+                                          (slotd effective-indexer-slot-definition))
+  (error 'indexer-slot-write-attempt
+         :object object
+         :slot-name (slot-definition-name slotd)
+         :value new-value))
+
+(defmethod slot-boundp-using-class ((class dotnet-proxy-class)
+                                    (object dotnet-proxy-object)
+                                    (slotd effective-indexer-slot-definition))
+  (slot-boundp object '%value))
+
+(defmethod slot-makunbound-using-class ((class dotnet-proxy-class)
+                                        (object dotnet-proxy-object)
+                                        (slotd effective-indexer-slot-definition))
+  (error 'indexer-slot-makunbound-attempt
+         :object object
+         :slot-name (slot-definition-name slotd)))
+
 (defun initialize-dynamic-type-cache ()
-  (let ((getter (new '(System.Func :object :object :string :object)
-                     #'get-dotnet-callable-object-slot-value))
-        (setter (new '(System.Action :object :object :string :object)
-                     #'set-dotnet-callable-object-slot-value))
-        (invoke (new '(System.Func :object :object :string (array :object) :object)
-                     #'invoke-dotnet-callable-object-method)))
-    (if (null -dynamic-type-cache-)
-      (setf -dynamic-type-cache- (make-dynamic-type-cache getter setter invoke))
-      (let ((classes (loop :for wp :in (dtc-classes -dynamic-type-cache-)
-                           :for class = (tg:weak-pointer-value wp)
-                           :when (and class (not (find class classes)))
-                             :collect class :into classes
-                           :finally (return classes))))
-        (setf -dynamic-type-cache- (make-dynamic-type-cache getter setter invoke))
-        (dolist (class (reverse classes))
-          (let ((slots (class-slots class)))
-            (dolist (eslotd (remove-if
-                             (lambda (slotd)
-                               (not (typep slotd 'effective-dotnet-slot-definition)))
-                             slots))
-              (initialize-effective-slot-definition
-               eslotd
-               (first (compute-direct-slot-definitions
-                       class
-                       (slot-definition-name eslotd))))))
-          (initialize-class-proxy class)
-          (make-instances-obsolete class))
-        (setf (dtc-classes -dynamic-type-cache-) (mapcar #'tg:make-weak-pointer classes))
-        -dynamic-type-cache-))))
+  (if (null -dynamic-type-cache-)
+    (setf -dynamic-type-cache- (make-dynamic-type-cache))
+    (let ((classes (loop :for wp :in (dtc-classes -dynamic-type-cache-)
+                         :for class = (tg:weak-pointer-value wp)
+                         :when (and class (not (find class classes)))
+                           :collect class :into classes
+                         :finally (return classes)))
+          (cache (make-dynamic-type-cache)))
+      (loop :for class :in (reverse classes)
+            :for slots = (class-slots class) :do
+              (loop :for eslotd :in slots
+                    :if (typep eslotd 'effective-dotnet-slot-definition) :do
+                      (initialize-effective-slot-definition
+                       eslotd
+                       (first (compute-direct-slot-definitions
+                               class
+                               (slot-definition-name eslotd)))))
+              (initialize-class-proxy class)
+              (make-instances-obsolete class))
+      (setf (dtc-classes cache) (mapcar #'tg:make-weak-pointer classes))
+      (setf -dynamic-type-cache- cache))))
 
 (defun clear-dynamic-type-cache ()
-  (let* ((dtc -dynamic-type-cache-))
-    (with-accessors ((lock dtc-lock)
-                     (assembly dtc-assembly)
-                     (module dtc-module)
-                     (classes dtc-classes)
-                     (type-count dtc-type-count)
-                     (getter-delegate dtc-getter-delegate)
-                     (setter-delegate dtc-setter-delegate)
-                     (invoke-delegate dtc-invoke-delegate))
-        dtc
-      (let* ((new-assembly (make-dynamic-type-cache-assembly))
-             (new-module (make-dynamic-type-cache-module new-assembly))
-             (new-getter (new '(System.Func :object :object :string :object)
-                              #'get-dotnet-callable-object-slot-value))
-             (new-setter (new '(System.Action :object :object :string :object)
-                              #'set-dotnet-callable-object-slot-value))
-             (new-invoke (new '(System.Func :object :object :string (array :object) :object)
-                              #'invoke-dotnet-callable-object-method)))
-        (with-write-lock (lock)
-          (setf assembly new-assembly
-                module new-module
-                getter-delegate new-getter
-                setter-delegate new-setter
-                invoke-delegate new-invoke
-                classes '()
-                type-count 0)
-          (values))))))
+  (%clear-dynamic-type-cache -dynamic-type-cache-))
 
 (defun dotnet-callable-proxy-object (proxy)
   (declare (type dotnet-object proxy))
@@ -955,7 +1105,7 @@
                                                    NonPublic
                                                    Instance))))
     (when field
-      [field GetValue proxy])))
+      (%handle-table-get (pointer-address [field GetValue proxy])))))
 
 (defun dotnet-callable-proxy-type-p (type)
   "Returns non-NIL in case if a TYPE is a proxy type for dotnet-callable-class"

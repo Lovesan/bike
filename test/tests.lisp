@@ -158,15 +158,21 @@
 
 (test test-callable-class
   (define-dotnet-callable-class callable-test-object ()
+    (ht :accessor cto-ht :initform (make-hash-table))
     (:property string-property :string :accessor cto-string-property)
     (:event raised System.EventHandler :accessor cto-raised)
     (:method ((cto-duplicate-string-property "DuplicateStringProperty")) :string ()
       (let ((value (cto-string-property this)))
-        (invoke 'System.String 'Concat value value))))
+        (invoke 'System.String 'Concat value value)))
+    (:indexer :string ((idx :int))
+     (:get cto-item (gethash idx (cto-ht this)))
+     (:set (setf cto-item) (setf (gethash idx (cto-ht this)) value))))
   (let ((obj (make-instance 'callable-test-object)))
     (setf (property obj 'StringProperty) "Hello")
+    (setf (ref obj 123) "Value")
     (is (string= "Hello" (cto-string-property obj)))
-    (is (string= "HelloHello" (invoke obj 'DuplicateStringProperty)))))
+    (is (string= "HelloHello" (invoke obj 'DuplicateStringProperty)))
+    (is (string= "Value" (ref obj 123)))))
 
 (test (test-event :depends-on test-callable-class)
   (let* ((x 0)

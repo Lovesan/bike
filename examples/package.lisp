@@ -36,6 +36,8 @@
            #:enumerable-callbacks
            #:example-exception-case
            #:example-exception-bind
+           #:callable-enumerable-example
+           #:callable-class-example
            #+windows
            #:hello-wpf
            #+windows

@@ -368,4 +368,13 @@ specification."
              (flet ,flet-bindings
                (exception-bind ,handler-bindings ,form))))))))
 
+(defun dotnet-error (type &rest args)
+  (declare (type dotnet-type-designator type)
+           (dynamic-extent args))
+  "Constructs an exception object of the specified .Net TYPE
+  using constructor ARGS and signals a DOTNET-ERROR which holds this exception object."
+  (let* ((type (resolve-type type))
+         (exception (%new type args)))
+    (error 'dotnet-error :object exception)))
+
 ;;; vim: ft=lisp et

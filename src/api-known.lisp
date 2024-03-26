@@ -412,6 +412,9 @@ type or method definition.")
   "Retrieves methods from a TYPE"
   (bike-vector-to-list (%type-methods type)))
 
+(defknown type-get-method-by-name
+    (System.Type :method GetMethod System.String System.Reflection.BindingFlags))
+
 (declaim (ftype (function (dotnet-object) dotnet-object) %type-events))
 (defknown %type-events (System.Type :method GetEvents))
 
@@ -574,6 +577,10 @@ type or method definition.")
     (System.Type :method GetConstructors System.Reflection.BindingFlags)
     "Returns a .NET array of type constructors")
 
+(defknown type-get-constructor
+    (System.Type :method GetConstructor System.Reflection.BindingFlags "System.Type[]")
+    "Retrieves type constructor by binding flags and type array argument")
+
 (defknown type-interfaces (System.Type :method GetInterfaces)
     "Returns a .Net array of interfaces implemented by a type")
 
@@ -624,5 +631,20 @@ type or method definition.")
   (defemit u4 System.Int32)
   (defemit s8 System.Int64)
   (defemit u8 System.UInt64))
+
+(defknown %emit-calli
+    (System.Reflection.Emit.ILGenerator :method EmitCalli
+                                        System.Reflection.Emit.OpCode
+                                        System.Runtime.InteropServices.CallingConvention
+                                        System.Type
+                                        "System.Type[]"))
+
+(defknown property-builder-set-get-method
+    (System.Reflection.Emit.PropertyBuilder :method SetGetMethod
+                                            System.Reflection.Emit.MethodBuilder))
+
+(defknown property-builder-set-set-method
+    (System.Reflection.Emit.PropertyBuilder :method SetSetMethod
+                                            System.Reflection.Emit.MethodBuilder))
 
 ;;; vim: ft=lisp et

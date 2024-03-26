@@ -90,7 +90,9 @@
                 #:ensure-list
                 #:when-let
                 #:when-let*
-                #:hash-table-keys)
+                #:hash-table-keys
+                #:switch
+                #:eswitch)
   (:import-from #:cl-ppcre
                 #:regex-replace)
   (:export
@@ -210,6 +212,8 @@
    #:duplicate-dotnet-name
    #:duplicate-dotnet-name-value
    #:duplicate-dotnet-name-class
+   #:duplicate-indexer
+   #:duplicate-indexer-class
    #:delegate-type-expected
    #:delegate-type-expected-datum
    #:interface-type-expected
@@ -226,17 +230,38 @@
    #:invalid-generic-constraint
    #:invalid-generic-constraint-message
    #:invalid-generic-constraint-list
+   #:dotnet-slot-write-attempt
+   #:dotnet-slot-write-attempt-object
+   #:dotnet-slot-write-attempt-slot-name
+   #:dotnet-slot-write-attempt-value
    #:method-slot-write-attempt
    #:method-slot-write-attempt-object
    #:method-slot-write-attempt-slot-name
    #:method-slot-write-attempt-value
+   #:indexer-slot-write-attempt
+   #:indexer-slot-write-attempt-object
+   #:indexer-slot-write-attempt-slot-name
+   #:indexer-slot-write-attempt-value
+   #:dotnet-slot-makunbound-attempt
+   #:dotnet-slot-makunbound-attempt-object
+   #:dotnet-slot-makunbound-attempt-slot-name
    #:method-slot-makunbound-attempt
    #:method-slot-makunbound-attempt-object
    #:method-slot-makunbound-attempt-slot-name
+   #:property-slot-makunbound-attempt
+   #:property-slot-makunbound-attempt-object
+   #:property-slot-makunbound-attempt-slot-name
+   #:indexer-slot-makunbound-attempt
+   #:indexer-slot-makunbound-attempt-object
+   #:indexer-slot-makunbound-attempt-slot-name
    #:dotnet-callable-object-orphan-proxy
    #:dotnet-callable-object-orphan-proxy-value
    #:dotnet-callable-object-orphan-proxy-operation
+   #:dotnet-callable-object-orphan-proxy-member-name
    #:dotnet-callable-object-orphan-proxy-arguments
+   #:dotnet-slot-missing
+   #:dotnet-slot-missing-class
+   #:dotnet-slot-missing-name
 
    ;; reflection api
    #:reflection-invoke
@@ -309,14 +334,25 @@
    #:slot-definition-handler-type
    #:callable-event-slot-definition
    #:slot-definition-raise-method-dotnet-name
+   #:method-slot-definition
+   #:slot-definition-return-type
+   #:slot-definition-parameters
+   #:slot-definition-rest-parameter
+   #:slot-definition-generic-parameters
+   #:slot-definition-function-name
+   #:indexer-slot-definition
    #:direct-dotnet-slot-definition
    #:direct-property-slot-definition
    #:direct-event-slot-definition
    #:direct-callable-event-slot-definition
+   #:direct-method-slot-definition
+   #:direct-indexer-slot-definition
    #:effective-dotnet-slot-definition
    #:effective-property-slot-definition
    #:effective-event-slot-definition
    #:effective-callable-event-slot-definition
+   #:effective-method-slot-definition
+   #:effective-indexer-slot-definition
 
    ;; proxy macros
    #:define-dotnet-callable-class
