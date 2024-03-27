@@ -914,35 +914,39 @@
 (defmethod slot-value-using-class ((class dotnet-proxy-class)
                                    (object dotnet-proxy-object)
                                    (slotd effective-property-slot-definition))
-  (let ((allocation (slot-definition-allocation slotd)))
+  (let ((allocation (slot-definition-allocation slotd))
+        (getter (slot-definition-getter slotd)))
     (if (eq allocation :dotnet)
-      (let ((getter (slot-definition-getter slotd)))
-        (unless getter
-          (error 'accessor-resolution-error
-                 :type (dcc-proxy-type class)
-                 :static-p nil
-                 :member (slotd-dotnet-name slotd)
-                 :member-kind :property
-                 :kind :reader))
-        (funcall (fdefinition getter) object))
-      (call-next-method))))
+      (if getter
+        (funcall (fdefinition getter) object)
+        (error 'accessor-resolution-error
+               :type (dcc-proxy-type class)
+               :static-p nil
+               :member (slotd-dotnet-name slotd)
+               :member-kind :property
+               :kind :reader))
+      (case getter
+        ((t nil) (call-next-method))
+        (t (funcall (fdefinition getter) object))))))
 
 (defmethod (setf slot-value-using-class) (new-value
                                           (class dotnet-proxy-class)
                                           (object dotnet-proxy-object)
                                           (slotd effective-property-slot-definition))
-  (let ((allocation (slot-definition-allocation slotd)))
+  (let ((allocation (slot-definition-allocation slotd))
+        (setter (slot-definition-setter slotd)))
     (if (eq allocation :dotnet)
-      (let ((setter (slot-definition-setter slotd)))
-        (unless setter
-          (error 'accessor-resolution-error
-                 :type (dcc-proxy-type class)
-                 :static-p nil
-                 :member (slotd-dotnet-name slotd)
-                 :member-kind :property
-                 :kind :writer))
-        (funcall (fdefinition setter) new-value object))
-      (call-next-method))))
+      (if setter
+        (funcall (fdefinition setter) new-value object)
+        (error 'accessor-resolution-error
+               :type (dcc-proxy-type class)
+               :static-p nil
+               :member (slotd-dotnet-name slotd)
+               :member-kind :property
+               :kind :writer))
+      (case setter
+        ((t nil) (call-next-method))
+        (t (funcall (fdefinition setter) new-value object))))))
 
 (defmethod slot-boundp-using-class ((class dotnet-proxy-class)
                                     (object dotnet-proxy-object)
