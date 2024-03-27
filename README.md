@@ -68,6 +68,8 @@ This library implements cross-platform Common Lisp interface to .Net Core platfo
 ;;  on Linux 4.15.0-1041-aws #43-Ubuntu SMP Thu Jun 6 13:39:11 UTC 2019
 ````
 
+See [examples](examples/) and [documentation](doc/README.md) for more info.
+
 ## Installation
 
 The most basic way to install the library at this moment would be to use [quicklisp](https://www.quicklisp.org/):
