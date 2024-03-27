@@ -727,6 +727,7 @@
       (emit Brfalse no-import-label)
       (emit-s8 Ldc_I8 (pointer-address
                        (foreign-symbol-pointer "ecl_release_current_thread")))
+      (emit Conv_I)
       (emit-calli #e(System.Runtime.InteropServices.CallingConvention Cdecl)
                   [:void]
                   (empty-types))
