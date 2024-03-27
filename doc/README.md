@@ -1520,7 +1520,7 @@ getter-form ::= existing-getter-form | getter-definition-form
 
 existing-getter-form ::= ({ :GET | :GETTER } function-name)
 
-getter-form-with-body ::= ({ :GET | :GETTER } function-name accessor-body)
+getter-definition-form ::= ({ :GET | :GETTER } function-name accessor-body)
 
 setter-form ::= existing-setter-form | setter-definition-form
 
