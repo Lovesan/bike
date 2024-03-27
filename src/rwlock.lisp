@@ -283,11 +283,4 @@
        (unwind-protect (locally ,@body)
          (rwlock-end-write ,lock)))))
 
-(defun ensure-bt2-classes-finalized ()
-  (c2mop:ensure-finalized (find-class 'bt2:thread))
-  (c2mop:ensure-finalized (find-class 'bt2:lock))
-  (values))
-
-(register-image-restore-hook 'ensure-bt2-classes-finalized t)
-
 ;;; vim: ft=lisp et

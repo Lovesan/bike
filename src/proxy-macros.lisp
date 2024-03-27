@@ -352,6 +352,7 @@
              ,@class-options
              ,@(when doc `((:documentation ,doc))))
            ,@(nreverse other-defs)
+           (ensure-finalized (find-class ',name))
            ',name)))))
 
 ;;; vim: ft=lisp et
