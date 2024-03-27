@@ -37,7 +37,8 @@
                #:flexi-streams
                #:trivial-features
                #:trivial-garbage
-               #:bordeaux-threads)
+               #:bordeaux-threads
+               #:closer-mop)
   :serial t
   :components ((:module "src"
                 :serial t
