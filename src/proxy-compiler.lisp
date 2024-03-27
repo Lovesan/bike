@@ -254,8 +254,8 @@
         (setf assembly new-assembly
               module new-module
               proxy-interface-type new-proxy-interface-type
-              classes '()
-              type-count 0))
+              classes classes
+              type-count type-count))
       (values))))
 
 (defun tbs-set-custom-attribute (member-builder attribute-type &rest args)

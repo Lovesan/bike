@@ -1084,6 +1084,7 @@
                            :collect class :into classes
                          :finally (return classes)))
           (cache (make-dynamic-type-cache)))
+      (setf -dynamic-type-cache- cache)
       (loop :for class :in (reverse classes)
             :for slots = (class-slots class) :do
               (loop :for eslotd :in slots
@@ -1096,7 +1097,7 @@
               (initialize-class-proxy class)
               (make-instances-obsolete class))
       (setf (dtc-classes cache) (mapcar #'tg:make-weak-pointer classes))
-      (setf -dynamic-type-cache- cache))))
+      cache)))
 
 (defun clear-dynamic-type-cache ()
   (%clear-dynamic-type-cache -dynamic-type-cache-))
