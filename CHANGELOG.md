@@ -1,3 +1,25 @@
+# 0.14.0 Callable classes. Apropos facility. ECL support. Documentation! More examples.
+  * Added the documentation (at last!)
+  * Implemented various minor fixes, improvements and refactoring
+  * Added `apropos` facility
+  * Added .NET-callable classes
+  * ECL support
+  * Reworked the usage of `*default-assemblies*` variable
+  * Reworked the Asp .Net Core example
+  * Allowed .NET to handle SIGRTMIN on Linux
+  * Added the WPF package browser example
+  * Fixed few bugs with invalid primitive type handling
+  * Added an alias for `System.Void`
+  * Handled `*print-escape*` in the printer facility
+  * Fixed MZ array type resolution
+  * Implemented a minor addition to custom syntax for convenience
+  * Fixed a bug with CoreCLR reloading on foreign library redefinition
+  * Added dependency on the `global-vars` library, for global variables
+  * Reworked `rwlock`
+  * Embraced `bt2` API from `bordeaux-threads` library
+  * Implemented various pathname-related fixes, especially on Windows
+  * Updated CircleCI pipeline to the latest .NET
+
 # 0.13.0 Printer facility, various improvements
   * Added extensible printer facility
   * Improved type name parser(MZ vectors, arrays of generic type definitions, identifier handling)
