@@ -1675,6 +1675,8 @@ Returns an underlying object of a dotnet callable proxy in case an `OBJECT` is a
 The library exposes a named readtable `BIKE-SYNTAX`, which allows for the following reader extensions:
 
 ````lisp
+[:typespec] ; == (resolve-type 'typespec)
+
 [:typespec MethodDesignator . args] ; == (invoke 'typespec 'MethodDesignator . args)
 
 [object MethodDesignator . args] ; == (invoke object 'MethodDesignator . args)
