@@ -128,18 +128,6 @@ CCL/Windows does not handle foreign thread callbacks properly but otherwise, the
 
 ECL/Win64 currently has this bug, which prevents the library from building: https://gitlab.com/embeddable-common-lisp/ecl/-/issues/679
 
-#### CoreCLR location
-
-On `load-foreign-library` CFFI first tries to load the library directly.
-
-Therefore, `coreclr.dll`(and `wpfgfx_cor3.dll` etc.) which CFFI loads, may originate from some directory
-listed in `PATH`, which differs from the .NET runtime library directory.
-
-That's not a problem in case you are deploying your application in the same directory that contains full .NET runtime,
-or in case you have the latest PowerShell installed and listed in PATH and you are targeting the latest .NET.
-
-But sometimes this behavior may cause weird things to happen.
-
 #### Older Windows issues
 
 There were some issues with SBCL and exceptions in the past, but those were resolved.
