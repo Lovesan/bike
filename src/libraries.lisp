@@ -30,25 +30,24 @@
   (defun init-coreclr-search-location ()
     (let ((lib (find-coreclr)))
       (if lib
-        (progn (setf -coreclr-location- lib)
-               (pushnew (pathname-directory-pathname lib)
-                        *foreign-library-directories*
-                        :test #'equalp))
+        (let ((runtime-dir (pathname-directory-pathname lib)))
+          (setf -coreclr-location- lib)
+          ;; Add runtime directory to DLL search path
+          (add-default-library-directory runtime-dir))
         (error "Unable to find CoreCLR")))
     (let ((lib (find-interop t)))
       (if lib
-        (progn (setf -interop-location- lib)
-               (pushnew (pathname-directory-pathname lib)
-                        *foreign-library-directories*
-                        :test #'equalp))
+        (let ((interop-dir (pathname-directory-pathname lib)))
+          (setf -interop-location- lib)
+          ;; Add interop directory to DLL search path
+          (add-default-library-directory interop-dir))
         (error "Unable to find BikeInterop.dll")))
     (values))
   (register-image-restore-hook 'init-coreclr-search-location))
 
-(define-foreign-library-once coreclr
-  (t #.+coreclr-library-file+))
+(define-foreign-library-once coreclr #.+coreclr-library-file+)
 
-(use-foreign-library-once coreclr)
+(use-foreign-library-once coreclr :default-directories-only t)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %get-related-app-path (name)
@@ -62,11 +61,11 @@
   (defun initialize-aspnet-search-location ()
     (let* ((aspnet-sdk-dir (pathname
                             (%get-related-app-path "Microsoft.AspNetCore.App"))))
-      (if (probe-file* (make-pathname* :name "Microsoft.AspNetCore.dll"
+      (if (probe-file* (make-pathname* :name "Microsoft.AspNetCore"
+                                       :type "dll"
                                        :defaults aspnet-sdk-dir))
-        (pushnew (setf -aspnet-sdk-dir- aspnet-sdk-dir)
-                 *foreign-library-directories*
-                 :test #'equalp)
+        ;; Add Asp.Net Core to DLL search path
+        (add-default-library-directory (setf -aspnet-sdk-dir- aspnet-sdk-dir))
         (setf -aspnet-sdk-dir- nil))))
   (register-image-restore-hook 'initialize-aspnet-search-location))
 
@@ -78,35 +77,31 @@
       (let* ((desktop-sdk-dir (pathname
                                (%get-related-app-path "Microsoft.WindowsDesktop.App"))))
         (if (probe-file*
-             (make-pathname* :name "wpfgfx_cor3.dll"
+             (make-pathname* :name "wpfgfx_cor3"
+                             :type "dll"
                              :defaults desktop-sdk-dir))
-          (pushnew (setf -desktop-sdk-dir- desktop-sdk-dir)
-                   *foreign-library-directories*
-                   :test #'equalp)
+          ;; Add Desktop SDK dir to DLL search path
+          (add-default-library-directory (setf -desktop-sdk-dir- desktop-sdk-dir))
           (setf -desktop-sdk-dir- nil))))
     (register-image-restore-hook 'initialize-wpfgfx-search-location))
 
   ;; These libs should be pre-loaded, otherwise WPF would be unable
   ;;   to find them, for who knows what reasons
-  (define-foreign-library-once vcruntime
-    (t "vcruntime140_cor3.dll"))
-  (define-foreign-library-once d3dcompiler
-    (t "D3DCompiler_47_cor3.dll"))
-  (define-foreign-library-once wpfgfx
-    (t "wpfgfx_cor3.dll"))
+  (define-foreign-library-once vcruntime "vcruntime140_cor3.dll")
+  (define-foreign-library-once d3dcompiler "D3DCompiler_47_cor3.dll")
+  (define-foreign-library-once wpfgfx "wpfgfx_cor3.dll")
 
   (eval-when (:compile-toplevel :load-toplevel :execute)
     (defun load-wpfgfx ()
       (when -desktop-sdk-dir-
-        (use-foreign-library-once vcruntime)
-        (use-foreign-library-once d3dcompiler)
-        (use-foreign-library-once wpfgfx)))
+        (load-foreign-library-once 'vcruntime :default-directories-only t)
+        (load-foreign-library-once 'd3dcompiler :default-directories-only t)
+        (load-foreign-library-once 'wpfgfx :default-directories-only t)))
     (register-image-restore-hook 'load-wpfgfx)))
 
 #-coreclr-windows
 (progn
-  (define-foreign-library-once system-native
-    (t #.+system-native-library-file+))
+  (define-foreign-library-once system-native #.+system-native-library-file+)
   (eval-when (:compile-toplevel :load-toplevel :execute)
     (define-global-var -has-system-native- nil)
     (defun initialize-system-native-search ()
@@ -119,7 +114,7 @@
   (eval-when (:compile-toplevel :load-toplevel :execute)
     (defun load-system-native ()
       (when -has-system-native-
-        (use-foreign-library-once system-native)))
+        (load-foreign-library-once 'system-native)))
     (register-image-restore-hook 'load-system-native))
   (defun init-native-aux-signals ()
     (when -has-system-native-

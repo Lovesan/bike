@@ -32,7 +32,8 @@
                 #:define-constant
                 #:non-negative-fixnum
                 #:with-gensyms
-                #:once-only)
+                #:once-only
+                #:removef)
   (:export
    ;; Additional types
    #:function-designator
@@ -56,9 +57,12 @@
    #:dnchar
    #:size-t
    #:define-foreign-library-once
+   #:load-foreign-library-once
    #:use-foreign-library-once
    #+windows
    #:kernel32
+   #:add-default-library-directory
+   #:remove-default-library-directory
 
    ;; Conditions
    #:slot-initializer-missing

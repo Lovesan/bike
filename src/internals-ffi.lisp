@@ -24,6 +24,16 @@
 
 (in-package #:bike-internals)
 
+#+coreclr-windows
+(defconstant +load-library-search-default-dirs+ #x00001000)
+
+(declaim (type list -default-library-directories-))
+(define-global-var -default-library-directories- '())
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (declaim (type hash-table -library-files-))
+  (define-global-var -library-files- (make-hash-table :test #'eq)))
+
 ;; LOAD-FOREIGN-LIBRARY actually closes the library before
 ;;  reloading it again. That would lead to a crash in case of .NET runtime
 ;;  being present in the process. .NET runtime, once loaded, can not be
@@ -35,25 +45,82 @@
 ;;  DEFINE-FOREIGN-LIBRARY expansion is evaluated.
 ;;  When it does this, it omits library load status
 ;;  making the FOREIGN-LIBRARY-LOADED-P function effectively useless.
-(defmacro define-foreign-library-once (name-and-options &body pairs)
-  "Defines a foreign library NAME that can be posteriorly used with
-    the USE-FOREIGN-LIBRARY macro.
+(defmacro define-foreign-library-once (name-and-options file)
+  "Defines a foreign library NAME which maps to the specified FILE.
 Unlike the original CFFI macro, it does not redefine the library
-  in case it is already defined."
+  in case it is already defined and also does not use a sophisticated feature spec evaluation."
+  (check-type file string)
   (let ((name-and-options (ensure-list name-and-options)))
     (destructuring-bind (name &rest options)
         name-and-options
       `(eval-when (:compile-toplevel :load-toplevel :execute)
          (unless (find ',name (list-foreign-libraries :loaded-only nil)
                        :key #'foreign-library-name)
+           (setf (gethash ',name -library-files-) ,file)
            (define-foreign-library (,name ,@options)
-             ,@pairs))))))
+             (t ,file)))))))
 
-(defmacro use-foreign-library-once (name)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun load-foreign-library-once (name &key default-directories-only)
+    "Like CFFI:LOAD-FOREIGN-LIBRARY but ensures that the library is only loaded once.
+
+:DEFAULT-DIRECTORIES-ONLY - unless non-NIL, specifies that the library search
+                            should only be performed in default directories for the platform.
+                            Currently only used on Windows."
+    (declare (ignorable default-directories-only))
+    (unless (foreign-library-loaded-p name)
+      #+coreclr-windows
+      (when default-directories-only
+        ;; Preload the library to avoid PATH issues
+        (let ((file (gethash name -library-files-)))
+          (unless file
+            (error "The library ~s must be defined using DEFINE-FOREIGN-LIBRARY-ONCE" name))
+          (load-library-ex file
+                           (null-pointer)
+                           +load-library-search-default-dirs+)))
+      (load-foreign-library name))))
+
+(defmacro use-foreign-library-once (name &key default-directories-only)
   (declare (type (and symbol (not null)) name))
   `(eval-when (:compile-toplevel :load-toplevel :execute)
-     (unless (foreign-library-loaded-p ',name)
-       (load-foreign-library ',name))))
+     (load-foreign-library-once
+      ',name
+      :default-directories-only ,default-directories-only)))
+
+(defun add-default-library-directory (path)
+  (declare (type (or pathname string) path))
+  (let ((path (ensure-directory-pathname path)))
+    #+coreclr-windows
+    (unless (find path -default-library-directories- :key #'car :test #'pathname-equal)
+      (let* ((native-path (native-path path))
+             (cookie (add-dll-directory native-path)))
+        (when (null-pointer-p cookie)
+          (error "Unable to add a default directory. System error."))
+        (push (cons path cookie) -default-library-directories-)))
+    #-coreclr-windows
+    (pushnew path -default-library-directories- :test #'pathname-equal)
+    (pushnew path *foreign-library-directories* :test #'pathname-equal)
+    path))
+
+(defun remove-default-library-directory (path)
+  (declare (type (or pathname string) path))
+  (let ((path (ensure-directory-pathname path)))
+    #+coreclr-windows
+    (let ((pair (find path -default-library-directories- :key #'car :test #'pathname-equal)))
+      (when pair
+        (unless (remove-dll-directory (native-path (cdr pair)))
+          (error "Unable to remove a default directory. System error."))
+        (removef -default-library-directories- pair :test #'eq)))
+    #-coreclr-windows
+    (removef -default-library-directories- path :test #'pathname-equal)
+    (removef *foreign-library-directories* path :test #'pathname-equal)
+    path))
+
+(defun clear-default-library-directories ()
+  (setf -default-library-directories- '())
+  (values))
+
+(register-image-restore-hook 'clear-default-library-directories nil)
 
 (define-constant +pointer-size+ (foreign-type-size :pointer))
 
@@ -100,10 +167,29 @@ Unlike the original CFFI macro, it does not redefine the library
   (define-constant +dos-path-prefixes+ '("\\\\?\\" "\\\\.\\")
     :test #'equal)
 
-  (define-foreign-library-once kernel32
-      (t "kernel32.dll"))
+  (define-foreign-library-once kernel32 "kernel32.dll")
   (use-foreign-library-once kernel32)
 
+  (defcfun (load-library-ex
+            "LoadLibraryExW"
+            :library kernel32
+            :convention :stdcall)
+      :pointer
+    (name lpwstr)
+    (file :pointer)
+    (flags :uint32))
+  (defcfun (add-dll-directory
+            "AddDllDirectory"
+            :library kernel32
+            :convention :stdcall)
+      :pointer
+    (new-directory lpwstr))
+  (defcfun (remove-dll-directory
+            "RemoveDllDirectory"
+            :library kernel32
+            :convention :stdcall)
+      :boolean
+    (cookie :pointer))
   (defcfun (create-file "CreateFileW" :convention :stdcall
                                       :library kernel32)
       :pointer
