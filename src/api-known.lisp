@@ -412,8 +412,23 @@ type or method definition.")
   "Retrieves methods from a TYPE"
   (bike-vector-to-list (%type-methods type)))
 
+(defknown type-get-method
+    (System.Type :method GetMethod
+                 System.String
+                 System.Reflection.BindingFlags
+                 System.Reflection.Binder
+                 System.Reflection.CallingConventions
+                 "System.Type[]"
+                 "System.Reflection.ParameterModifier[]")
+    "Retrieves a .NET method")
+
 (defknown type-get-method-by-name
-    (System.Type :method GetMethod System.String System.Reflection.BindingFlags))
+    (System.Type :method GetMethod System.String System.Reflection.BindingFlags)
+    "Retrieves a .NET method by name and binding flags")
+
+(defknown type-get-method-by-argument-types
+    (System.Type :method GetMethod System.String "System.Type[]")
+    "Retrieves a .NET method by name and argument types")
 
 (declaim (ftype (function (dotnet-object) dotnet-object) %type-events))
 (defknown %type-events (System.Type :method GetEvents))
@@ -577,9 +592,21 @@ type or method definition.")
     (System.Type :method GetConstructors System.Reflection.BindingFlags)
     "Returns a .NET array of type constructors")
 
-(defknown type-get-constructor
-    (System.Type :method GetConstructor System.Reflection.BindingFlags "System.Type[]")
-    "Retrieves type constructor by binding flags and type array argument")
+(declaim (ftype (function (dotnet-object* t t t t) t)
+                %type-get-constructor))
+(defknown %type-get-constructor
+    (System.Type :method GetConstructor
+                 System.Reflection.BindingFlags
+                 System.Reflection.Binder
+                 "System.Type[]"
+                 "System.Reflection.ParameterModifier[]")
+    "Retrieves a type constructor")
+
+(defun type-get-constructor (type binding-flags argument-types)
+  (declare (type dotnet-object* type)
+           (type dotnet-object binding-flags argument-types))
+  "Retrieves type constructor by binding flags and type array argument"
+  (%type-get-constructor type binding-flags nil argument-types nil))
 
 (defknown type-interfaces (System.Type :method GetInterfaces)
     "Returns a .Net array of interfaces implemented by a type")

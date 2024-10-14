@@ -149,10 +149,10 @@
         (binding-flags #e(System.Reflection.BindingFlags Public Static)))
     (if (or (value-type-p type)
             (bike-equals type [:object]))
-      [interlocked-type GetMethod method-name binding-flags (type-vector
-                                                             (resolve-type (list :ref type))
-                                                             type
-                                                             type)]
+      (type-get-method-by-argument-types
+       interlocked-type
+       method-name
+       (type-vector (resolve-type (list :ref type)) type type))
       (do-enumerable (mi (type-get-members interlocked-type
                                            method-name
                                            #e(System.Reflection.MemberTypes Method)
@@ -894,10 +894,10 @@
     (let* ((prefix (if addp "add_" "remove_"))
            (handler-type [event-field %FieldType])
            (combine-method
-             [[:System.Delegate] GetMethod
+             (type-get-method-by-argument-types
+              [:System.Delegate]
               (if addp "Combine" "Remove")
-              #e(System.Reflection.BindingFlags Public Static)
-              (type-vector [:System.Delegate] [:System.Delegate])])
+              (type-vector [:System.Delegate] [:System.Delegate])))
            (method-builder [type-builder DefineMethod
                                          (strcat prefix event-name)
                                          #e(System.Reflection.MethodAttributes
@@ -977,7 +977,10 @@
       (tbs-add-event-method state name event-builder event-field t)
       (tbs-add-event-method state name event-builder event-field nil)
       (when raise-method-name
-        (let* ((handler-invoke [handler-type GetMethod "Invoke"])
+        (let* ((handler-invoke (type-get-method-by-name
+                                handler-type
+                                "Invoke"
+                                #e(System.Reflection.BindingFlags Public Instance)))
                (handler-parameters (method-parameters handler-invoke))
                (handler-parameter-types (mapcar #'parameter-type handler-parameters))
                (handler-return-param (method-return-parameter handler-invoke))
