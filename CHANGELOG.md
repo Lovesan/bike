@@ -1,3 +1,8 @@
+# 0.15.0 Disable FP exceptions on the Lisp side
+  * From now on, the library disables all FPU exceptions at startup.
+  * Backported a few methods so the library can again be run on the .NET 5
+  * Fixed CoreCLR location issue on Windows
+
 # 0.14.0 Callable classes. Apropos facility. ECL support. Documentation! More examples.
   * Added the documentation (at last!)
   * Implemented various minor fixes, improvements and refactoring

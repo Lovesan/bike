@@ -377,6 +377,8 @@
      [[:Thread %CurrentThread] SetApartmentState #e(ApartmentState STA)]
      ;; WPF frequently causes floating-point exceptions when float traps are unmasked.
      ;; So, just disable them for the UI thread.
+     ;; This should aready been done on the global level though.
+     ;; See src/ffi.lisp
      (cffi:foreign-funcall "_fpreset")
      ;; Create a window and set global variables
      (let ((window (new 'System.Windows.Window))

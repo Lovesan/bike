@@ -17,9 +17,9 @@ Now you have the batteries included! Which are of the size of Battersea Power St
 
 |          | Windows | Linux | macOS  |
 |:--------:|:-------:|:-----:|:------:|
-| **SBCL** | [![OK](https://placehold.co/80x30/239922/FFF?text=OK)](#) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-lisp-runtime-on-linux-due-to-floating-point-exception) | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) |
-| **CCL**  | [![OK*](https://placehold.co/80x30/239922/FFF?text=OK%2A)](#foreign-thread-callbacks) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-lisp-runtime-on-linux-due-to-floating-point-exception)  | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) |
-| **ECL**  | [![ECL Bug](https://placehold.co/80x30/A00/DD2?text=ECL%20Bug)](#windows) | [![Workaround](https://placehold.co/80x30/DD2/blue?text=W%2FA)](#net-6-runtime-loading-crashes-lisp-runtime-on-linux-due-to-floating-point-exception)  | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) |
+| **SBCL** | [![OK](https://placehold.co/80x30/239922/FFF?text=OK)](#) | [![OK](https://placehold.co/80x30/239922/FFF?text=OK)](#) | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) |
+| **CCL**  | [![OK*](https://placehold.co/80x30/239922/FFF?text=OK%2A)](#foreign-thread-callbacks) | [![OK](https://placehold.co/80x30/239922/FFF?text=OK)](#)  | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) |
+| **ECL**  | [![ECL Bug](https://placehold.co/80x30/A00/DD2?text=ECL%20Bug)](#windows) | [![OK](https://placehold.co/80x30/239922/FFF?text=OK)](#)  | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) |
 | Other    | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) | [![?](https://placehold.co/80x30/999/FFF?text=%3F)](#) |
 
 \* With some exceptions
@@ -105,6 +105,15 @@ Given this, you can deploy dumped images to other machines.
 
 SBCL is the main development and testing platform. CCL is also used for testing.
 
+### Floating point exceptions from .NET runtime
+
+.NET is unable to handle FPU exceptions, so the library disables all FPU exceptions on startup.
+
+This requires implementation-specific code. See [src/ffi.lisp](src/ffi.lisp)
+
+The downside is, you get a NaN instead of a DIVISION-BY-ZERO/FLOATING-POINT-INVALID-OPERATION/etc when you encounter such situations
+doing float calculations.
+
 ### Task.Result and other things which block .Net code
 
 Avoid using this if you pass Lisp callbacks to .Net code - this may cause deadlocks. You've been warned.
@@ -140,53 +149,7 @@ Seems like it has been resolved. [This particular patch from Luís Oliveira grea
 
 ### Linux
 
-#### .NET 6+ runtime loading crashes Lisp runtime on Linux due to floating point exception
-
-https://github.com/Lovesan/bike/issues/10
-
-This is a major/blocking issue that the library author needs help with.
-
-Apparently, .NET 6 changed something in its floating point exception handling on Linux, and since then, Lisp runtimes crash with `SIGFPE` on CoreCLR initialization.
-
-An example of such crash:
-````
-CORRUPTION WARNING in SBCL pid 151 tid 163:
-Received signal 8 @ 7f00cbeb2c3b in non-lisp tid 163, resignaling to a lisp thread.
-The integrity of this image is possibly compromised.
-Continuing with fingers crossed.
-Floating point exception (core dumped)
-````
-
-The source of this FP exception seems to be some operation involving NaN, on some .Net background thread.
-
-There's a workaround for SBCL, mentioned in the issue comments. Before loading the library, execute the following:
-````lisp
-(sb-vm::set-floating-point-modes :traps (remove :invalid (getf (sb-vm::get-floating-point-modes) :traps)))
-````
-
-This would disable NaN-related exceptions for SBCL.
-
-You can also disable all FP exceptions, if you like:
-````lisp
-(sb-vm::set-floating-point-modes :traps nil)
-````
-
-However, the side effect is that you would get no floating-point-related errors whatsoever\
-  so that for ex. `(/ 1.0 0.0)` would lead to a result of `#.SINGLE-FLOAT-POSITIVE-INFINITY` instead of a condition of type `DIVISION-BY-ZERO`.
-
-For CCL:
-````lisp
-(ccl:set-fpu-mode :invalid nil)
-````
-
-ECL workaround:
-````lisp
-(ext:trap-fpe 'floating-point-invalid-operation nil)
-````
-
-Also, take a look at https://github.com/Shinmera/float-features library.
-
-You may want to wrap your application entry point function in `float-features:with-float-traps-masked` macro on application deployment.
+The library should work fine on Linux.
 
 #### Older linux issues
 

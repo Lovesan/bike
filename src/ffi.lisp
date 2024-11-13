@@ -24,6 +24,31 @@
 
 (in-package #:bike)
 
+;; .NET expects clean FPU state. So sacrifice FP exceptions
+(defun disable-fpu-exceptions ()
+  #+sbcl (sb-vm::set-floating-point-modes :traps nil)
+  #+ccl (ccl:set-fpu-mode :invalid nil
+                          :inexact nil
+                          :overflow nil
+                          :underflow nil
+                          :division-by-zero nil)
+  #+ecl (progn (ext:trap-fpe 'floating-point-invalid-operation nil)
+               (ext:trap-fpe 'division-by-zero nil)
+               (ext:trap-fpe 'floating-point-overflow nil)
+               (ext:trap-fpe 'floating-point-underflow nil)
+               (ext:trap-fpe 'floating-point-inexact nil))
+  #-(or sbcl ccl ecl)
+  (warn
+   "BIKE: Lisp must disable floating point exceptions
+  before loading the libarary.
+Please contribute to porting to your implementation.
+Add impl. specific code to bike/src/ffi.lisp")
+  #+(and coreclr-windows (not (or sbcl ccl ecl)))
+  (cffi:foreign-funcall "_fpreset")
+  (values))
+
+(register-image-restore-hook 'disable-fpu-exceptions)
+
 (declaim (inline coreclr-initialize))
 (defcfun (coreclr-initialize
           "coreclr_initialize"
