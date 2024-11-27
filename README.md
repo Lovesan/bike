@@ -114,6 +114,31 @@ This requires implementation-specific code. See [src/ffi.lisp](src/ffi.lisp)
 The downside is, you get a NaN instead of a DIVISION-BY-ZERO/FLOATING-POINT-INVALID-OPERATION/etc when you encounter such situations
 doing float calculations.
 
+IDE(SLIME, SLY, etc) may create threads before the library has been loaded, and these threads may have the FPU exceptions enabled. So in these threads, the problem with weird exceptions still applies.
+
+To fix this, add the following to your RC file:
+
+SBCL (~/.sbclrc):
+````lisp
+(sb-vm::set-floating-point-modes :traps nil)
+````
+CCL(~/ccl-init.lisp on Windows or ~/.ccl-init.lisp on Linux):
+````lisp
+(ccl:set-fpu-mode :invalid nil
+                  :inexact nil
+                  :overflow nil
+                  :underflow nil
+                  :division-by-zero nil)
+````
+ECL(~/.eclrc)
+````lisp
+(progn (ext:trap-fpe 'floating-point-invalid-operation nil)
+       (ext:trap-fpe 'division-by-zero nil)
+       (ext:trap-fpe 'floating-point-overflow nil)
+       (ext:trap-fpe 'floating-point-underflow nil)
+       (ext:trap-fpe 'floating-point-inexact nil))
+````
+
 ### Task.Result and other things which block .Net code
 
 Avoid using this if you pass Lisp callbacks to .Net code - this may cause deadlocks. You've been warned.

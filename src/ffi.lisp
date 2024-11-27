@@ -26,6 +26,7 @@
 
 ;; .NET expects clean FPU state. So sacrifice FP exceptions
 (defun disable-fpu-exceptions ()
+  "Disables FPU exceptions for the current thread and its child threads."
   #+sbcl (sb-vm::set-floating-point-modes :traps nil)
   #+ccl (ccl:set-fpu-mode :invalid nil
                           :inexact nil

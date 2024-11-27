@@ -99,6 +99,9 @@
    ;; some internals reexports
    #:native-path
 
+   ;; FPU
+   #:disable-fpu-exceptions
+
    ;; types and stuff
    #:*default-assemblies*
    #:resolve-type
