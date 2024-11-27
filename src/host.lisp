@@ -161,60 +161,87 @@
   (initialize-corefx-signals "InitializeCoreFxSignals")
   (get-loaded-assemblies "GetLoadedAssemblies"))
 
+(defun %initialize-coreclr (exe-path-ptr
+                            domain-name-ptr
+                            property-count
+                            property-keys-ptr
+                            property-values-ptr
+                            out-host-ptr
+                            out-domain-id-ptr)
+  (declare (type foreign-pointer
+                 exe-path-ptr
+                 domain-name-ptr
+                 property-keys-ptr
+                 property-values-ptr
+                 out-host-ptr
+                 out-domain-id-ptr)
+           (type (integer 0 #.most-positive-fixnum) property-count)
+           (optimize (speed 3) (safety 0) (debug 0)))
+  (let ((rv (coreclr-initialize exe-path-ptr
+                                domain-name-ptr
+                                property-count
+                                property-keys-ptr
+                                property-values-ptr
+                                out-host-ptr
+                                out-domain-id-ptr)))
+    (declare (type (unsigned-byte 32) rv))
+    #+coreclr-restore-signals
+    (progn
+      ;; save coreclr signals
+      (dotimes (i +nsig+)
+        ;; Some of them would of course be ours lisp signals reestablished earlier
+        (sigaction i (null-pointer) (sigaction-address -dotnet-sigactions- i)))
+      #+sbcl
+      (foreign-funcall "restore_sbcl_signals")
+      #-sbcl
+      (restore-lisp-sigactions))
+    (unless (zerop rv)
+      (error "Unable to initialize coreclr: HRESULT ~8,'0X" rv))
+    (values)))
+
 (defun initialize-coreclr (&optional (domain-name "CommonLisp"))
   (declare (type string domain-name))
-  (let* ((exe (get-exe-path))
-         (tpa (convert-to-foreign (%get-tpa-string) 'lpastr))
+  (let* ((exe-path-ptr (convert-to-foreign (get-exe-path) 'lpastr))
+         (domain-name-ptr (convert-to-foreign domain-name 'lpastr))
+         (tpa-ptr (convert-to-foreign (%get-tpa-string) 'lpastr))
          (assembly-dirs (%get-app-paths))
-         (app-paths (convert-to-foreign assembly-dirs 'lpastr))
-         (app-ni-paths (convert-to-foreign assembly-dirs 'lpastr)))
+         (app-paths-ptr (convert-to-foreign assembly-dirs 'lpastr))
+         (app-ni-paths-ptr (convert-to-foreign assembly-dirs 'lpastr)))
     (unwind-protect
-         (with-foreign-strings ((tpa-key "TRUSTED_PLATFORM_ASSEMBLIES"
-                                         :encoding :ascii)
-                                (app-paths-key "APP_PATHS"
-                                               :encoding :ascii)
-                                (app-ni-paths-key "APP_NI_PATHS"
-                                                  :encoding :ascii))
-           (with-foreign-objects ((keys :pointer 3)
-                                  (vals :pointer 3)
-                                  (host :pointer)
-                                  (domain-id :uint))
-             (setf (mem-aref keys :pointer 0) tpa-key
-                   (mem-aref keys :pointer 1) app-paths-key
-                   (mem-aref keys :pointer 2) app-ni-paths-key
-                   (mem-aref vals :pointer 0) tpa
-                   (mem-aref vals :pointer 1) app-paths
-                   (mem-aref vals :pointer 2) app-ni-paths
-                   (mem-ref domain-id :uint) 0
-                   (mem-ref host :pointer) (null-pointer))
-             (locally (declare (optimize (speed 3) (safety 0) (space 0) (debug 0)))
-               (let ((rv (coreclr-initialize exe
-                                             domain-name
-                                             3
-                                             keys
-                                             vals
-                                             host
-                                             domain-id)))
-                 (declare (type (unsigned-byte 32) rv))
-                 #+coreclr-restore-signals
-                 (progn
-                   ;; save coreclr signals
-                   (dotimes (i +nsig+)
-                     ;; Some of them would of course be ours lisp signals reestablished earlier
-                     (sigaction i (null-pointer) (sigaction-address -dotnet-sigactions- i)))
-                   #+sbcl
-                   (foreign-funcall "restore_sbcl_signals")
-                   #-sbcl
-                   (restore-lisp-sigactions))
-                 (unless (zerop rv)
-                   (error "Unable to initialize coreclr: HRESULT ~8,'0X" rv))))
-             (coreclr-host (mem-ref host :pointer)
-                           (mem-ref domain-id :uint)
+         (with-foreign-strings ((tpa-key-ptr "TRUSTED_PLATFORM_ASSEMBLIES"
+                                             :encoding :ascii)
+                                (app-paths-key-ptr "APP_PATHS"
+                                                   :encoding :ascii)
+                                (app-ni-paths-key-ptr "APP_NI_PATHS"
+                                                      :encoding :ascii))
+           (with-foreign-objects ((keys-ptr :pointer 3)
+                                  (vals-ptr :pointer 3)
+                                  (host-ptr :pointer)
+                                  (domain-id-ptr :uint))
+             (setf (mem-aref keys-ptr :pointer 0) tpa-key-ptr
+                   (mem-aref keys-ptr :pointer 1) app-paths-key-ptr
+                   (mem-aref keys-ptr :pointer 2) app-ni-paths-key-ptr
+                   (mem-aref vals-ptr :pointer 0) tpa-ptr
+                   (mem-aref vals-ptr :pointer 1) app-paths-ptr
+                   (mem-aref vals-ptr :pointer 2) app-ni-paths-ptr
+                   (mem-ref domain-id-ptr :uint) 0
+                   (mem-ref host-ptr :pointer) (null-pointer))
+             (%initialize-coreclr exe-path-ptr
+                                  domain-name-ptr
+                                  3
+                                  keys-ptr
+                                  vals-ptr
+                                  host-ptr
+                                  domain-id-ptr)
+             (coreclr-host (mem-ref host-ptr :pointer)
+                           (mem-ref domain-id-ptr :uint)
                            domain-name)
              (values)))
-      (free-converted-object tpa 'lpastr nil)
-      (free-converted-object app-paths 'lpastr nil)
-      (free-converted-object app-ni-paths 'lpastr nil))))
+      (free-converted-object exe-path-ptr 'lpastr nil)
+      (free-converted-object domain-name-ptr 'lpastr nil)
+      (free-converted-object tpa-ptr 'lpastr nil)
+      (free-converted-object app-paths-ptr 'lpastr nil)
+      (free-converted-object app-ni-paths-ptr 'lpastr nil))))
 
 (register-image-restore-hook 'initialize-coreclr (not -coreclr-host-))
 

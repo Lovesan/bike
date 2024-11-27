@@ -55,31 +55,13 @@ Add impl. specific code to bike/src/ffi.lisp")
           :library coreclr
           :convention :stdcall)
     :uint
-  (exe-path lpastr)
-  (app-domain-name lpastr)
+  (exe-path :pointer)
+  (app-domain-name :pointer)
   (property-count :int)
   (property-keys :pointer)
   (property-values :pointer)
   (host-handle :pointer)
   (domain-id :pointer))
-
-(define-compiler-macro coreclr-initialize (exe-path
-                                           app-domain-name
-                                           property-count
-                                           property-keys
-                                           property-values
-                                           host-handle
-                                           domain-id)
-  `(foreign-funcall ("coreclr_initialize" :convention :stdcall
-                                          :library coreclr)
-                    lpastr ,exe-path
-                    lpastr ,app-domain-name
-                    :int ,property-count
-                    :pointer ,property-keys
-                    :pointer ,property-values
-                    :pointer ,host-handle
-                    :pointer ,domain-id
-                    :uint))
 
 (defcfun (coreclr-shutdown-2
           "coreclr_shutdown_2"
