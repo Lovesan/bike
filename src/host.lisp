@@ -26,12 +26,17 @@
 
 (defun %get-delegate (host-handle domain-id name)
   (with-foreign-object (pp :pointer)
-    (let ((rv (coreclr-create-delegate host-handle
-                                       domain-id
-                                       "BikeInterop"
-                                       "BikeInterop.Externals"
-                                       name
-                                       pp)))
+    (let* ((fp (foreign-symbol-pointer "coreclr_create_delegate" :library 'coreclr))
+           (rv (foreign-funcall-pointer
+                fp
+                (:convention :stdcall)
+                :pointer host-handle
+                :uint domain-id
+                (:string :encoding :ascii) "BikeInterop"
+                (:string :encoding :ascii) "BikeInterop.Externals"
+                (:string :encoding :ascii) name
+                :pointer pp
+                :uint)))
       (if (zerop rv)
         (mem-ref pp :pointer)
         (error "Unable to get interop delegate '~a'" name)))))
@@ -177,13 +182,18 @@
                  out-domain-id-ptr)
            (type (integer 0 #.most-positive-fixnum) property-count)
            (optimize (speed 3) (safety 0) (debug 0)))
-  (let ((rv (coreclr-initialize exe-path-ptr
-                                domain-name-ptr
-                                property-count
-                                property-keys-ptr
-                                property-values-ptr
-                                out-host-ptr
-                                out-domain-id-ptr)))
+  (let* ((fp (foreign-symbol-pointer "coreclr_initialize" :library 'coreclr))
+         (rv (foreign-funcall-pointer
+              fp
+              (:convention :stdcall)
+              :pointer exe-path-ptr
+              :pointer domain-name-ptr
+              :int property-count
+              :pointer property-keys-ptr
+              :pointer property-values-ptr
+              :pointer out-host-ptr
+              :pointer out-domain-id-ptr
+              :uint)))
     (declare (type (unsigned-byte 32) rv))
     #+coreclr-restore-signals
     (progn
@@ -258,9 +268,12 @@
     (if host
       (with-foreign-object (pcode :int)
         (setf -coreclr-host- nil)
-        (let ((rv (coreclr-shutdown-2 (%coreclr-host-handle host)
-                                      (%coreclr-host-domain-id host)
-                                      pcode)))
+        (let* ((fp (foreign-symbol-pointer "coreclr_shutdown_2" :library 'coreclr))
+               (rv (foreign-funcall-pointer fp (:convention :stdcall)
+                                            :pointer (%coreclr-host-handle host)
+                                            :uint (%coreclr-host-domain-id host)
+                                            :pointer pcode
+                                            :uint)))
           (unless (zerop rv)
             (error "Unable to shutdown coreclr: HRESULT ~8,'0X" rv))
           (mem-ref pcode :int)))

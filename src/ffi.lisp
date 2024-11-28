@@ -50,53 +50,6 @@ Add impl. specific code to bike/src/ffi.lisp")
 
 (register-image-restore-hook 'disable-fpu-exceptions)
 
-(declaim (inline coreclr-initialize))
-(defcfun (coreclr-initialize
-          "coreclr_initialize"
-          :library coreclr
-          :convention :stdcall)
-    :uint
-  (exe-path :pointer)
-  (app-domain-name :pointer)
-  (property-count :int)
-  (property-keys :pointer)
-  (property-values :pointer)
-  (host-handle :pointer)
-  (domain-id :pointer))
-
-(defcfun (coreclr-shutdown-2
-          "coreclr_shutdown_2"
-          :library coreclr
-          :convention :stdcall)
-    :uint
-  (host-handle :pointer)
-  (domain-id :uint)
-  (exit-code :pointer))
-
-(defcfun (coreclr-create-delegate
-          "coreclr_create_delegate"
-          :library coreclr
-          :convention :stdcall)
-    :uint
-  (host-handle :pointer)
-  (domain-id :uint)
-  (entry-assembly lpastr)
-  (entry-type lpastr)
-  (entry-method lpastr)
-  (delegate :pointer))
-
-(defcfun (coreclr-execute-assembly
-          "coreclr_execute_assembly"
-          :library coreclr
-          :convention :stdcall)
-    :uint
-  (host-handle :pointer)
-  (domain-id :uint)
-  (argc :int)
-  (argv :pointer)
-  (assembly-path lpastr)
-  (exit-code :pointer))
-
 #+coreclr-restore-signals
 (progn
   (defcstruct sigaction
