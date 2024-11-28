@@ -26,7 +26,7 @@
 
 (defun %get-delegate (host-handle domain-id name)
   (with-foreign-object (pp :pointer)
-    (let* ((fp (foreign-symbol-pointer "coreclr_create_delegate" :library 'coreclr))
+    (let* ((fp -create-delegate-pointer-)
            (rv (foreign-funcall-pointer
                 fp
                 (:convention :stdcall)
@@ -182,7 +182,7 @@
                  out-domain-id-ptr)
            (type (integer 0 #.most-positive-fixnum) property-count)
            (optimize (speed 3) (safety 0) (debug 0)))
-  (let* ((fp (foreign-symbol-pointer "coreclr_initialize" :library 'coreclr))
+  (let* ((fp -initialize-pointer-)
          (rv (foreign-funcall-pointer
               fp
               (:convention :stdcall)
@@ -268,7 +268,7 @@
     (if host
       (with-foreign-object (pcode :int)
         (setf -coreclr-host- nil)
-        (let* ((fp (foreign-symbol-pointer "coreclr_shutdown_2" :library 'coreclr))
+        (let* ((fp -shutdown-pointer-)
                (rv (foreign-funcall-pointer fp (:convention :stdcall)
                                             :pointer (%coreclr-host-handle host)
                                             :uint (%coreclr-host-domain-id host)

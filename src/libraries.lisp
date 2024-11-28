@@ -24,6 +24,10 @@
 
 (in-package #:bike)
 
+(define-global-var -initialize-pointer- nil)
+(define-global-var -create-delegate-pointer- nil)
+(define-global-var -shutdown-pointer- nil)
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (define-global-var -coreclr-location- nil)
   (define-global-var -interop-location- nil)
@@ -43,16 +47,29 @@
           (add-default-library-directory interop-dir))
         (error "Unable to find BikeInterop.dll")))
     (values))
-  (register-image-restore-hook 'init-coreclr-search-location))
+  (register-image-restore-hook 'init-coreclr-search-location)
+  (defun install-coreclr-functions ()
+    (setf -initialize-pointer- (foreign-symbol-pointer
+                                "coreclr_initialize"
+                                :library 'coreclr)
+          -create-delegate-pointer- (foreign-symbol-pointer
+                                     "coreclr_create_delegate"
+                                     :library 'coreclr)
+          -shutdown-pointer- (foreign-symbol-pointer
+                              "coreclr_shutdown_2"
+                              :library 'coreclr))))
 
 (define-foreign-library-once coreclr #.+coreclr-library-file+)
 
 (use-foreign-library-once coreclr :default-directories-only t)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (install-coreclr-functions))
 
 (register-image-restore-hook
  (lambda ()
    (close-foreign-library 'coreclr)
-   (load-foreign-library-once 'coreclr :default-directories-only t))
+   (load-foreign-library-once 'coreclr :default-directories-only t)
+   (install-coreclr-functions))
  nil)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
