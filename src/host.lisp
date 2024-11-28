@@ -213,22 +213,30 @@
                                 (app-paths-key-ptr "APP_PATHS"
                                                    :encoding :ascii)
                                 (app-ni-paths-key-ptr "APP_NI_PATHS"
-                                                      :encoding :ascii))
-           (with-foreign-objects ((keys-ptr :pointer 3)
-                                  (vals-ptr :pointer 3)
+                                                      :encoding :ascii)
+                                (native-dll-key-ptr "NATIVE_DLL_SEARCH_DIRECTORIES"
+                                                    :encoding :ascii)
+                                (probing-paths-key-ptr "PROBING_DIRECTORIES"
+                                                       :encoding :ascii))
+           (with-foreign-objects ((keys-ptr :pointer 5)
+                                  (vals-ptr :pointer 5)
                                   (host-ptr :pointer)
                                   (domain-id-ptr :uint))
              (setf (mem-aref keys-ptr :pointer 0) tpa-key-ptr
                    (mem-aref keys-ptr :pointer 1) app-paths-key-ptr
                    (mem-aref keys-ptr :pointer 2) app-ni-paths-key-ptr
+                   (mem-aref keys-ptr :pointer 3) native-dll-key-ptr
+                   (mem-aref keys-ptr :pointer 4) probing-paths-key-ptr
                    (mem-aref vals-ptr :pointer 0) tpa-ptr
                    (mem-aref vals-ptr :pointer 1) app-paths-ptr
                    (mem-aref vals-ptr :pointer 2) app-ni-paths-ptr
+                   (mem-aref vals-ptr :pointer 3) app-ni-paths-ptr
+                   (mem-aref vals-ptr :pointer 4) app-paths-ptr
                    (mem-ref domain-id-ptr :uint) 0
                    (mem-ref host-ptr :pointer) (null-pointer))
              (%initialize-coreclr exe-path-ptr
                                   domain-name-ptr
-                                  3
+                                  5
                                   keys-ptr
                                   vals-ptr
                                   host-ptr

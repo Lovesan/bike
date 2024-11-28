@@ -49,6 +49,12 @@
 
 (use-foreign-library-once coreclr :default-directories-only t)
 
+(register-image-restore-hook
+ (lambda ()
+   (close-foreign-library 'coreclr)
+   (load-foreign-library-once 'coreclr :default-directories-only t))
+ nil)
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defun %get-related-app-path (name)
     (regex-replace
@@ -97,7 +103,15 @@
         (load-foreign-library-once 'vcruntime :default-directories-only t)
         (load-foreign-library-once 'd3dcompiler :default-directories-only t)
         (load-foreign-library-once 'wpfgfx :default-directories-only t)))
-    (register-image-restore-hook 'load-wpfgfx)))
+    (register-image-restore-hook 'load-wpfgfx))
+
+  (register-image-restore-hook
+   (lambda ()
+     (close-foreign-library 'vcruntime)
+     (close-foreign-library 'd3dcompiler)
+     (close-foreign-library 'wpfgfx)
+     (load-wpfgfx))
+   nil))
 
 #-coreclr-windows
 (progn
@@ -191,12 +205,13 @@
           (inter-directory-separator)
           (native-path -interop-location-)))
 
-(defun %get-trusted-assembly-names ()
+(defun %get-trusted-assembly-paths ()
   (loop :with tpa-dlls = (get-trusted-platform-assemblies)
         :for full-pathname :in tpa-dlls
         :for name = (pathname-name full-pathname)
         :when (and (string-prefix-p "System." name)
+                   (not (string-prefix-p "System.Private." name))
                    (not (string-suffix-p name ".Native")))
-          :collect name))
+          :collect (native-path full-pathname)))
 
 ;;; vim: ft=lisp et

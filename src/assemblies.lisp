@@ -63,10 +63,15 @@
 
 (defun init-type-table (namespaces types aliases)
   (setf -type-table- (%type-table))
+  (with-type-table (lock (ns namespaces) (new-aliases aliases))
+    (with-write-lock (lock)
+      (setf ns namespaces)
+      (loop :for (alias . designator) :in aliases
+            :do (setf (gethash alias new-aliases) designator))))
   ;; load default assemblies
-  (dolist (assembly-string (append (%get-trusted-assembly-names)
+  (dolist (assembly-string (append (%get-trusted-assembly-paths)
                                    *default-assemblies*))
-    (load-assembly assembly-string))
+    (load-assembly-from assembly-string))
   (import-loaded-assemblies)
   (use-type-alias :object "System.Object")
   (use-type-alias :string "System.String")
@@ -85,11 +90,8 @@
   (use-type-alias :decimal "System.Decimal")
   (use-type-alias :type "System.Type")
   (use-type-alias :void "System.Void")
-  (with-type-table (data (ns namespaces) lock (new-aliases aliases))
+  (with-type-table (data (ns namespaces) lock)
     (with-write-lock (lock)
-      (setf ns namespaces)
-      (loop :for (alias . designator) :in aliases
-            :do (setf (gethash alias new-aliases) designator))
       (dolist (pair types)
         (resolve-type (cdr pair)))))
   (values))
