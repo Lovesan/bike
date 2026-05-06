@@ -55,7 +55,7 @@
                         (,lock %handle-table-lock))
            ,table
          (,@(if lock-type
-              `(,(if (eq lock-type :write) 'with-read-lock 'with-write-lock)
+              `(,(if (eq lock-type :write) 'with-write-lock 'with-read-lock)
                 (,lock))
               '(progn))
           (locally ,@body))))))

@@ -24,7 +24,7 @@
 
 (in-package #:bike-internals)
 
-;; Read preferrence. Reentrant. Upgradable.
+;; Read preference. Reentrant. Upgradable.
 
 (defstruct (rwlock-thread-info (:constructor make-rwlti)
                                (:conc-name rwlti-)
@@ -39,7 +39,7 @@
                    (:predicate rwlockp)
                    (:copier nil)
                    (:conc-name %rwlock-))
-  "Read-Write lock with read preferrence"
+  "Read-Write lock with read preference"
   (name nil :type (or null string))
   (cv-lock (bt2:make-lock) :type bt2:lock :read-only t)
   (reader-cv (bt2:make-condition-variable)
@@ -60,7 +60,7 @@
 
 (defun make-rwlock (&key name)
   (declare (type (or null string) name))
-  "Creates an instance of Read-Write lock with read preferrence"
+  "Creates an instance of Read-Write lock with read preference"
   (%make-rwlock name))
 
 (defun rwlock-name (rwlock)
@@ -156,8 +156,7 @@
     (let ((self (bt2:current-thread)))
       (bt2:with-lock-held (lock)
         (loop
-          (cond ((or (plusp reader-count)
-                     (eq writer self))
+          (cond ((eq writer self)
                  (rwlock-modify-count rwlock self :reader-delta 1)
                  (return))
                 ((zerop writer-count)
@@ -271,7 +270,7 @@
   (with-gensyms (lock)
     `(let ((,lock ,rwlock))
        (declare (type rwlock ,lock))
-       (rwlock-begin-read ,rwlock)
+       (rwlock-begin-read ,lock)
        (unwind-protect (locally ,@body)
          (rwlock-end-read ,lock)))))
 
