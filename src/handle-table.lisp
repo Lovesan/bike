@@ -33,6 +33,7 @@
                     :initial-element nil)
    :type (simple-array t (*)))
   (length 1 :type fixnum)
+  (free-head 0 :type fixnum)
   (lock (make-rwlock :name "Handle table lock")
    :type rwlock
    :read-only t))
@@ -45,13 +46,16 @@
 
 (register-image-restore-hook 'init-handle-table (null -handle-table-))
 
-(defmacro with-handle-table ((data-var &optional (length-var (gensym)) (lock-type :write))
+(defmacro with-handle-table ((data-var &optional (length-var (gensym))
+                                                 (free-head-var (gensym))
+                                                 (lock-type :write))
                              &body body)
   (with-gensyms (table lock)
     `(let ((,table -handle-table-))
        (declare (type handle-table ,table))
        (with-accessors ((,data-var %handle-table-data)
                         (,length-var %handle-table-length)
+                        (,free-head-var %handle-table-free-head)
                         (,lock %handle-table-lock))
            ,table
          (,@(if lock-type
@@ -61,59 +65,52 @@
           (locally ,@body))))))
 
 (defun %resize-handle-table ()
-  (with-handle-table (data length nil)
+  (with-handle-table (data length free-head nil)
     (let* ((size (length data))
-           (new-size (min array-total-size-limit (1+ (* size 2)))))
+           (new-size (min (1- array-total-size-limit) (1+ (* size 2)))))
       (when (< size new-size)
         (let ((new-data (make-array new-size :initial-element nil)))
-          (replace new-data data :start1 0 :end1 size
-                                 :start2 0 :end2 size)
+          (replace new-data data)
           (setf data new-data)
           t)))))
 
-(defun %find-free-lisp-handle ()
-  (with-handle-table (data length nil)
-    (loop :with slots = data
-          :for i :of-type non-negative-fixnum :from 1 :below length
-          :for descriptor = (svref slots i)
-          :when (null descriptor) :return i
-          :finally (return 0))))
-
 (defun %alloc-lisp-handle (object &optional weakp)
-  (with-handle-table (data length :write)
-    (let* ((slots data)
-           (index (%find-free-lisp-handle))
-           (value (cons (if weakp
-                          (tg:make-weak-pointer object)
-                          object)
-                        weakp)))
-      (cond ((> index 0)
-             (setf (svref slots index) value)
-             index)
-            ((or (< length (length slots))
+  (with-handle-table (data length free-head :write)
+    (let ((value (cons (if weakp
+                         (tg:make-weak-pointer object)
+                         object)
+                       weakp)))
+      (cond ((plusp free-head)
+             (let* ((index free-head)
+                    (next (the fixnum (svref data index))))
+               (setf free-head next
+                     (svref data index) value)
+               index))
+            ((or (< length (length data))
                  (%resize-handle-table))
-             (let ((slots data)
-                   (index length))
-               (setf (svref slots index) value)
+             (let ((index length))
+               (setf (svref data index) value)
                (incf length)
                index))
             (t 0)))))
 
 (defun %free-lisp-handle (handle)
   (declare (type fixnum handle))
-  (with-handle-table (data length :write)
+  (with-handle-table (data length free-head :write)
     (when (and (> handle 0)
-               (< handle length))
-      (setf (svref data handle) nil)))
+               (< handle length)
+               (consp (svref data handle)))
+      (setf (svref data handle) free-head
+            free-head handle)))
   (values))
 
 (defun %handle-table-get (handle)
   (declare (type fixnum handle))
-  (with-handle-table (data length :read)
+  (with-handle-table (data length free-head :read)
     (when (and (> handle 0)
                (< handle length))
       (let ((value (svref data handle)))
-        (when value
+        (when (consp value)
           (destructuring-bind (ptr . weakp)
               value
             (if weakp
@@ -121,9 +118,11 @@
               ptr)))))))
 
 (defun %clear-handle-table ()
-  (with-handle-table (data length :write)
+  (with-handle-table (data length free-head :write)
     (dotimes (i length)
       (setf (svref data i) nil))
+    (setf length 1
+          free-head 0)
     (values)))
 
 ;;; vim: ft=lisp et
