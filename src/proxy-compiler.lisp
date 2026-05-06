@@ -413,6 +413,17 @@
              #e(System.Runtime.InteropServices.UnmanagedType LPWStr)))
     (values return-type parameter-types)))
 
+(defun tbs-gen-default-value (gen type &optional (tmp [gen DeclareLocal type]))
+  (declare (type dotnet-object gen tmp)
+           (type dotnet-type type))
+  (with-il-generator (gen gen)
+    (if (value-type-p type)
+      (progn
+        (emit Ldloca tmp)
+        (emit Initobj type)
+        (emit Ldloc tmp))
+      (emit Ldnull))))
+
 (defun tbs-gen-unbox (gen type &optional (tmp [gen DeclareLocal [:object]]))
   (declare (type dotnet-object gen tmp)
            (type dotnet-type type))
@@ -984,13 +995,15 @@
                (handler-parameters (method-parameters handler-invoke))
                (handler-parameter-types (mapcar #'parameter-type handler-parameters))
                (handler-return-param (method-return-parameter handler-invoke))
+               (return-type (method-return-type handler-invoke))
+               (voidp (bike-equals return-type [:void]))
                (raise-builder [type-builder DefineMethod
                                             raise-method-name
                                             #e(System.Reflection.MethodAttributes
                                                HideBySig
                                                SpecialName
                                                Public)
-                                            (method-return-type handler-invoke)
+                                            return-type
                                             (list-to-bike-vector handler-parameter-types
                                                                  :element-type :type)]))
           [raise-builder DefineParameter 0
@@ -1014,7 +1027,10 @@
                         (emit-u1 Ldarg_S i)
                         (emit-u2 Ldarg i)))
             (emit Callvirt handler-invoke)
+            (emit Ret)
             (mark-label handler-is-null)
+            (unless voidp
+              (tbs-gen-default-value gen return-type))
             (emit Ret))
           [event-builder SetRaiseMethod raise-builder]))
       event-builder)))
