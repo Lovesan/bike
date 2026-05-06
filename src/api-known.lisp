@@ -280,6 +280,10 @@ type or method definition.")
     (System.Reflection.MethodBase :property IsFamilyOrAssembly)
     "Returns whether method is protected internal")
 
+(defknown method-private-and-protected-p
+    (System.Reflection.MethodBase :property IsFamilyAndAssembly)
+  "Returns whether method is private protected")
+
 (declaim (ftype (function (dotnet-object) (or null dotnet-object))
                 method-base-definition))
 (defknown method-base-definition (System.Reflection.MethodInfo :method GetBaseDefinition)

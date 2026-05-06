@@ -638,7 +638,9 @@
                                                      Instance)))
         (result '()))
     (do-bike-vector (ci candidates)
-      (unless (method-private-p ci)
+      (unless (or (method-private-p ci)
+                  (method-internal-p ci)
+                  (method-private-and-protected-p ci))
         (push ci result)))
     result))
 
