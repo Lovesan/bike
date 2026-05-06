@@ -25,6 +25,7 @@
 (in-package #:bike)
 
 (defconstant +default-handle-table-size+ 4096)
+(defconstant +handle-table-active+ -1)
 
 (defstruct (handle-table (:constructor %handle-table ())
                          (:conc-name %handle-table-)
@@ -32,6 +33,14 @@
   (data (make-array +default-handle-table-size+
                     :initial-element nil)
    :type (simple-array t (*)))
+  (weak-flags (make-array +default-handle-table-size+
+                          :element-type 'bit
+                          :initial-element 0)
+   :type simple-bit-vector)
+  (free-next (make-array +default-handle-table-size+
+                         :element-type 'fixnum
+                         :initial-element 0)
+   :type (simple-array fixnum (*)))
   (length 1 :type fixnum)
   (free-head 0 :type fixnum)
   (lock (make-rwlock :name "Handle table lock")
@@ -48,6 +57,8 @@
 
 (defmacro with-handle-table ((data-var &optional (length-var (gensym))
                                                  (free-head-var (gensym))
+                                                 (weak-flags-var (gensym))
+                                                 (free-next-var (gensym))
                                                  (lock-type :write))
                              &body body)
   (with-gensyms (table lock)
@@ -56,6 +67,8 @@
        (with-accessors ((,data-var %handle-table-data)
                         (,length-var %handle-table-length)
                         (,free-head-var %handle-table-free-head)
+                        (,weak-flags-var %handle-table-weak-flags)
+                        (,free-next-var %handle-table-free-next)
                         (,lock %handle-table-lock))
            ,table
          (,@(if lock-type
@@ -65,62 +78,78 @@
           (locally ,@body))))))
 
 (defun %resize-handle-table ()
-  (with-handle-table (data length free-head nil)
+  (with-handle-table (data length free-head weak-flags free-next nil)
     (let* ((size (length data))
            (new-size (min (1- array-total-size-limit) (1+ (* size 2)))))
       (when (< size new-size)
-        (let ((new-data (make-array new-size :initial-element nil)))
+        (let ((new-data (make-array new-size :initial-element nil))
+              (new-weak-flags (make-array new-size
+                                          :element-type 'bit
+                                          :initial-element 0))
+              (new-free-next (make-array new-size
+                                         :element-type 'fixnum
+                                         :initial-element 0)))
           (replace new-data data)
-          (setf data new-data)
+          (replace new-weak-flags weak-flags)
+          (replace new-free-next free-next)
+          (setf data new-data
+                weak-flags new-weak-flags
+                free-next new-free-next)
           t)))))
 
 (defun %alloc-lisp-handle (object &optional weakp)
-  (with-handle-table (data length free-head :write)
-    (let ((value (cons (if weakp
-                         (tg:make-weak-pointer object)
-                         object)
-                       weakp)))
+  (with-handle-table (data length free-head weak-flags free-next :write)
+    (let ((value (if weakp
+                   (tg:make-weak-pointer object)
+                   object))
+          (weak-flag (if weakp 1 0)))
       (cond ((plusp free-head)
              (let* ((index free-head)
-                    (next (the fixnum (svref data index))))
+                    (next (the fixnum (aref free-next index))))
                (setf free-head next
-                     (svref data index) value)
+                     (svref data index) value
+                     (sbit weak-flags index) weak-flag
+                     (aref free-next index) +handle-table-active+)
                index))
             ((or (< length (length data))
                  (%resize-handle-table))
              (let ((index length))
-               (setf (svref data index) value)
+               (setf (svref data index) value
+                     (sbit weak-flags index) weak-flag
+                     (aref free-next index) +handle-table-active+)
                (incf length)
                index))
             (t 0)))))
 
 (defun %free-lisp-handle (handle)
   (declare (type fixnum handle))
-  (with-handle-table (data length free-head :write)
+  (with-handle-table (data length free-head weak-flags free-next :write)
     (when (and (> handle 0)
                (< handle length)
-               (consp (svref data handle)))
-      (setf (svref data handle) free-head
+               (= +handle-table-active+ (aref free-next handle)))
+      (setf (svref data handle) nil
+            (sbit weak-flags handle) 0
+            (aref free-next handle) free-head
             free-head handle)))
   (values))
 
 (defun %handle-table-get (handle)
   (declare (type fixnum handle))
-  (with-handle-table (data length free-head :read)
+  (with-handle-table (data length free-head weak-flags free-next :read)
     (when (and (> handle 0)
-               (< handle length))
+               (< handle length)
+               (= +handle-table-active+ (aref free-next handle)))
       (let ((value (svref data handle)))
-        (when (consp value)
-          (destructuring-bind (ptr . weakp)
-              value
-            (if weakp
-              (tg:weak-pointer-value ptr)
-              ptr)))))))
+        (if (zerop (sbit weak-flags handle))
+          value
+          (tg:weak-pointer-value value))))))
 
 (defun %clear-handle-table ()
-  (with-handle-table (data length free-head :write)
+  (with-handle-table (data length free-head weak-flags free-next :write)
     (dotimes (i length)
-      (setf (svref data i) nil))
+      (setf (svref data i) nil
+            (sbit weak-flags i) 0
+            (aref free-next i) 0))
     (setf length 1
           free-head 0)
     (values)))
