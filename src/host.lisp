@@ -104,6 +104,7 @@
                   ,@args-and-types))))))
 
 (define-coreclr-host coreclr-host (handle domain-id domain-name vtable)
+  (duplicate-object "DuplicateObject")
   (free-handle "FreeHandle")
   (get-type-of "GetTypeOf")
   (get-type-by-name "GetTypeByName")

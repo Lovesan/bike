@@ -672,6 +672,7 @@
              (state (make-type-builder-state name base-type interfaces)))
         (dolist (c base-constructors)
           (tbs-add-constructor state c callable-base-type-p))
+        (tbs-add-finalizer state base-type)
         (dolist (slotd eslotds)
           (typecase slotd
             (effective-event-slot-definition
@@ -831,8 +832,7 @@
               (out-ex :pointer)
               (out-ex-from-dotnet :pointer))
   (handler-case
-      (let* ((proxy (%dotnet-object boxed-proxy))
-             (target (%handle-table-get (pointer-address boxed-object)))
+      (let* ((target (%handle-table-get (pointer-address boxed-object)))
              (args (loop :for i :below argc
                          :for boxed = (mem-aref args-ptr :pointer i)
                          :for info = (mem-aref info-ptr :uint32 i)
@@ -855,7 +855,7 @@
         (unless target
           (restart-case
               (error 'dotnet-callable-object-orphan-proxy
-                     :value proxy
+                     :value (%dotnet-object-from-weak-handle boxed-proxy)
                      :operation operation
                      :member-name name
                      :arguments args)

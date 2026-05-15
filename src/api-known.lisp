@@ -670,6 +670,15 @@ type or method definition.")
                                         System.Type
                                         "System.Type[]"))
 
+(defknown %begin-exception-block
+    (System.Reflection.Emit.ILGenerator :method BeginExceptionBlock))
+
+(defknown %begin-finally-block
+    (System.Reflection.Emit.ILGenerator :method BeginFinallyBlock))
+
+(defknown %end-exception-block
+    (System.Reflection.Emit.ILGenerator :method EndExceptionBlock))
+
 (defknown property-builder-set-get-method
     (System.Reflection.Emit.PropertyBuilder :method SetGetMethod
                                             System.Reflection.Emit.MethodBuilder))

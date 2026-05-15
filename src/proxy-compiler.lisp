@@ -52,7 +52,8 @@
   (type-builder (required-slot) :type dotnet-object)
   (callback-field (required-slot) :type dotnet-object)
   (context-field (required-slot) :type dotnet-object)
-  (lisp-object-field (required-slot) :type dotnet-object))
+  (lisp-object-field (required-slot) :type dotnet-object)
+  (this-field (required-slot) :type dotnet-object))
 
 (defstruct (method-parameter-info
             (:copier nil)
@@ -107,6 +108,10 @@
   "_callback"
   :test #'equal)
 
+(define-constant +callable-proxy-this-field-name+
+  "_this"
+  :test #'equal)
+
 (defmacro with-il-generator ((generator-var generator &rest label-names) &body body)
   `(let ((,generator-var ,generator))
      (declare (type dotnet-object ,generator-var))
@@ -133,10 +138,19 @@
               (define-label ()
                 (invoke ,generator-var 'DefineLabel))
               (mark-label (label)
-                (invoke ,generator-var 'MarkLabel label)))
+                (invoke ,generator-var 'MarkLabel label))
+              (begin-exception-block ()
+                (%begin-exception-block ,generator-var))
+              (begin-finally-block ()
+                (%begin-finally-block ,generator-var))
+              (end-exception-block ()
+                (%end-exception-block ,generator-var)))
          (declare (ignorable (function declare-local)
                              (function define-label)
-                             (function mark-label)))
+                             (function mark-label)
+                             (function begin-exception-block)
+                             (function end-exception-block)
+                             (function begin-finally-block)))
          (let ,(loop :for name :in label-names
                      :collect `(,name (define-label)))
            ,@body)))))
@@ -178,6 +192,10 @@
 
 (defun get-box-object-method ()
   (type-get-method-by-name [:BikeInterop.Externals] "BoxObject"
+                           #e(System.Reflection.BindingFlags Public NonPublic Static)))
+
+(defun get-weak-box-object-method ()
+  (type-get-method-by-name [:BikeInterop.Externals] "WeakBoxObject"
                            #e(System.Reflection.BindingFlags Public NonPublic Static)))
 
 (defun get-unbox-object-method ()
@@ -302,7 +320,11 @@
        :lisp-object-field [type-builder DefineField
                                         +callable-proxy-lisp-object-field-name+
                                         [:BikeInterop.LispObject]
-                                        #e(System.Reflection.FieldAttributes Private)]))))
+                                        #e(System.Reflection.FieldAttributes Private)]
+       :this-field [type-builder DefineField
+                                 +callable-proxy-this-field-name+
+                                 [:System.IntPtr]
+                                 #e(System.Reflection.FieldAttributes Private)]))))
 
 (defun tbs-resolve-type (type generic-parameters)
   (declare (type list generic-parameters))
@@ -758,7 +780,8 @@
            (type (or null method-parameter-info) params-array-parameter))
   (with-accessors ((type-builder tbs-type-builder)
                    (callback-field tbs-callback-field)
-                   (context-field tbs-context-field))
+                   (context-field tbs-context-field)
+                   (this-field tbs-this-field))
       state
     (let* ((builder [type-builder DefineMethod
                                   name
@@ -789,7 +812,7 @@
             #+(or ecl)
             (tbs-gen-ecl-import-current-thread gen thread-imported-local)
             (emit Ldarg_0)
-            (emit Call (get-box-object-method))
+            (emit Ldfld this-field)
             (tbs-gen-load-field gen context-field)
             (tbs-gen-load-opcode gen operation)
             (emit-s4 Ldc_I4 (if voidp 1 0))
@@ -1041,7 +1064,8 @@
   (with-accessors ((type-builder tbs-type-builder)
                    (context-field tbs-context-field)
                    (callback-field tbs-callback-field)
-                   (lisp-object-field tbs-lisp-object-field))
+                   (lisp-object-field tbs-lisp-object-field)
+                   (this-field tbs-this-field))
       state
     (let* ((base-parameters (if base-callable-p
                               (nthcdr 2 (method-parameters base-constructor))
@@ -1084,6 +1108,51 @@
         (emit Ldarg_1)
         (emit Call (get-lisp-object-create-method))
         (emit Stfld lisp-object-field)
+        (emit Ldarg_0)
+        (emit Ldarg_0)
+        (emit Call (get-weak-box-object-method))
+        (emit Stfld this-field)
+        (emit Ret))
+      builder)))
+
+(defun tbs-add-finalizer (state base-type)
+  (declare (type type-builder-state state)
+           (type (or null dotnet-type) base-type))
+  (with-accessors ((type-builder tbs-type-builder)
+                   (this-field tbs-this-field))
+      state
+    (let* ((base-type (or base-type [:object]))
+           (base-finalize
+             (or (type-get-method-by-name
+                  base-type
+                  "Finalize"
+                  #e(System.Reflection.BindingFlags NonPublic Instance))
+                 (type-get-method-by-name
+                  [:object]
+                  "Finalize"
+                  #e(System.Reflection.BindingFlags NonPublic Instance))))
+           (builder [type-builder DefineMethod
+                                  "Finalize"
+                                  #e(System.Reflection.MethodAttributes
+                                     Family
+                                     HideBySig
+                                     Virtual)
+                                  [:void]
+                                  (empty-types)])
+           (free-handle (get-free-handle-method)))
+      (with-il-generator (gen [builder GetILGenerator])
+        (begin-exception-block)
+        (emit Ldarg_0)
+        (emit Ldfld this-field)
+        (emit Call free-handle)
+        (emit Ldarg_0)
+        (emit Ldc_I4_0)
+        (emit Conv_I)
+        (emit Stfld this-field)
+        (begin-finally-block)
+        (emit Ldarg_0)
+        (emit Call base-finalize)
+        (end-exception-block)
         (emit Ret))
       builder)))
 

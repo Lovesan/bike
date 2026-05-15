@@ -166,6 +166,16 @@
   (declare (type dotnet-object* object))
   (pointer-address (dotnet-object-handle object)))
 
++(declaim (inline %dotnet-object-from-weak-handle))
++(defun %dotnet-object-from-weak-handle (handle)
+  (declare (type foreign-pointer handle))
+  (let ((strong-handle (hostcall duplicate-object
+                                 :pointer handle
+                                 :pointer)))
+    (if (null-pointer-p strong-handle)
+      nil
+      (%dotnet-object strong-handle))))
+
 (declaim (inline %get-string-length))
 (defun %get-string-length (value)
   (declare (type foreign-pointer value))

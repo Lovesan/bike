@@ -1549,6 +1549,22 @@ namespace BikeInterop
             return GCHandle.ToIntPtr(handle);
         }
 
+        public static IntPtr WeakBoxObject(object value)
+        {
+            if (value == null)
+                return IntPtr.Zero;
+            var handle = GCHandle.Alloc(value, GCHandleType.Weak);
+            return GCHandle.ToIntPtr(handle);
+        }
+
+        public static IntPtr DuplicateObject(IntPtr weakHandle)
+        {
+            if (IntPtr.Zero == weakHandle)
+                return IntPtr.Zero;
+            var handle = GCHandle.FromIntPtr(weakHandle);
+            return BoxObject(handle.Target);
+        }
+
         public static object UnboxObject(IntPtr pointer)
         {
             if (IntPtr.Zero == pointer)
