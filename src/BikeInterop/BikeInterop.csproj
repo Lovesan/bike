@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <LangVersion>latest</LangVersion>
     <VersionPrefix>0.15</VersionPrefix>
     <Copyright>© 2019, Dmitry Ignatiev &lt;lovesan.ru at gmail.com&gt;</Copyright>

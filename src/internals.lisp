@@ -70,7 +70,7 @@
     (native-path
      (merge-pathnames*
       (make-pathname*
-       :directory '(:relative "BikeInterop" "bin" "netstandard2.0"))
+       :directory '(:relative "BikeInterop" "bin" "netstandard2.1"))
       (pathname-directory-pathname #.(current-lisp-file-pathname))))))
 
 ;; Clear interop assembly on rebuild
