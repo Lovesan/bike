@@ -28,4 +28,6 @@
 
 (asdf:test-system '#:bike)
 
+#+ecl
+(ext:quit)
 ;;; vim: ft=lisp et
