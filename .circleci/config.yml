@@ -1,8 +1,8 @@
 version: 2
 jobs:
-  build_9_0_ccl_amd64:
+  build_10_0_ccl_amd64:
     docker:
-      - image: "love5an/dotnet-core-sdk-common-lisp:9.0-ccl-latest-noble"
+      - image: "love5an/dotnet-core-sdk-common-lisp:10.0-ccl-latest-noble"
     working_directory: ~/quicklisp/local-projects/bike
     steps:
       - checkout
@@ -10,9 +10,9 @@ jobs:
           name: Run tests
           command: cat tests.lisp | ccl64 -Q -b
 
-  build_9_0_sbcl_amd64:
+  build_10_0_sbcl_amd64:
     docker:
-      - image: "love5an/dotnet-core-sdk-common-lisp:9.0-sbcl-latest-noble"
+      - image: "love5an/dotnet-core-sdk-common-lisp:10.0-sbcl-latest-noble"
     working_directory: ~/quicklisp/local-projects/bike
     steps:
       - checkout
@@ -20,10 +20,21 @@ jobs:
           name: Run tests
           command: cat tests.lisp | sbcl --disable-debugger --noprint
 
+  build_10_0_ecl_amd64:
+    docker:
+      - image: "love5an/dotnet-core-sdk-common-lisp:10.0-ecl-latest-noble"
+    working_directory: ~/quicklisp/local-projects/bike
+    steps:
+      - checkout
+      - run:
+          name: Run tests
+          command: cat tests.lisp | ecl -q
+
 workflows:
   version: 2
 
   tests:
     jobs:
-      - build_9_0_ccl_amd64
-      - build_9_0_sbcl_amd64
+      - build_10_0_ccl_amd64
+      - build_10_0_sbcl_amd64
+      - build_10_0_ecl_amd64

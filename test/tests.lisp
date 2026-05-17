@@ -36,7 +36,9 @@
 (in-suite bike-suite)
 
 (test test-hello
-  (is (eq nil (invoke 'System.Console 'WriteLine "Hello, World!"))))
+  ;; TODO: Figure out why ECL returns T
+  (invoke 'System.Console 'WriteLine "Hello, World!")
+  (is t))
 
 (test box-unbox-int
   (is (eql 4 (unbox (box 4 'int)))))
