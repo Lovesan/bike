@@ -38,7 +38,7 @@
 (test test-hello
   ;; TODO: Figure out why ECL returns T
   (invoke 'System.Console 'WriteLine "Hello, World!")
-  (is t))
+  (is (eq t t)))
 
 (test box-unbox-int
   (is (eql 4 (unbox (box 4 'int)))))
