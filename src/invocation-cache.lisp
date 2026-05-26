@@ -35,6 +35,7 @@
   (type (required-slot) :type dotnet-type :read-only t)
   (name (required-slot) :type simple-character-string :read-only t)
   (kind (required-slot) :type member-kind :read-only t)
+  (hash-code 0 :type non-negative-fixnum :read-only t)
   (type-arg-count 0 :type non-negative-fixnum :read-only t)
   (type-args '() :type list :read-only t)
   (arg-type-count 0 :type non-negative-fixnum :read-only t)
@@ -142,14 +143,6 @@
     (dolist (arg-type arg-types code)
       (setf code (invocation-hash-combine code (%get-hash-code arg-type))))))
 
-(defun ientry-hash-code (entry)
-  (declare (type invocation-entry entry))
-  (with-ientry (type name kind type-arg-count type-args arg-type-count arg-types) entry
-    (ientry-hash-code* type name kind :type-arg-count type-arg-count
-                                      :type-args type-args
-                                      :arg-type-count arg-type-count
-                                      :arg-types arg-types)))
-
 (defun ientry-equals* (entry type* name* kind* &key ((:type-arg-count type-arg-count*) 0)
                                                     ((:type-args type-args*) '())
                                                     ((:arg-type-count arg-type-count*) 0)
@@ -204,11 +197,12 @@
       (loop :for entry = (svref vector nbucket)
               :then (ientry-next entry)
             :while entry :do
-              (when (ientry-equals* entry type name kind
-                                    :type-arg-count type-arg-count
-                                    :type-args type-args
-                                    :arg-type-count arg-type-count
-                                    :arg-types arg-types)
+              (when (and (= hash-code (ientry-hash-code entry))
+                         (ientry-equals* entry type name kind
+                                         :type-arg-count type-arg-count
+                                         :type-args type-args
+                                         :arg-type-count arg-type-count
+                                         :arg-types arg-types))
                 (return entry))))))
 
 (defun get-ientry (type name kind &key (type-arg-count 0)
@@ -308,6 +302,7 @@
                    (entry (make-ientry :type type
                                        :name name
                                        :kind kind
+                                       :hash-code hash-code
                                        :type-arg-count type-arg-count
                                        :type-args type-args
                                        :arg-type-count arg-type-count
