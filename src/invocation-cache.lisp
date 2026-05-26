@@ -361,7 +361,7 @@
                    (nbucket (mod hash-code (length vector)))
                    (prev (svref vector nbucket))
                    (entry (make-ientry :type type
-                                       :name name
+                                       :name (copy-seq name)
                                        :kind kind
                                        :hash-code hash-code
                                        :type-arg-count type-arg-count
