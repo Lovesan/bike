@@ -59,6 +59,18 @@
 
 (defconstant +invocation-cache-rehash-threshold+ 0.75)
 
+(defconstant +invocation-cache-hash-bits+ (integer-length most-positive-fixnum))
+
+(defconstant +invocation-cache-hash-mask+ most-positive-fixnum)
+
+(defconstant +invocation-cache-hash-rotation+ 5)
+
+(defconstant +invocation-cache-hash-left-mask+
+  (ash +invocation-cache-hash-mask+ (- +invocation-cache-hash-rotation+)))
+
+(defconstant +invocation-cache-hash-salt+
+  (logand #x9E3779B97F4A7C15 +invocation-cache-hash-mask+))
+
 (defstruct (invocation-cache (:constructor make-icache)
                              (:copier nil)
                              (:predicate invocation-cache-p)
@@ -81,6 +93,35 @@
          (declare (type invocation-cache ,cache))
          (with-accessors ,accessors ,cache ,@body)))))
 
+(declaim (inline normalize-invocation-hash-code))
+(defun normalize-invocation-hash-code (code)
+  (declare (type integer code))
+  (the non-negative-fixnum
+       (logand code +invocation-cache-hash-mask+)))
+
+(declaim (inline rotate-invocation-hash-code))
+(defun rotate-invocation-hash-code (code)
+  (declare (type non-negative-fixnum code))
+  (the non-negative-fixnum
+       (logior (ash (logand code +invocation-cache-hash-left-mask+)
+                    +invocation-cache-hash-rotation+)
+               (ash code
+                    (- +invocation-cache-hash-rotation+
+                       +invocation-cache-hash-bits+)))))
+
+(declaim (inline invocation-hash-combine))
+(defun invocation-hash-combine (code value)
+  (declare (type non-negative-fixnum code)
+           (type integer value))
+  (let ((value (normalize-invocation-hash-code value)))
+    (declare (type non-negative-fixnum value))
+    (the non-negative-fixnum
+         (logand (logxor (rotate-invocation-hash-code code)
+                         value
+                         (ash value -7)
+                         +invocation-cache-hash-salt+)
+                 +invocation-cache-hash-mask+))))
+
 (defun ientry-hash-code* (type name kind &key (type-arg-count 0)
                                               (type-args '())
                                               (arg-type-count 0)
@@ -90,16 +131,16 @@
            (type member-kind kind)
            (type non-negative-fixnum type-arg-count arg-type-count)
            (type list type-args arg-types))
-  (let ((code (logxor (%get-hash-code type)
-                      (sxhash name)
-                      (sxhash kind)
-                      (sxhash type-arg-count)
-                      (sxhash arg-type-count))))
-    (declare (type (signed-byte #.+pointer-bits+) code))
+  (let ((code (normalize-invocation-hash-code (%get-hash-code type))))
+    (declare (type non-negative-fixnum code))
+    (setf code (invocation-hash-combine code (sxhash name))
+          code (invocation-hash-combine code (sxhash kind))
+          code (invocation-hash-combine code (sxhash type-arg-count))
+          code (invocation-hash-combine code (sxhash arg-type-count)))
     (dolist (type-arg type-args)
-      (setf code (logxor code (%get-hash-code type-arg))))
+      (setf code (invocation-hash-combine code (%get-hash-code type-arg))))
     (dolist (arg-type arg-types code)
-      (setf code (logxor code (%get-hash-code arg-type))))))
+      (setf code (invocation-hash-combine code (%get-hash-code arg-type))))))
 
 (defun ientry-hash-code (entry)
   (declare (type invocation-entry entry))
