@@ -58,6 +58,8 @@
 (defconstant +max-invocation-cache-count+ (min most-positive-fixnum
                                                10000))
 
+(defconstant +invocation-cache-soft-cap-ratio+ 0.8)
+
 (defconstant +invocation-cache-rehash-threshold+ 0.75)
 
 (defconstant +invocation-cache-hash-bits+ (integer-length most-positive-fixnum))
@@ -80,6 +82,9 @@
                        :initial-element nil)
    :type simple-vector)
   (count 0 :type non-negative-fixnum)
+  (random-state (make-random-state t)
+   :type random-state
+   :read-only t)
   (lock (make-rwlock :name "Invocation cache lock")
    :type rwlock
    :read-only t))
@@ -237,29 +242,83 @@
     (with-write-lock (lock)
       (%clear-invocation-cache))))
 
+(declaim (inline invocation-cache-soft-cap))
+(defun invocation-cache-soft-cap ()
+  (the non-negative-fixnum
+       (floor (* +max-invocation-cache-count+
+                 +invocation-cache-soft-cap-ratio+))))
+
+(defun %icache-bucket-chain-length (entry)
+  (declare (type (or null invocation-entry) entry))
+  (loop :for e = entry :then (ientry-next e)
+        :while e
+        :count t))
+
+(defun %evict-icache-entry-from-bucket (vector bucket random-state)
+  (declare (type simple-vector vector)
+           (type non-negative-fixnum bucket)
+           (type random-state random-state))
+  (let* ((entry (svref vector bucket))
+         (chain-length (%icache-bucket-chain-length entry))
+         (victim-index (random chain-length random-state))
+         prev)
+    (declare (type positive-fixnum chain-length)
+             (type non-negative-fixnum victim-index)
+             (type (or null invocation-entry) entry prev))
+    (dotimes (i victim-index)
+      (setf prev entry
+            entry (ientry-next entry)))
+    (if prev
+      (setf (ientry-next prev) (ientry-next entry))
+      (setf (svref vector bucket) (ientry-next entry)))
+    (setf (ientry-next entry) nil)
+    (values)))
+
+(defun %evict-random-icache-entry (vector random-state)
+  (declare (type simple-vector vector)
+           (type random-state random-state))
+  (let* ((size (length vector))
+         (start (random size random-state)))
+    (declare (type positive-fixnum size)
+             (type non-negative-fixnum start))
+    (dotimes (offset size)
+      (let ((bucket (mod (+ start offset) size)))
+        (declare (type non-negative-fixnum bucket))
+        (when (svref vector bucket)
+          (%evict-icache-entry-from-bucket vector bucket random-state)
+          (return t))))))
+
+(defun %evict-icache-entries ()
+  (with-icache (buckets count random-state)
+    (let* ((vector buckets)
+           (soft-cap (invocation-cache-soft-cap))
+           (evict-count (max 0 (- count soft-cap))))
+      (declare (type non-negative-fixnum soft-cap evict-count))
+      (dotimes (i evict-count)
+        (declare (ignore i))
+        (unless (%evict-random-icache-entry vector random-state)
+          (return))
+        (decf count)))))
+
 (defun %resize-icache ()
-  (with-icache (buckets count)
-    (if (= count +max-invocation-cache-count+)
-      ;; simply clear the cache
-      ;; TODO: do something more smart
-      (%clear-invocation-cache)
-      (let* ((vector buckets)
-             (size (length vector))
-             (new-size (min most-positive-fixnum
-                            (1+ (* size 2)))))
-        (when (> new-size size)
-          (let ((new-vector (make-array new-size
-                                        :initial-element nil)))
-            (dotimes (i size)
-              (do ((entry (svref vector i) next)
-                   next)
-                  ((null entry))
-                (setf next (ientry-next entry))
-                (let* ((nbucket (mod (ientry-hash-code entry) new-size))
-                       (prev (svref new-vector nbucket)))
-                  (setf (svref new-vector nbucket) entry
-                        (ientry-next entry) prev))))
-            (setf buckets new-vector))))))
+  (with-icache (buckets)
+    (let* ((vector buckets)
+           (size (length vector))
+           (new-size (min most-positive-fixnum
+                          (1+ (* size 2)))))
+      (when (> new-size size)
+        (let ((new-vector (make-array new-size
+                                      :initial-element nil)))
+          (dotimes (i size)
+            (do ((entry (svref vector i) next)
+                 next)
+                ((null entry))
+              (setf next (ientry-next entry))
+              (let* ((nbucket (mod (ientry-hash-code entry) new-size))
+                     (prev (svref new-vector nbucket)))
+                (setf (svref new-vector nbucket) entry
+                      (ientry-next entry) prev))))
+          (setf buckets new-vector)))))
   (values))
 
 
@@ -287,6 +346,9 @@
                        :arg-type-count arg-type-count
                        :arg-types arg-types)
           (let ((vector buckets))
+            (when (>= count +max-invocation-cache-count+)
+              (%evict-icache-entries)
+              (setf vector buckets))
             (when (> (/ (float count) (length vector))
                      +invocation-cache-rehash-threshold+)
               (%resize-icache)
