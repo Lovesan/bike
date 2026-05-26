@@ -251,15 +251,14 @@
           (let ((new-vector (make-array new-size
                                         :initial-element nil)))
             (dotimes (i size)
-              (let ((bucket-entries (loop :for entry = (svref vector i)
-                                            :then (ientry-next entry)
-                                          :while entry :collect entry)))
-                (dolist (entry bucket-entries)
-                  (let* ((hash-code (ientry-hash-code entry))
-                         (nbucket (mod hash-code new-size))
-                         (prev (svref new-vector nbucket)))
-                    (setf (svref new-vector nbucket) entry
-                          (ientry-next entry) prev)))))
+              (do ((entry (svref vector i) next)
+                   next)
+                  ((null entry))
+                (setf next (ientry-next entry))
+                (let* ((nbucket (mod (ientry-hash-code entry) new-size))
+                       (prev (svref new-vector nbucket)))
+                  (setf (svref new-vector nbucket) entry
+                        (ientry-next entry) prev))))
             (setf buckets new-vector))))))
   (values))
 
