@@ -23,7 +23,8 @@
 ;;; DEALINGS IN THE SOFTWARE.
 
 (ql:quickload '#:bike-internals)
-(ql:quickload '#:bike)
+(ql:quickload '#:named-readtables)
+(asdf:load-system '#:bike :verbose t)
 (ql:quickload '#:bike-tests)
 
 (asdf:test-system '#:bike)
