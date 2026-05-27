@@ -295,7 +295,7 @@
            (evict-count (max 0 (- count soft-cap))))
       (declare (type non-negative-fixnum soft-cap evict-count))
       (dotimes (i evict-count)
-        (declare (ignore i))
+        (declare (ignorable i))
         (unless (%evict-random-icache-entry vector random-state)
           (return))
         (decf count)))))
