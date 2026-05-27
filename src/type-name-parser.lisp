@@ -29,7 +29,7 @@
            (type non-negative-fixnum start))
   "Returns a lambda which tokenizes type name string"
   (let* ((end (or end (length name)))
-         (i 0)
+         (i start)
          (c nil))
     (declare (type non-negative-fixnum i end)
              (type (or null character) c))
@@ -89,7 +89,7 @@
                    (t (token :space)))
            :eof-error
              (error 'type-name-parser-eof
-                    :datume name
+                    :datum name
                     :position i)
            :error
              (error 'type-name-parser-error
