@@ -174,13 +174,15 @@ assemblyProps -> COMMA maybeSpace assemblyProp assemblyProps
 
 assemblyProp -> IDENTIFIER("Version") maybeSpace EQ maybeSpace version maybeSpace
                 / IDENTIFIER("Culture") maybeSpace EQ maybeSpace maybeIdentifier maybeSpace
-                / IDENTIFIER("PublicKeyToken") maybeSpace EQ maybeSpace maybeIdentifier maybeSpace
-                / IDENTIFIER("PublicKey") maybeSpace EQ maybeSpace maybeIdentifier maybeSpace
+                / IDENTIFIER("PublicKeyToken") maybeSpace EQ maybeSpace maybeAssemblyToken maybeSpace
+                / IDENTIFIER("PublicKey") maybeSpace EQ maybeSpace maybeAssemblyToken maybeSpace
                 / IDENTIFIER("Custom") maybeSpace EQ maybeSpace maybeIdentifier maybeSpace
 
 version -> INTEGER DOT INTEGER DOT INTEGER DOT INTEGER / <empty>
 
 maybeIdentifier -> IDENTIFIER / <empty>
+
+maybeAssemblyToken -> IDENTIFIER / INTEGER / <empty>
 
 name -> IDENTIFIER nameRest
         / EQ nameRest
@@ -244,6 +246,11 @@ nameRest -> IDENTIFIER nameRest
                  (consume :integer)
                  (consume :dot)
                  (consume :integer)))
+             (maybe-assembly-token ()
+               (peek)
+               (case token
+                 ((:identifier :integer)
+                  (next))))
              (assembly-prop ()
                (peek)
                (expect :identifier)
@@ -266,14 +273,14 @@ nameRest -> IDENTIFIER nameRest
                       (maybe-space)
                       (consume :eq)
                       (maybe-space)
-                      (maybe-identifier)
+                      (maybe-assembly-token)
                       (maybe-space))
                      ((value= "PublicKey")
                       (next)
                       (maybe-space)
                       (consume :eq)
                       (maybe-space)
-                      (maybe-identifier)
+                      (maybe-assembly-token)
                       (maybe-space))
                      ((value= "Custom")
                       (next)
