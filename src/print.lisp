@@ -494,7 +494,7 @@ Output OBJECT to STREAM with \"#<\" prefix, \">\" suffix, optionally
        (declare (type dotnet-object ,object)
                 (type stream ,stream))
        (let (,before-callback ,after-callback)
-         (declare (type (or null (function () (values)))
+         (declare (type (or null function)
                         ,before-callback ,after-callback))
          (macrolet (,(make-printer-before/after-macrolet 'before-members before-callback)
                     ,(make-printer-before/after-macrolet 'after-members after-callback))
