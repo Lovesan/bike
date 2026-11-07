@@ -1,4 +1,4 @@
-version: 2
+version: 2.1
 jobs:
   build_10_0_ccl_amd64:
     docker:
@@ -31,8 +31,6 @@ jobs:
           command: cat tests.lisp | ecl -q
 
 workflows:
-  version: 2
-
   tests:
     jobs:
       - build_10_0_ccl_amd64
